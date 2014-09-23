@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	//"fmt"
 	//"strings"
 	"github.com/chenyf/push/utils/safemap"
 	"github.com/bitly/go-simplejson"
@@ -71,7 +72,7 @@ func (client *Client)SendMessage(msgType uint8, body []byte, reply chan *Message
 }
 
 var (
-	DevMap *safemap.SafeMap = safemap.NewSafeMap()
+	DevicesMap *safemap.SafeMap = safemap.NewSafeMap()
 )
 
 func InitClient(conn *net.TCPConn, devid string) (*Client) {
@@ -83,7 +84,7 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 		NextSeqId: 1,
 		LastAlive: time.Now(),
 	}
-	DevMap.Set(devid, client)
+	DevicesMap.Set(devid, client)
 
 	go func() {
 		log.Printf("enter send routine")
@@ -113,15 +114,50 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 
 func CloseClient(client *Client) {
 	client.ctrl <- true
-	DevMap.Delete(client.devId)
+	DevicesMap.Delete(client.devId)
 }
 
-func handleReply(client *Client, header *Header, body []byte) int {
+func handleRequestReply(client *Client, header *Header, body []byte) int {
 	ch, ok := client.WaitingChannels[header.Seq]; if ok {
 		//remove waiting channel from map
 		delete(client.WaitingChannels, header.Seq)
 		ch <- &Message{Header: *header, Data: body}
 	}
+	return 0
+}
+
+func handleRegister(client *Client, header *Header, body []byte) int {
+	msg, err := simplejson.NewJson(body)
+	if err != nil {
+		return -1
+	}
+	appKey, err := msg.Get("appKey").String()
+	if err != nil {
+		return -1
+	}
+	regid := RegId(client.devId, appKey)
+	if RegistrationsMap.Check(regid) {
+		return -1
+	}
+	app := &App{
+		DevId : client.devId,
+		AppKey : appKey,
+	}
+	RegistrationsMap.Set(regid, app)
+	return 0
+}
+
+func handleUnregister(client *Client, header *Header, body []byte) int {
+	msg, err := simplejson.NewJson(body)
+	if err != nil {
+		return -1
+	}
+	appKey, err := msg.Get("appKey").String()
+	if err != nil {
+		return -1
+	}
+	regid := RegId(client.devId, appKey)
+	RegistrationsMap.Delete(regid)
 	return 0
 }
 
@@ -131,7 +167,6 @@ func handleHeartbeat(client *Client, header *Header, body []byte) int {
 }
 
 type Device struct {
-	
 }
 
 func (this *Server) SetAcceptTimeout(acceptTimeout time.Duration) {
@@ -158,7 +193,9 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		return nil, err
 	}
 	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
-	this.funcMap[MSG_REQUEST_REPLY] = handleReply
+	this.funcMap[MSG_REQUEST_REPLY] = handleRequestReply
+	this.funcMap[MSG_REGISTER] = handleRegister
+	this.funcMap[MSG_UNREGISTER] = handleUnregister
 	return l, nil
 }
 
@@ -256,7 +293,7 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 	log.Printf("recv register devid (%s)", devid)
-	if DevMap.Check(devid) {
+	if DevicesMap.Check(devid) {
 		log.Printf("device (%s) register already", devid)
 		conn.Close()
 		return nil
