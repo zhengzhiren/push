@@ -47,20 +47,3 @@ func (header *Header)Deserialize(b []byte) (error) {
 	return nil
 }
 
-type ReplyMessage struct {
-	AppId	string	`json"app_id"`
-	MsgSeq	int64	`json:"msg_seq"`
-}
-
-type RegisterMessage struct{
-	AppId	string	`json"app_id"`
-	AppKey	string	`json:"app_key"`
-}
-type UnregisterMessage struct{
-	AppId	string	`json"app_id"`
-	AppKey	string	`json:"app_key"`
-}
-type InitMessage struct {
-	DeviceId	string	`json:"device_id"`
-}
-

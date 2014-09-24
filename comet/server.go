@@ -128,43 +128,47 @@ func CloseClient(client *Client) {
 	DevicesMap.Delete(client.devId)
 }
 
+type ReplyMessage struct {
+	AppId	string	`json"app_id"`
+	RegId	string	`json"reg_id"`
+	MsgSeq	int64	`json:"msg_seq"`
+}
 func handleRequestReply(client *Client, header *Header, body []byte) int {
 	var msg ReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	regid := RegId(client.devId, msg.AppId)
-	regapp := RegisterManagerInstance.Get(regid)
-	regapp.LastMsgSeq = msg.MsgSeq
+	app := AMInstance.Get(msg.RegId)
+	app.LastMsgSeq = msg.MsgSeq
 	return 0
 }
 
+type RegisterMessage struct{
+	AppId	string	`json"app_id"`
+	AppKey	string	`json:"app_key"`
+	RegId	string	`json"reg_id"`
+}
+// app注册后，才可以接收消息
 func handleRegister(client *Client, header *Header, body []byte) int {
 	var msg RegisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	regid := RegId(client.devId, msg.AppId)
-	if RegisterManagerInstance.Check(regid) {
-		return -1
-	}
-	app := &App{
-		DevId : client.devId,
-		AppId : msg.AppId,
-		AppKey : msg.AppKey,
-		LastMsgSeq : -1,
-	}
-	RegisterManagerInstance.Set(regid, app)
+	AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	return 0
 }
 
+type UnregisterMessage struct{
+	AppId	string	`json"app_id"`
+	AppKey	string	`json:"app_key"`
+	RegId	string	`json"reg_id"`
+}
 func handleUnregister(client *Client, header *Header, body []byte) int {
 	var msg UnregisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	regid := RegId(client.devId, msg.AppId)
-	RegisterManagerInstance.Delete(regid)
+	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	return 0
 }
 
@@ -255,6 +259,9 @@ func (this *Server) Stop() {
 	log.Printf("comet server stopped")
 }
 
+type InitMessage struct {
+	DeviceId	string	`json:"device_id"`
+}
 func waitInit(conn *net.TCPConn) (*Client) {
 	conn.SetReadDeadline(time.Now().Add(10* time.Second))
 	buf := make([]byte, 10)

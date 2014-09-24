@@ -2,42 +2,26 @@ package comet
 
 import (
 	//"fmt"
-	"github.com/chenyf/push/utils/safemap"
 )
 
-type AppItem struct {
-	RegList	[]string
-}
+func PushMessage(appId string, recvType int, recvUsers string, msg string) {
+	set := AMInstance.GetByApp(appId)
 
-var (
-	AppsMap *safemap.SafeMap = safemap.NewSafeMap()
-)
-
-/*
-func PushMessage(appKey string, recvType int, recvUsers string, msg string) {
-	appItem := AppsMap.Get(appKey)
-	select recvType {
+	switch recvType {
 	case 1: //broadcast
-		for regid := range(appItem.RegList) {
-			regItem := RegistrationsMap.Get(regid)
-			devid := regItem.DeviceId
+		for item := range((*set).Iter()) {
+			regid := item.(string)
+			app := AMInstance.Get(regid)
+			devid := app.DevId
 			if DevicesMap.Check(devid) {
-				device := DevicesMap.Get(devid)
-				device.SendMessage(msg)
+				client := DevicesMap.Get(devid).(*Client)
+				client.SendMessage(MSG_REQUEST, []byte(msg), nil)
 			}
 		}
 	case 2: //regid
-		regid := RegistrationsMap.Get(recvUsers)
-			regItem := RegistrationsMap.Get(regid)
-			devid := regItem.DeviceId
-			if DevicesMap.Check(devid) {
-				device := DevicesMap.Get(devid)
-				device.SendMessage(msg)
-			}
 	case 3:	//alias
 	case 4: //tag list
 	default:
 	}
 }
-*/
 
