@@ -8,8 +8,10 @@ import (
 	"time"
 	//"fmt"
 	//"strings"
+	"encoding/json"
+	//"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
-	"github.com/bitly/go-simplejson"
+	//"github.com/bitly/go-simplejson"
 )
 
 type MsgHandler func(*Client, *Header, []byte)(int)
@@ -75,6 +77,15 @@ var (
 	DevicesMap *safemap.SafeMap = safemap.NewSafeMap()
 )
 
+/*
+func HandleOfflineMsgs(appId string, client *Client) {
+	msg_list := storage.StorageInstance.GetOfflineMsgs(appId, client.Lastxxx)
+	for msg := range(msg_list) {
+		client.SendMessage(MSG_REQUEST, msg.Body, nil)
+	}
+}
+*/
+
 func InitClient(conn *net.TCPConn, devid string) (*Client) {
 	client := &Client {
 		devId: devid,
@@ -118,46 +129,42 @@ func CloseClient(client *Client) {
 }
 
 func handleRequestReply(client *Client, header *Header, body []byte) int {
-	ch, ok := client.WaitingChannels[header.Seq]; if ok {
-		//remove waiting channel from map
-		delete(client.WaitingChannels, header.Seq)
-		ch <- &Message{Header: *header, Data: body}
+	var msg ReplyMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		return -1
 	}
+	regid := RegId(client.devId, msg.AppId)
+	regapp := RegisterManagerInstance.Get(regid)
+	regapp.LastMsgSeq = msg.MsgSeq
 	return 0
 }
 
 func handleRegister(client *Client, header *Header, body []byte) int {
-	msg, err := simplejson.NewJson(body)
-	if err != nil {
+	var msg RegisterMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	appKey, err := msg.Get("appKey").String()
-	if err != nil {
-		return -1
-	}
-	regid := RegId(client.devId, appKey)
-	if RegistrationsMap.Check(regid) {
+	regid := RegId(client.devId, msg.AppId)
+	if RegisterManagerInstance.Check(regid) {
 		return -1
 	}
 	app := &App{
 		DevId : client.devId,
-		AppKey : appKey,
+		AppId : msg.AppId,
+		AppKey : msg.AppKey,
+		LastMsgSeq : -1,
 	}
-	RegistrationsMap.Set(regid, app)
+	RegisterManagerInstance.Set(regid, app)
 	return 0
 }
 
 func handleUnregister(client *Client, header *Header, body []byte) int {
-	msg, err := simplejson.NewJson(body)
-	if err != nil {
+	var msg UnregisterMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	appKey, err := msg.Get("appKey").String()
-	if err != nil {
-		return -1
-	}
-	regid := RegId(client.devId, appKey)
-	RegistrationsMap.Delete(regid)
+	regid := RegId(client.devId, msg.AppId)
+	RegisterManagerInstance.Delete(regid)
 	return 0
 }
 
@@ -279,22 +286,17 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 
-	js, err := simplejson.NewJson(data)
-	if err != nil {
+	var msg InitMessage
+	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Printf("JSON decode failed")
 		conn.Close()
 		return nil
 	}
 
-	devid, err := js.Get("id").String()
-	if err != nil {
-		log.Printf("missing 'id'")
-		conn.Close()
-		return nil
-	}
-	log.Printf("recv register devid (%s)", devid)
+	devid := msg.DeviceId
+	log.Printf("recv init devid (%s)", devid)
 	if DevicesMap.Check(devid) {
-		log.Printf("device (%s) register already", devid)
+		log.Printf("device (%s) init already", devid)
 		conn.Close()
 		return nil
 	}

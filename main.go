@@ -29,7 +29,7 @@ type CommandResponse struct {
 }
 
 func getStatus(w http.ResponseWriter, r *http.Request) {
-	size := comet.DevMap.Size()
+	size := comet.DevicesMap.Size()
 	fmt.Fprintf(w, "total register device: %d\n", size)
 }
 
@@ -127,13 +127,13 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !comet.DevMap.Check(rid) {
+	if !comet.DevicesMap.Check(rid) {
 		response.Error = fmt.Sprintf("device (%s) offline", rid)
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
 		return
 	}
-	client := comet.DevMap.Get(rid).(*comet.Client)
+	client := comet.DevicesMap.Get(rid).(*comet.Client)
 
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
@@ -170,12 +170,12 @@ func getCommand(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "missing devid\n")
 		return
 	}
-	if !comet.DevMap.Check(devid) {
+	if !comet.DevicesMap.Check(devid) {
 		fmt.Fprintf(w, "(%s) not register\n", devid)
 		return
 	}
 	cmd := r.FormValue("cmd")
-	client := comet.DevMap.Get(devid).(*comet.Client)
+	client := comet.DevicesMap.Get(devid).(*comet.Client)
 	reply := make(chan *comet.Message)
 	client.SendMessage(comet.MSG_REQUEST, []byte(cmd), reply)
 	select {

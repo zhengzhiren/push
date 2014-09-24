@@ -1,7 +1,7 @@
 package comet
 
 import (
-	"fmt"
+	//"fmt"
 	"github.com/chenyf/push/utils/safemap"
 )
 
@@ -13,7 +13,7 @@ var (
 	AppsMap *safemap.SafeMap = safemap.NewSafeMap()
 )
 
-
+/*
 func PushMessage(appKey string, recvType int, recvUsers string, msg string) {
 	appItem := AppsMap.Get(appKey)
 	select recvType {
@@ -38,5 +38,6 @@ func PushMessage(appKey string, recvType int, recvUsers string, msg string) {
 	case 4: //tag list
 	default:
 	}
-
 }
+*/
+
