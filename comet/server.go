@@ -170,7 +170,10 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 		return -1
 	}
 	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
-	regid := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	regid, err := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	if err != nil {
+		return -1
+	}
 
 	reply := RegisterReplyMessage{
 		AppId : msg.AppId,

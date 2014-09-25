@@ -1,17 +1,6 @@
 package storage
 
 import (
-	//"time"
-)
-
-type Storage struct {
-	Backend	string
-}
-
-var (
-	StorageInstance *Storage = &Storage{
-		Backend : "redis",
-	}
 )
 
 type PushMessage struct {
@@ -19,13 +8,18 @@ type PushMessage struct {
 	Body []byte
 }
 
-func (storage *Storage)GetOfflineMsgs(appId string, ctime int64) []*PushMessage {
-	msg_list := []*PushMessage{}
-	return msg_list
+type AppInfo struct{
+	LastMsgId	int64
+}
+type Storage interface {
+	GetOfflineMsgs(appId string, ctime int64) []*PushMessage
+	GetMsg(appId string, msgId int64) *PushMessage
+	GetApp(regId string) (*AppInfo)
+	AddApp(regId string, appId string, appKey string, devId string) error
 }
 
-func (storage *Storage)GetMsg(appId string, msgId int64) *PushMessage {
-	return nil
-}
-
+var (
+	StorageInstance Storage = RedisStorage{
+	}
+)
 

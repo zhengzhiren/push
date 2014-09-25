@@ -2,6 +2,9 @@ package comet
 
 import (
 	"fmt"
+	"log"
+	"github.com/chenyf/push/error"
+	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
 	"github.com/deckarep/golang-set"
 )
@@ -28,29 +31,48 @@ func RegId(devid string, appKey string) string {
 	return fmt.Sprintf("%s_%s", devid, appKey)
 }
 
-func (this *AppManager)RegisterApp(devid string, appid string, appkey string, regid string) string {
-	app := &App{
-		DevId : devid,
-		AppId : appid,
-		AppKey : appkey,
-		LastMsgId : -1,
-	}
-
-	if regid == "" {
-		regid = RegId(devid, appid)
-	}
-	if !this.regMap.Check(regid) {
-		this.regMap.Set(regid, app)
-		if this.appMap.Check(appid) {
-			set := this.appMap.Get(appid).(mapset.Set)
-			set.Add(regid)
+func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (string, error) {
+	var last_msgid int64 = -1
+	if regId == "" {
+		// the first time to register, assign new regid
+		regId = RegId(devId, appId)
+		// store it : app on device
+		if err := storage.StorageInstance.AddApp(regId, appId, appKey, devId); err != nil {
+			log.Printf("register failed")
+			return "", err
+		}
+	} else  {
+		// not the first time
+		if this.regMap.Check(regId) {
+			log.Printf("register already")
+			return regId, nil
 		} else {
-			set := mapset.NewSet()
-			set.Add(regid)
-			this.appMap.Set(appid, set)
+			// get info from storage
+			app_info := storage.StorageInstance.GetApp(regId)
+			if app_info == nil {
+				return "", &pusherror.PushError{"regid not found in storage"}
+			}
+			last_msgid = app_info.LastMsgId
 		}
 	}
-	return regid
+
+	app := &App{
+		DevId : devId,
+		AppId : appId,
+		AppKey : appKey,
+		LastMsgId : last_msgid,
+	}
+
+	this.regMap.Set(regId, app)
+	if this.appMap.Check(appId) {
+		set := this.appMap.Get(appId).(mapset.Set)
+		set.Add(regId)
+	} else {
+		set := mapset.NewSet()
+		set.Add(regId)
+		this.appMap.Set(appId, set)
+	}
+	return regId, nil
 }
 
 func (this *AppManager)UnregisterApp(devid string, appid string, appkey string, regid string) {
