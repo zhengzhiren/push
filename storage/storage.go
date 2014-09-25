@@ -24,3 +24,8 @@ func (storage *Storage)GetOfflineMsgs(appId string, ctime int64) []*PushMessage 
 	return msg_list
 }
 
+func (storage *Storage)GetMsg(appId string, msgId int64) *PushMessage {
+	return nil
+}
+
+

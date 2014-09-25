@@ -5,9 +5,12 @@ import (
 	"log"
 )
 
-func PushMessage(appId string, pushType int, recvUsers string, msg string) {
+func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 	// get current online apps
 	set := AMInstance.GetByApp(appId)
+	if set == nil {
+		return
+	}
 
 	switch pushType {
 	case 0: //broadcast
@@ -16,9 +19,9 @@ func PushMessage(appId string, pushType int, recvUsers string, msg string) {
 			app := AMInstance.Get(regid)
 			devid := app.DevId
 			if DevicesMap.Check(devid) {
-				client := DevicesMap.Get(devid).(*Client)
 				log.Printf("push to (%s) (%s)", devid, regid)
-				client.SendMessage(MSG_REQUEST, []byte(msg), nil)
+				client := DevicesMap.Get(devid).(*Client)
+				client.SendMessage(MSG_PUSH, msg, nil)
 			}
 		}
 	case 1: //regid
@@ -27,7 +30,7 @@ func PushMessage(appId string, pushType int, recvUsers string, msg string) {
 		if DevicesMap.Check(devid) {
 			client := DevicesMap.Get(devid).(*Client)
 			log.Printf("push to (%s) (%s)", devid, recvUsers)
-			client.SendMessage(MSG_REQUEST, []byte(msg), nil)
+			client.SendMessage(MSG_PUSH, msg, nil)
 		}
 	case 2:	//alias
 	case 3: //tag list

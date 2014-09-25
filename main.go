@@ -151,7 +151,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 
 	bCmd, _ := json.Marshal(cmdRequest)
 	reply := make(chan *comet.Message)
-	client.SendMessage(comet.MSG_REQUEST, bCmd, reply)
+	client.SendMessage(comet.MSG_PUSH, bCmd, reply)
 	select {
 	case msg := <-reply:
 		fmt.Fprintf(w, string(msg.Data))
@@ -163,27 +163,21 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 func getCommand(w http.ResponseWriter, r *http.Request) {
-
 	r.ParseForm()
-	devid := r.FormValue("devid")
-	if devid == "" {
-		fmt.Fprintf(w, "missing devid\n")
-		return
-	}
-	if !comet.DevicesMap.Check(devid) {
-		fmt.Fprintf(w, "(%s) not register\n", devid)
+	appid := r.FormValue("appid")
+	if appid == "" {
+		fmt.Fprintf(w, "missing appid\n")
 		return
 	}
 	cmd := r.FormValue("cmd")
-	client := comet.DevicesMap.Get(devid).(*comet.Client)
-	reply := make(chan *comet.Message)
-	client.SendMessage(comet.MSG_REQUEST, []byte(cmd), reply)
-	select {
-	case msg := <-reply:
-		fmt.Fprintf(w, "recv reply  (%s)\n", string(msg.Data))
-	case <- time.After(10 * time.Second):
-		fmt.Fprintf(w, "recv timeout\n")
+	msg := comet.PushMessage{
+		MsgId : 1000,
+		AppId : appid,
+		MsgType : 0,
+		Payload : cmd,
 	}
+	b, _ := json.Marshal(msg)
+	comet.PushOutMessage(appid, 0, "", b)
 }
 
 func main() {

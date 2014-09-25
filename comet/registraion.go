@@ -7,10 +7,10 @@ import (
 )
 
 type App struct {
-	DevId	string
-	AppId	string
-	AppKey	string
-	LastMsgSeq	int64
+	DevId		string
+	AppId		string
+	AppKey		string
+	LastMsgId	int64
 }
 type AppManager struct {
 	regMap *safemap.SafeMap
@@ -28,37 +28,47 @@ func RegId(devid string, appKey string) string {
 	return fmt.Sprintf("%s_%s", devid, appKey)
 }
 
-func (this *AppManager)RegisterApp(devid string, appid string, appkey string, regid *string) {
+func (this *AppManager)RegisterApp(devid string, appid string, appkey string, regid string) string {
 	app := &App{
 		DevId : devid,
 		AppId : appid,
 		AppKey : appkey,
+		LastMsgId : -1,
 	}
 
-	var id string
-	if regid == nil {
-		id = RegId(devid, appkey)
-	} else {
-		id = *regid
+	if regid == "" {
+		regid = RegId(devid, appid)
 	}
-	if !this.regMap.Check(id) {
-		this.regMap.Set(id, app)
-		set := this.appMap.Get(appid).(*mapset.Set)
-		(*set).Add(regid)
+	if !this.regMap.Check(regid) {
+		this.regMap.Set(regid, app)
+		if this.appMap.Check(appid) {
+			set := this.appMap.Get(appid).(mapset.Set)
+			set.Add(regid)
+		} else {
+			set := mapset.NewSet()
+			set.Add(regid)
+			this.appMap.Set(appid, set)
+		}
 	}
+	return regid
 }
 
 func (this *AppManager)UnregisterApp(devid string, appid string, appkey string, regid string) {
 	if this.regMap.Check(regid) {
 		this.regMap.Delete(regid)
-		set := this.appMap.Get(appid).(*mapset.Set)
-		(*set).Remove(regid)
+		if this.appMap.Check(appid) {
+			set := this.appMap.Get(appid).(mapset.Set)
+			set.Remove(regid)
+		}
 	}
 }
 
 func (this *AppManager)Get(regid string) *App {
-	app := this.regMap.Get(regid).(*App)
-	return app
+	if this.regMap.Check(regid) {
+		app := this.regMap.Get(regid).(*App)
+		return app
+	}
+	return nil
 }
 
 func (this *AppManager)Set(regid string, app *App) {
@@ -74,6 +84,10 @@ func (this *AppManager)Delete(regid string) {
 }
 
 func (this AppManager)GetByApp(appId string) (*mapset.Set) {
-	set := this.appMap.Get(appId).(*mapset.Set)
-	return set
+	if this.appMap.Check(appId) {
+		set := this.appMap.Get(appId).(mapset.Set)
+		return &set
+	}
+	return nil
 }
+

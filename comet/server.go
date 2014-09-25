@@ -100,7 +100,6 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 	go func() {
 		log.Printf("enter send routine")
 		for {
-			log.Printf("run loop")
 			select {
 			case pack := <-client.MsgOut:
 				seqid := pack.client.NextSeqId
@@ -108,7 +107,7 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
-				log.Printf("send msg ok, (%s)", string(pack.msg.Data))
+				log.Printf("send msg ok, (%d) (%s)", pack.msg.Header.Type, pack.msg.Data)
 				pack.client.NextSeqId += 1
 				// add reply channel
 				if pack.reply != nil {
@@ -128,47 +127,75 @@ func CloseClient(client *Client) {
 	DevicesMap.Delete(client.devId)
 }
 
-type ReplyMessage struct {
-	AppId	string	`json"app_id"`
-	RegId	string	`json"reg_id"`
-	MsgSeq	int64	`json:"msg_seq"`
+type PushMessage struct {
+	MsgId	int64	`json:"msg_id"`
+	AppId	string	`json:"app_id"`
+	MsgType	int		`json:"msg_type"`
+	Payload	string	`json:"payload"`
 }
-func handleRequestReply(client *Client, header *Header, body []byte) int {
-	var msg ReplyMessage
+type PushReplyMessage struct {
+	MsgId	int64	`json:"msg_id"`
+	AppId	string	`json:"app_id"`
+	RegId	string	`json:"reg_id"`
+}
+func handlePushReply(client *Client, header *Header, body []byte) int {
+	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
 	app := AMInstance.Get(msg.RegId)
-	app.LastMsgSeq = msg.MsgSeq
+	if app != nil {
+		app.LastMsgId = msg.MsgId
+	} else {
+		log.Printf("unknown regid (%s)", msg.RegId)
+	}
 	return 0
 }
 
 type RegisterMessage struct{
-	AppId	string	`json"app_id"`
+	AppId	string	`json:"app_id"`
 	AppKey	string	`json:"app_key"`
-	RegId	string	`json"reg_id"`
+	RegId	string	`json:"reg_id"`
+}
+type RegisterReplyMessage struct{
+	AppId	string	`json:"app_id"`
+	RegId	string	`json:"reg_id"`
+	Result	int		`json:"result"`
 }
 // app注册后，才可以接收消息
 func handleRegister(client *Client, header *Header, body []byte) int {
+	log.Printf("handle register")
 	var msg RegisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, &msg.RegId)
+	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
+	regid := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+
+	reply := RegisterReplyMessage{
+		AppId : msg.AppId,
+		RegId : regid,
+		Result : 0,
+	}
+	b, _ := json.Marshal(reply)
+	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
 	return 0
 }
 
 type UnregisterMessage struct{
-	AppId	string	`json"app_id"`
+	AppId	string	`json:"app_id"`
 	AppKey	string	`json:"app_key"`
-	RegId	string	`json"reg_id"`
+	RegId	string	`json:"reg_id"`
 }
 func handleUnregister(client *Client, header *Header, body []byte) int {
+	log.Printf("handle unregister")
 	var msg UnregisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
+	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
 	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	client.SendMessage(MSG_UNREGISTER_REPLY, []byte("OK"), nil)
 	return 0
 }
 
@@ -206,7 +233,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
 	this.funcMap[MSG_REGISTER] = handleRegister
 	this.funcMap[MSG_UNREGISTER] = handleUnregister
-	this.funcMap[MSG_REQUEST_REPLY] = handleRequestReply
+	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
 	return l, nil
 }
 
@@ -291,7 +318,7 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	}
 
 	if header.Type != MSG_INIT {
-		log.Printf("not register message")
+		log.Printf("not register message, %d", header.Type)
 		conn.Close()
 		return nil
 	}
@@ -358,19 +385,22 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 			log.Printf("readfull failed (%v)", err)
 			break
 		}
-		//log.Printf("read %d bytes", n)
 		var header Header
 		if err := header.Deserialize(buf[0:n]); err != nil {
 			break
 		}
-
-		data := make([]byte, header.Len)
-		if _, err := io.ReadFull(conn, data); err != nil {
-			if e, ok := err.(*net.OpError); ok && e.Timeout() {
-				continue
+		log.Printf("recv msg: %d, len %d", header.Type, header.Len)
+		data := []byte{}
+		if header.Len > 0 {
+			data = make([]byte, header.Len)
+			if _, err := io.ReadFull(conn, data); err != nil {
+				if e, ok := err.(*net.OpError); ok && e.Timeout() {
+					continue
+				}
+				log.Printf("read from client failed: (%v)", err)
+				break
 			}
-			log.Printf("read from client failed: (%v)", err)
-			break
+			log.Printf("body (%s)", data)
 		}
 
 		handler, ok := this.funcMap[header.Type]; if ok {
