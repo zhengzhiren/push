@@ -203,7 +203,7 @@ func main() {
 	waitGroup := &sync.WaitGroup{}
 	cometServer := comet.NewServer()
 
-	listener, err := cometServer.Init("0.0.0.0:10000")
+	listener, err := cometServer.Init("0.0.0.0:20000")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func main() {
 		http.HandleFunc("/router/command", postRouterCommand)
 		http.HandleFunc("/command", getCommand)
 		http.HandleFunc("/status", getStatus)
-		err := http.ListenAndServe("0.0.0.0:9999", nil)
+		err := http.ListenAndServe("0.0.0.0:19999", nil)
 		if err != nil {
 			log.Fatal("http listen: ", err)
 		}

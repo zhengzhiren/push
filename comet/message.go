@@ -18,15 +18,16 @@ type Message struct {
 }
 
 const (
-	HEADER_SIZE			= uint32(10)
-	MSG_HEARTBEAT		= uint8(0)
-	MSG_INIT			= uint8(1)
-	MSG_REGISTER		= uint8(3)
-	MSG_REGISTER_REPLY	= uint8(4)
-	MSG_UNREGISTER		= uint8(5)
+	HEADER_SIZE				= uint32(10)
+	MSG_HEARTBEAT			= uint8(0)
+	MSG_INIT				= uint8(1)
+	MSG_INIT_REPLY			= uint8(2)
+	MSG_REGISTER			= uint8(3)
+	MSG_REGISTER_REPLY		= uint8(4)
+	MSG_UNREGISTER			= uint8(5)
 	MSG_UNREGISTER_REPLY	= uint8(6)
-	MSG_REQUEST			= uint8(20)
-	MSG_REQUEST_REPLY	= uint8(21)
+	MSG_REQUEST				= uint8(10)
+	MSG_REQUEST_REPLY		= uint8(11)
 )
 
 // msg to byte

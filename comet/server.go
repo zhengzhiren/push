@@ -154,7 +154,7 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, &msg.RegId)
 	return 0
 }
 
@@ -204,9 +204,9 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		return nil, err
 	}
 	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
-	this.funcMap[MSG_REQUEST_REPLY] = handleRequestReply
 	this.funcMap[MSG_REGISTER] = handleRegister
 	this.funcMap[MSG_UNREGISTER] = handleUnregister
+	this.funcMap[MSG_REQUEST_REPLY] = handleRequestReply
 	return l, nil
 }
 
@@ -262,6 +262,9 @@ func (this *Server) Stop() {
 type InitMessage struct {
 	DeviceId	string	`json:"device_id"`
 }
+type InitReplyMessage struct {
+	Result	string `json:"result"`
+}
 func waitInit(conn *net.TCPConn) (*Client) {
 	conn.SetReadDeadline(time.Now().Add(10* time.Second))
 	buf := make([]byte, 10)
@@ -308,6 +311,12 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 	client := InitClient(conn, devid)
+
+	reply := InitReplyMessage{
+		Result : "0",
+	}
+	body, _ := json.Marshal(&reply)
+	client.SendMessage(MSG_INIT_REPLY, body, nil)
 	return client
 }
 

@@ -28,21 +28,32 @@ func RegId(devid string, appKey string) string {
 	return fmt.Sprintf("%s_%s", devid, appKey)
 }
 
-func (this *AppManager)RegisterApp(devid string, appid string, appkey string, regid string) {
+func (this *AppManager)RegisterApp(devid string, appid string, appkey string, regid *string) {
 	app := &App{
 		DevId : devid,
 		AppId : appid,
 		AppKey : appkey,
 	}
-	this.regMap.Set(regid, app)
-	set := this.appMap.Get(appid).(*mapset.Set)
-	(*set).Add(regid)
+
+	var id string
+	if regid == nil {
+		id = RegId(devid, appkey)
+	} else {
+		id = *regid
+	}
+	if !this.regMap.Check(id) {
+		this.regMap.Set(id, app)
+		set := this.appMap.Get(appid).(*mapset.Set)
+		(*set).Add(regid)
+	}
 }
 
 func (this *AppManager)UnregisterApp(devid string, appid string, appkey string, regid string) {
-	this.regMap.Delete(regid)
-	set := this.appMap.Get(appid).(*mapset.Set)
-	(*set).Remove(regid)
+	if this.regMap.Check(regid) {
+		this.regMap.Delete(regid)
+		set := this.appMap.Get(appid).(*mapset.Set)
+		(*set).Remove(regid)
+	}
 }
 
 func (this *AppManager)Get(regid string) *App {
