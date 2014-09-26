@@ -41,19 +41,46 @@ func newRedisStorage() *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
-	ret, err := redis.Strings(r.pool.Get().Do("HGETALL", appId))
+	key := appId + "_offline"
+	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
+	if err != nil {
+		log.Printf("failed to get fields of offline msg:", err)
+		return nil
+	}
+
+	now := time.Now().Unix()
+	skeys := make(map[int64]interface{})
+	var sidxs []float64
+	
+	for i := range ret {
+		var (
+			idx int64
+			expire int64
+		)
+		if _, err := fmt.Sscanf(ret[i], "%v_%v", &idx, &expire); err != nil {
+			log.Printf("invaild redis hash field:", err)
+			continue
+		}
+
+		if idx <= msgId || expire <= now {
+			continue
+		} else {
+			skeys[idx] = ret[i]
+			sidxs = append(sidxs, float64(idx))
+		}
+	}
+
+	sort.Float64Slice(sidxs).Sort()
+	args := []interface{}{key}
+	for k := range sidxs {
+		t := int64(sidxs[k])
+		args = append(args, skeys[t])
+	}
+
+	msg, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
 	if err != nil {
 		log.Printf("failed to get offline msg:", err)
 		return nil
-	}
-	var msg []string
-	for i := range ret {
-		//log.Print(ret)
-		if _, err := strconv.Atoi(ret[i]); err == nil{
-			continue
-		} else {
-			msg = append(msg, ret[i])
-		}
 	}
 	return msg
 }
