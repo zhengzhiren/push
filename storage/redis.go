@@ -3,6 +3,7 @@ package storage
 
 import (
 	//"time"
+	"fmt"
 	"log"
 	"time"
 	"strconv"
@@ -11,7 +12,7 @@ import (
 	//"github.com/chenyf/push/error"
 )
 
-const RedisServer = "127.0.0.1:6379"
+const RedisServer = "0.0.0.0:6379"
 
 type RedisStorage struct {
 	pool *redis.Pool
@@ -67,18 +68,6 @@ func (r *RedisStorage)GetMsg(appId string, msgId int64) string {
 	return msg
 }
 
-func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo, error) {
-	msg, err := redis.Bytes(r.pool.Get().Do("GET", regId))
-	if err != nil {
-		return nil, err
-	}
-
-	var app AppInfo
-	if err := json.Unmarshal(msg, &app); err != nil {
-		return nil ,err
-	}
-	return &app, nil
-}
 
 func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 	app := AppInfo{
@@ -88,11 +77,24 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 	if err != nil {
 		return err
 	}
-	if _, err := r.pool.Get().Do("SET", regId, b); err != nil {
+	if _, err := r.pool.Get().Do("HSET", fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
 		return err
 	}
 	return nil
 	//return &pusherror.PushError{"add failed"}
+}
+
+func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo, error) {
+	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
+	if err != nil {
+		return nil, err
+	}
+
+	var app AppInfo
+	if err := json.Unmarshal(msg, &app); err != nil {
+		return nil ,err
+	}
+	return &app, nil
 }
 
 /*

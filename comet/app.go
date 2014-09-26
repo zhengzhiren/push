@@ -13,7 +13,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 		for _, app := range(apps) {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
-				log.Printf("push to (%s) (%s)", app.DevId, app.RegId)
+				log.Printf("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
 				client.SendMessage(MSG_PUSH, msg, nil)
 			}
 		}
@@ -22,7 +22,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 		if app != nil {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
-				log.Printf("push to (%s) (%s)", app.DevId, recvUsers)
+				log.Printf("push to (app %s) (device %s) (regid %s)", appId, app.DevId, recvUsers)
 				client.SendMessage(MSG_PUSH, msg, nil)
 			}
 		}

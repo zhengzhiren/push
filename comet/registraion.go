@@ -122,6 +122,7 @@ func (this *AppManager)UpdateApp(appId string, regId string, msgId int64) error 
 		return nil
 	}
 	if msgId <= app.LastMsgId {
+		log.Printf("msgid mismatch: %d <= %d", msgId, app.LastMsgId)
 		return nil
 	}
 	if err := storage.StorageInstance.UpdateApp(appId, regId, msgId); err != nil {

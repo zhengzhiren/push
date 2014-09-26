@@ -6,12 +6,13 @@ import (
 	"log"
 	"sync"
 	"strings"
+	"strconv"
 	"io/ioutil"
 	"os/signal"
 	"syscall"
 	"net/http"
 	"fmt"
-	"time"
+	//"time"
 	"encoding/json"
 	"crypto/hmac"
 	"crypto/sha1"
@@ -30,7 +31,7 @@ type CommandResponse struct {
 }
 
 var (
-	uri          = flag.String("uri", "amqp://guest:guest@localhost:5672/", "AMQP URI")
+	uri          = flag.String("uri", "amqp://guest:guest@10.135.28.11:5672/", "AMQP URI")
 	exchange     = flag.String("exchange", "test-exchange", "Durable, non-auto-deleted AMQP exchange name")
 	exchangeType = flag.String("exchange-type", "direct", "Exchange type - direct|fanout|topic|x-custom")
 	queue        = flag.String("queue", "test-queue", "Ephemeral AMQP queue name")
@@ -69,6 +70,15 @@ func sign(path string, query map[string]string) []byte{
 	return mac.Sum(nil)
 }
 
+type InputMsg struct {
+	AppId		string	`json:"app_id"`
+	PushType	int		`json:"push_type"`
+	RegId		string	`json:"reg_id"`
+	MsgType		int		`json:"msg_type"`
+	TTL			uint64	`json:"ttl"`
+	MsgId		int64	`json:"msg_id"`
+	Payload		string	`json:"payload"`
+}
 func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	var response CommandResponse
 	response.Status = 1
@@ -79,73 +89,12 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseForm()
-	rid := r.FormValue("rid")
-	if rid == "" {
-		response.Error = "missing 'rid'"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-
-	uid := r.FormValue("uid")
-	if uid == "" {
-		response.Error = "missing 'uid'"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-
-	if !checkAuthz(uid, rid) {
-		response.Error = "authorization failed"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-
-	/*
-	uid := r.FormValue("uid")
-	if uid == "" {	fmt.Fprintf(w, "missing 'uid'\n"); return; }
-	tid := r.FormValue("tid")
-	if tid == "" {	fmt.Fprintf(w, "missing 'tid'\n"); return; }
-	sign := r.FormValue("sign")
-	if sign == "" {	fmt.Fprintf(w, "missing 'sign'\n"); return; }
-	tm := r.FormValue("tm")
-	if tm == "" {	fmt.Fprintf(w, "missing 'tm'\n"); return; }
-	pmtt := r.FormValue("pmtt")
-	if pmtt == "" {	fmt.Fprintf(w, "missing 'pmtt'\n"); return; }
-	query := map[string]string {
-		"uid" : uid,
-		"rid" : rid,
-		"tid" : tid,
-		"src" : "letv",
-		"tm" :  tm,
-		"pmtt" : pmtt,
-	}
-	path := "/router/command"
-	mysign := sign(path, query)
-	if mysign != sign {
-		response.Error = "sign valication failed"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-	*/
-
 	if r.Body == nil {
 		response.Error = "missing POST data"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
 		return
 	}
-
-	if !comet.DevicesMap.Check(rid) {
-		response.Error = fmt.Sprintf("device (%s) offline", rid)
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-	client := comet.DevicesMap.Get(rid).(*comet.Client)
-
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
@@ -155,22 +104,26 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmdRequest := CommandRequest{
-		Uid: uid,
-		Cmd: string(body),
-	}
-
-	bCmd, _ := json.Marshal(cmdRequest)
-	reply := make(chan *comet.Message)
-	client.SendMessage(comet.MSG_PUSH, bCmd, reply)
-	select {
-	case msg := <-reply:
-		fmt.Fprintf(w, string(msg.Data))
-	case <- time.After(10 * time.Second):
-		response.Error = "recv response timeout"
+	var input InputMsg
+	if err := json.Unmarshal(body, &input); err != nil {
+		response.Error = fmt.Sprintf("json decode failed, %s", err)
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
+		return
 	}
+
+	msg := comet.PushMessage{
+		MsgId : input.MsgId,
+		AppId : input.AppId,
+		MsgType : input.MsgType,
+		Payload : input.Payload,
+	}
+	b, _ := json.Marshal(msg)
+	regid := ""
+	if input.PushType == 1 {
+		regid = input.RegId
+	}
+	comet.PushOutMessage(input.AppId, input.PushType, regid, b)
 }
 
 func getCommand(w http.ResponseWriter, r *http.Request) {
@@ -180,15 +133,30 @@ func getCommand(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "missing appid\n")
 		return
 	}
+	push_type := 0
+	ptype := r.FormValue("ptype")
+	if ptype != "" {
+		push_type, _ = strconv.Atoi(ptype)
+	}
+	msgid := r.FormValue("msgid")
+	if msgid == "" {
+		fmt.Fprintf(w, "missing msgid\n")
+		return
+	}
+	mid, err := strconv.Atoi(msgid)
+	if err != nil {
+		fmt.Fprintf(w, "invalid msgid\n")
+		return
+	}
 	cmd := r.FormValue("cmd")
 	msg := comet.PushMessage{
-		MsgId : 1000,
+		MsgId : int64(mid),
 		AppId : appid,
 		MsgType : 0,
 		Payload : cmd,
 	}
 	b, _ := json.Marshal(msg)
-	comet.PushOutMessage(appid, 0, "", b)
+	comet.PushOutMessage(appid, push_type, "", b)
 }
 
 func main() {

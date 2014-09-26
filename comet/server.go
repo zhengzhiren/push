@@ -128,10 +128,10 @@ func CloseClient(client *Client) {
 }
 
 type PushMessage struct {
-	MsgId	int64	`json:"msg_id"`
-	AppId	string	`json:"app_id"`
-	MsgType	int		`json:"msg_type"`
-	Payload	string	`json:"payload"`
+	MsgId		int64	`json:"msg_id"`
+	AppId		string	`json:"app_id"`
+	MsgType		int		`json:"msg_type"`
+	Payload		string	`json:"payload"`
 }
 type PushReplyMessage struct {
 	MsgId	int64	`json:"msg_id"`
