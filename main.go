@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"crypto/hmac"
 	"crypto/sha1"
+	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
 )
 
@@ -27,6 +28,16 @@ type CommandResponse struct {
 	Status	int		`json:"status"`
 	Error	string	`json:"error"`
 }
+
+var (
+	uri          = flag.String("uri", "amqp://guest:guest@localhost:5672/", "AMQP URI")
+	exchange     = flag.String("exchange", "test-exchange", "Durable, non-auto-deleted AMQP exchange name")
+	exchangeType = flag.String("exchange-type", "direct", "Exchange type - direct|fanout|topic|x-custom")
+	queue        = flag.String("queue", "test-queue", "Ephemeral AMQP queue name")
+	bindingKey   = flag.String("key", "test-key", "AMQP binding key")
+	consumerTag  = flag.String("consumer-tag", "simple-consumer", "AMQP consumer tag (should not be blank)")
+	qos          = flag.Int("qos", 1, "message qos")
+)
 
 func getStatus(w http.ResponseWriter, r *http.Request) {
 	size := comet.DevicesMap.Size()
@@ -196,6 +207,10 @@ func main() {
 
 	waitGroup := &sync.WaitGroup{}
 	cometServer := comet.NewServer()
+	mqConsumer, err := mq.NewConsumer(*uri, *exchange, *exchangeType, *queue, *bindingKey, *consumerTag, *qos)
+	if err != nil {
+			log.Fatal(err)
+	}
 
 	listener, err := cometServer.Init("0.0.0.0:20000")
 	if err != nil {
@@ -210,12 +225,18 @@ func main() {
 		///utils.RemovePidFile(srv.	runtime.config.Pidfile)
 		cometServer.Stop()
 		log.Printf("leave 1")
+		mqConsumer.Shutdown()
 		waitGroup.Done()
 		log.Printf("leave 2")
 	}()
 
 	go func() {
 		cometServer.Run(listener)
+	}()
+	
+	go func() {
+		log.Printf("mq running")
+		mqConsumer.Consume()
 	}()
 	waitGroup.Add(1)
 	go func() {
