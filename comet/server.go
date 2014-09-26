@@ -143,11 +143,13 @@ func handlePushReply(client *Client, header *Header, body []byte) int {
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	app := AMInstance.Get(msg.RegId)
+	app := AMInstance.Get(msg.AppId, msg.RegId)
 	if app != nil {
-		app.LastMsgId = msg.MsgId
+		if app.LastMsgId < msg.MsgId {
+			app.LastMsgId = msg.MsgId
+		}
 	} else {
-		log.Printf("unknown regid (%s)", msg.RegId)
+		log.Printf("unknown reply (%s) (%s)", msg.AppId, msg.RegId)
 	}
 	return 0
 }
@@ -171,14 +173,14 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 	}
 	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
 	regid, err := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	result := 0
 	if err != nil {
-		return -1
+		result = 1
 	}
-
 	reply := RegisterReplyMessage{
 		AppId : msg.AppId,
 		RegId : regid,
-		Result : 0,
+		Result : result,
 	}
 	b, _ := json.Marshal(reply)
 	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
@@ -190,6 +192,11 @@ type UnregisterMessage struct{
 	AppKey	string	`json:"app_key"`
 	RegId	string	`json:"reg_id"`
 }
+type UnregisterReplyMessage struct{
+	AppId	string	`json:"app_id"`
+	RegId	string	`json:"reg_id"`
+	Result	int		`json:"result"`
+}
 func handleUnregister(client *Client, header *Header, body []byte) int {
 	log.Printf("handle unregister")
 	var msg UnregisterMessage
@@ -198,16 +205,20 @@ func handleUnregister(client *Client, header *Header, body []byte) int {
 	}
 	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
 	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
-	client.SendMessage(MSG_UNREGISTER_REPLY, []byte("OK"), nil)
+	result := 0
+	reply := RegisterReplyMessage{
+		AppId : msg.AppId,
+		RegId : msg.RegId,
+		Result : result,
+	}
+	b, _ := json.Marshal(reply)
+	client.SendMessage(MSG_UNREGISTER_REPLY, b, nil)
 	return 0
 }
 
 func handleHeartbeat(client *Client, header *Header, body []byte) int {
 	client.LastAlive = time.Now()
 	return 0
-}
-
-type Device struct {
 }
 
 func (this *Server) SetAcceptTimeout(acceptTimeout time.Duration) {
@@ -233,10 +244,10 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Printf("failed to listen, (%v)", err)
 		return nil, err
 	}
-	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
-	this.funcMap[MSG_REGISTER] = handleRegister
-	this.funcMap[MSG_UNREGISTER] = handleUnregister
-	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
+	this.funcMap[MSG_HEARTBEAT]		= handleHeartbeat
+	this.funcMap[MSG_REGISTER]		= handleRegister
+	this.funcMap[MSG_UNREGISTER]	= handleUnregister
+	this.funcMap[MSG_PUSH_REPLY]	= handlePushReply
 	return l, nil
 }
 
@@ -341,7 +352,6 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 	client := InitClient(conn, devid)
-
 	reply := InitReplyMessage{
 		Result : "0",
 	}
