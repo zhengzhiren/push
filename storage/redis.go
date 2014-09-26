@@ -6,8 +6,9 @@ import (
 	"log"
 	"time"
 	"strconv"
+	"encoding/json"
 	"github.com/garyburd/redigo/redis"
-	"github.com/chenyf/push/error"
+	//"github.com/chenyf/push/error"
 )
 
 const RedisServer = "127.0.0.1:6379"
@@ -18,22 +19,22 @@ type RedisStorage struct {
 
 func newRedisStorage() *RedisStorage {
 	return &RedisStorage {
-    		pool: &redis.Pool{
-        		MaxIdle: 1,
-        		IdleTimeout: 300 * time.Second,
-        		Dial: func() (redis.Conn, error) {
-        			c, err := redis.Dial("tcp", RedisServer)
-        			if err != nil {
-        				log.Printf("faild to connect Redis:", err)
-        				return nil, err
-        			}
-        			return c, err
-        		},
-        		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-        			_, err := c.Do("PING")
-        			return err
-        		},
-        	},
+		pool: &redis.Pool{
+			MaxIdle: 1,
+			IdleTimeout: 300 * time.Second,
+			Dial: func() (redis.Conn, error) {
+				c, err := redis.Dial("tcp", RedisServer)
+				if err != nil {
+					log.Printf("faild to connect Redis:", err)
+					return nil, err
+				}
+				return c, err
+			},
+			TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				_, err := c.Do("PING")
+				return err
+			},
+		},
 	}
 }
 
@@ -66,13 +67,32 @@ func (r *RedisStorage)GetMsg(appId string, msgId int64) string {
 	return msg
 }
 
+func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo, error) {
+	msg, err := redis.Bytes(r.pool.Get().Do("GET", regId))
+	if err != nil {
+		return nil, err
+	}
 
-func (r *RedisStorage)GetApp(regId string) (*AppInfo) {
-	return nil
+	var app AppInfo
+	if err := json.Unmarshal(msg, &app); err != nil {
+		return nil ,err
+	}
+	return &app, nil
 }
 
-func (r *RedisStorage)AddApp(regId string, appId string, appKey string, devId string) error {
-	return &pusherror.PushError{"add failed"}
+func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
+	app := AppInfo{
+		LastMsgId : msgId,
+	}
+	b, err := json.Marshal(app)
+	if err != nil {
+		return err
+	}
+	if _, err := r.pool.Get().Do("SET", regId, b); err != nil {
+		return err
+	}
+	return nil
+	//return &pusherror.PushError{"add failed"}
 }
 
 /*

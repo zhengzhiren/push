@@ -130,7 +130,7 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			continue
 		}
 		log.Print(rawMsg)
-		
+
 		/*msg := comet.PushMessage{
 			MsgId : 1000,
 			AppId : appid,

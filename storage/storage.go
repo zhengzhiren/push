@@ -9,13 +9,13 @@ type PushMessage struct {
 }
 
 type AppInfo struct{
-	LastMsgId	int64
+	LastMsgId	int64	`json:"last_msgid"`
 }
 type Storage interface {
 	GetOfflineMsgs(appId string, ctime int64) []string
 	GetMsg(appId string, msgId int64) string
-	GetApp(regId string) (*AppInfo)
-	AddApp(regId string, appId string, appKey string, devId string) error
+	GetApp(appId string, regId string) (*AppInfo, error)
+	UpdateApp(appId string, regId string, msgId int64) error
 }
 
 var (

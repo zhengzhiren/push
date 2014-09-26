@@ -3,23 +3,26 @@ package comet
 import (
 	"fmt"
 	"log"
+	"sync"
 	"github.com/chenyf/push/error"
 	"github.com/chenyf/push/storage"
-	"github.com/chenyf/push/utils/safemap"
 )
 
 type App struct {
 	RegId		string
 	DevId		string
+	AppId		string
 	LastMsgId	int64
 }
 type AppManager struct {
-	appMap *safemap.SafeMap
+	lock *sync.RWMutex
+	appMap map[string]*App
 }
 
 var (
 	AMInstance *AppManager = &AppManager{
-		appMap : safemap.NewSafeMap(),
+		lock: new(sync.RWMutex),
+		appMap: make(map[string]*App), 
 	}
 )
 
@@ -28,17 +31,21 @@ func RegId(devid string, appKey string) string {
 }
 
 func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (string, error) {
+	log.Printf("register (%s) (%s)", appId, regId)
 	var last_msgid int64 = -1
 	if regId != "" {
 		// 非第一次注册
-		key := fmt.Sprintf("%s_%s", appId, regId)
-		if this.appMap.Check(key) {
-			// 已在内存中
+		this.lock.RLock()
+		if _, ok := this.appMap[regId]; ok {
+			log.Printf("in memory already")
+			this.lock.RUnlock()
 			return regId, nil
 		}
+		this.lock.RUnlock()
 		// 从后端存储获取 last_msgid
-		app_info := storage.StorageInstance.GetApp(appId, regId)
-		if app_info == nil {
+		app_info, err := storage.StorageInstance.GetApp(appId, regId)
+		if err != nil {
+			log.Printf("not in storage")
 			return "", &pusherror.PushError{"regid not found in storage"}
 		}
 		last_msgid = app_info.LastMsgId
@@ -46,53 +53,80 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		// 第一次注册，分配一个新的regId
 		regId = RegId(devId, appId)
 		// 记录到后端存储中
-		if err := storage.StorageInstance.AddApp(appId, regId, appKey, devId); err != nil {
+		if err := storage.StorageInstance.UpdateApp(appId, regId, -1); err != nil {
 			log.Printf("storage add failed")
 			return "", err
 		}
 	}
-	key := fmt.Sprintf("%s_%s", appId, regId)
 	app := &App{
 		RegId : regId,
 		DevId : devId,
+		AppId : appId,
 		LastMsgId : last_msgid,
 	}
-	this.appMap.Set(key, app)
+	this.lock.Lock()
+	log.Printf("register app (%s) (%s)", appId, regId)
+	this.appMap[regId] = app
+	this.lock.Unlock()
 	return regId, nil
 }
 
 func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, regId string) {
-	key := fmt.Sprintf("%s_%s", appId, regId)
-	if this.appMap.Check(key) {
-		this.appMap.Delete(key)
+	/*
+	if this.appMap.Check(regId) {
+		this.appMap.Delete(regId)
 	}
+	*/
 }
 
 func (this *AppManager)Get(appId string, regId string) *App {
-	key := fmt.Sprintf("%s_%s", appId, regId)
-	if this.appMap.Check(key) {
-		app := this.appMap.Get(key).(*App)
+	this.lock.Lock()
+	app, ok := this.appMap[regId]; if ok {
+		this.lock.Unlock()
 		return app
 	}
+	this.lock.Unlock()
 	return nil
 }
 
+/*
 func (this *AppManager)Set(appId string, regId string, app *App) {
-	key := fmt.Sprintf("%s_%s", appId, regId)
-	this.appMap.Set(key, app)
+	this.appMap.Set(regId, app)
 }
 
 func (this *AppManager)Check(appId string, regId string) bool {
-	key := fmt.Sprintf("%s_%s", appId, regId)
-	return this.appMap.Check(key)
+	return this.appMap.Check(regId)
 }
 
 func (this *AppManager)Delete(appId string, regId string) {
-	key := fmt.Sprintf("%s_%s", appId, regId)
-	this.appMap.Delete(key)
+	this.appMap.Delete(regId)
 }
+*/
 
 func (this *AppManager)GetApps(appId string) ([]*App) {
-	return nil
+	apps := make([]*App, 0, len(this.appMap))
+	this.lock.RLock()
+	for _, app := range(this.appMap) {
+		if app.AppId == appId {
+			apps = append(apps, app)
+		}
+	}
+	this.lock.RUnlock()
+	log.Printf("get %d apps", len(apps))
+	return apps
 }
 
+func (this *AppManager)UpdateApp(appId string, regId string, msgId int64) error {
+	app := this.Get(appId, regId)
+	if app == nil {
+		return nil
+	}
+	if msgId <= app.LastMsgId {
+		return nil
+	}
+	if err := storage.StorageInstance.UpdateApp(appId, regId, msgId); err != nil {
+		return err
+	}
+	app.LastMsgId = msgId
+	return nil
+}

@@ -5,7 +5,7 @@ import (
 	"log"
 	"io"
 	"os"
-	//"fmt"
+	"fmt"
 	"time"
 	"encoding/json"
 	//"strings"
@@ -80,8 +80,8 @@ func main() {
 
 	sendInit(conn, devid)
 	time.Sleep(10)
-	regid := "regid_test0"
-	sendRegister(conn, "myapp1", "mykey1", regid)
+	regid := fmt.Sprintf("%s_myapp1", devid)
+	sendRegister(conn, "myapp1", "mykey1", "")
 
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {

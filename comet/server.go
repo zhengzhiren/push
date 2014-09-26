@@ -143,13 +143,8 @@ func handlePushReply(client *Client, header *Header, body []byte) int {
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	app := AMInstance.Get(msg.AppId, msg.RegId)
-	if app != nil {
-		if app.LastMsgId < msg.MsgId {
-			app.LastMsgId = msg.MsgId
-		}
-	} else {
-		log.Printf("unknown reply (%s) (%s)", msg.AppId, msg.RegId)
+	if err := AMInstance.UpdateApp(msg.AppId, msg.RegId, msg.MsgId); err != nil {
+		log.Printf("update app failed, (%s)", err)
 	}
 	return 0
 }
@@ -402,7 +397,9 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 		if err := header.Deserialize(buf[0:n]); err != nil {
 			break
 		}
-		log.Printf("recv msg: %d, len %d", header.Type, header.Len)
+		if header.Type != 0 {
+			log.Printf("recv msg: %d, len %d", header.Type, header.Len)
+		}
 		data := []byte{}
 		if header.Len > 0 {
 			data = make([]byte, header.Len)

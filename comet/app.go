@@ -1,7 +1,7 @@
 package comet
 
 import (
-	"fmt"
+	//"fmt"
 	"log"
 )
 
@@ -33,15 +33,10 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 }
 
 func SimplePushMessage(appId string, pushType int, pushParams interface{}, msg []byte) error {
-	set := AMInstance.GetByApp(appId)
-	if set == nil {
-		return fmt.Errorf("failed to get oline apps with appid")
-	}
-
 	switch pushType {
 		case 0:
 		case 1:
-			app := AMInstance.Get(pushParams.(string))
+			app := AMInstance.Get(appId, pushParams.(string))
 			devid := app.DevId
 			if DevicesMap.Check(devid) {
 				client := DevicesMap.Get(devid).(*Client)

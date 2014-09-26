@@ -233,7 +233,7 @@ func main() {
 	go func() {
 		cometServer.Run(listener)
 	}()
-	
+
 	go func() {
 		log.Printf("mq running")
 		mqConsumer.Consume()
