@@ -31,7 +31,7 @@ type CommandResponse struct {
 }
 
 var (
-	uri          = flag.String("uri", "amqp://guest:guest@10.135.28.11:5672/", "AMQP URI")
+	uri          = flag.String("uri", "amqp://guest:guest@10.154.156.121:5672/", "AMQP URI")
 	exchange     = flag.String("exchange", "test-exchange", "Durable, non-auto-deleted AMQP exchange name")
 	exchangeType = flag.String("exchange-type", "direct", "Exchange type - direct|fanout|topic|x-custom")
 	queue        = flag.String("queue", "test-queue", "Ephemeral AMQP queue name")
@@ -123,6 +123,8 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	if input.PushType == 1 {
 		regid = input.RegId
 	}
+
+	storage.StorageInstance.
 	comet.PushOutMessage(input.AppId, input.PushType, regid, b)
 }
 
