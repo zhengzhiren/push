@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"log"
 	"time"
-	"strconv"
+	"sort"
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
 	//"github.com/chenyf/push/error"
 )
 
-const RedisServer = "0.0.0.0:6379"
+const (
+	RedisServer = "10.154.156.121:6380"
+	RedisPasswd = "rpasswd"
+)
 
 type RedisStorage struct {
 	pool *redis.Pool
@@ -26,7 +29,11 @@ func newRedisStorage() *RedisStorage {
 			Dial: func() (redis.Conn, error) {
 				c, err := redis.Dial("tcp", RedisServer)
 				if err != nil {
-					log.Printf("faild to connect Redis:", err)
+					log.Printf("failed to connect Redis:", err)
+					return nil, err
+				}
+				if _, err := c.Do("AUTH", RedisPasswd); err != nil {
+					log.Printf("failed to auth Redis:", err)
 					return nil, err
 				}
 				return c, err
