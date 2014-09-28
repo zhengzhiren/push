@@ -86,12 +86,12 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 		args = append(args, skeys[t])
 	}
 
-	msg, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
+	msgs, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
 	if err != nil {
 		log.Printf("failed to get offline msg:", err)
 		return nil
 	}
-	return msg
+	return msgs
 }
 
 // 从存储后端获取指定消息

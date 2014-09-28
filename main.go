@@ -123,8 +123,6 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	if input.PushType == 1 {
 		regid = input.RegId
 	}
-
-	storage.StorageInstance.
 	comet.PushOutMessage(input.AppId, input.PushType, regid, b)
 }
 
