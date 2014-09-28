@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"log"
 	"time"
-	"strconv"
+	"sort"
+	//"strconv"
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
 	//"github.com/chenyf/push/error"
@@ -51,7 +52,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 	now := time.Now().Unix()
 	skeys := make(map[int64]interface{})
 	var sidxs []float64
-	
+
 	for i := range ret {
 		var (
 			idx int64
