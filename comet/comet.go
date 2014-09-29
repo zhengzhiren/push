@@ -3,6 +3,8 @@ package comet
 import (
 	//"fmt"
 	"log"
+	"encoding/json"
+	"github.com/chenyf/push/message"
 )
 
 func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
@@ -32,17 +34,30 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 	}
 }
 
-func SimplePushMessage(appId string, pushType int, pushParams interface{}, msg []byte) error {
-	switch pushType {
-		case 0:
+func SimplePushMessage(appId string, rawMsg *message.RawMessage) error {
+	msg := message.PushMessage{
+		MsgId: rawMsg.MsgId,
+		AppId: appId,
+		Type: rawMsg.PushType,
+		Content: rawMsg.Content, //FIXME
+	}
+	switch rawMsg.PushType {
 		case 1:
-			app := AMInstance.Get(appId, pushParams.(string))
-			devid := app.DevId
-			if DevicesMap.Check(devid) {
-				client := DevicesMap.Get(devid).(*Client)
-				log.Printf("push to (%s) (%s)", devid, pushParams.(string))
-				client.SendMessage(MSG_PUSH, msg, nil)
+			apps := AMInstance.GetApps(appId)
+			for _, app := range(apps) {
+				client := DevicesMap.Get(app.DevId).(*Client)
+				if client != nil {
+					log.Printf("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
+					fmsg, err := json.Marshal(msg)
+					if err != nil {
+						log.Printf("failed to encode msg %v", msg)
+						continue
+					}
+					client.SendMessage(MSG_PUSH, fmsg, nil)
+				}
 			}
+		case 2:
+		case 3:
 		default:
 	}
 	return nil

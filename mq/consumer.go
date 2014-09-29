@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/streadway/amqp"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/comet"
 )
 
 type Consumer struct {
@@ -118,11 +119,11 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 		d.Ack(false)
 		m := make(map[string]interface{})
 		if err := json.Unmarshal(d.Body, &m); err != nil {
-			log.Printf("failed to decode transMsg:", err)
+			log.Printf("failed to decode raw msg:", err)
 			continue
 		}
-		log.Printf("@@@", storage.StorageInstance.GetMsg(m["appid"].(string), int64(m["msgid"].(float64))))
-		//comet.SimplePushOutMessage(appid, 0, "", b)
+		rmsg := storage.StorageInstance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))
+		comet.SimplePushMessage(m["appid"].(string), rmsg)
 	}
 	log.Printf("handle: deliveries channel closed")
 	done <- nil

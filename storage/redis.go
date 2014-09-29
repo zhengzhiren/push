@@ -52,7 +52,7 @@ func newRedisStorage() *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
-	log.Printf("get offline msgs (%s) (>%d)", appId, msgId) 
+	log.Printf("get offline msgs (%s) (>%d)", appId, msgId)
 	key := appId + "_offline"
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
 	if err != nil {
@@ -127,31 +127,18 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 }
 
 // 从存储后端获取指定消息
-func (r *RedisStorage)GetMsg(appId string, msgId int64) string {
+func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *message.RawMessage {
 	ret, err := redis.Bytes(r.pool.Get().Do("HGET", appId, msgId))
 	if err != nil {
 		log.Printf("failed to get raw msg:", err)
-		return ""
+		return nil
 	}
-	rmsg := message.RawMessage{}
-	if err := json.Unmarshal(ret, &rmsg); err != nil {
+	rmsg := &message.RawMessage{}
+	if err := json.Unmarshal(ret, rmsg); err != nil {
 		log.Printf("failed to decode raw msg:", err)
-		return ""
+		return nil
 	}
-
-	msg := message.PushMessage{
-		MsgId: rmsg.MsgId,
-		AppId: rmsg.AppId,
-		Type: rmsg.PushType,
-		Content: rmsg.Content,
-	}
-
-	fmsg, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("failed to encode push message:", err)
-		return ""
-	}
-	return string(fmsg)
+	return rmsg
 }
 
 func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
