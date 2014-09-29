@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
+	"github.com/chenyf/push/message"
 	//"github.com/bitly/go-simplejson"
 )
 
@@ -429,20 +430,9 @@ func handleHeartbeat(client *Client, header *Header, body []byte) int {
 	return 0
 }
 
-type PushMessage struct {
-	MsgId		int64	`json:"msgid"`
-	AppId		string	`json:"appid"`
-	Type		int		`json:"type"`  //1: notification  2:app message
-	Content		string	`json:"content"`
-}
-type PushReplyMessage struct {
-	MsgId	int64	`json:"msgid"`
-	AppId	string	`json:"appid"`
-	RegId	string	`json:"regid"`
-}
 func handlePushReply(client *Client, header *Header, body []byte) int {
 	log.Printf("handle push reply")
-	var msg PushReplyMessage
+	var msg message.PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Printf("json decode failed")
 		return -1
