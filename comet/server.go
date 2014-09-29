@@ -267,8 +267,8 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 }
 
 type InitMessage struct {
-	DeviceId	string	`json:"device_id"`
-	Apps		[]RegisterMessage `json:"apps"`
+	DeviceId	string				`json:"devid"`
+	Apps		[]RegisterMessage	`json:"apps"`
 }
 type InitReplyMessage struct {
 	Result	string `json:"result"`
@@ -333,13 +333,13 @@ func waitInit(conn *net.TCPConn) (*Client) {
 }
 
 type RegisterMessage struct{
-	AppId	string	`json:"app_id"`
-	AppKey	string	`json:"app_key"`
-	RegId	string	`json:"reg_id"`
+	AppId	string	`json:"appid"`
+	AppKey	string	`json:"appkey"`
+	RegId	string	`json:"regid"`
 }
 type RegisterReplyMessage struct{
-	AppId	string	`json:"app_id"`
-	RegId	string	`json:"reg_id"`
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
 	Result	int		`json:"result"`
 }
 // app注册后，才可以接收消息
@@ -366,6 +366,7 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 
 	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	if app == nil {
+		log.Printf("AMInstance register app failed")
 		reply := RegisterReplyMessage{
 			AppId : msg.AppId,
 			RegId : msg.RegId,
@@ -395,13 +396,13 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 }
 
 type UnregisterMessage struct{
-	AppId	string	`json:"app_id"`
-	AppKey	string	`json:"app_key"`
-	RegId	string	`json:"reg_id"`
+	AppId	string	`json:"appid"`
+	AppKey	string	`json:"appkey"`
+	RegId	string	`json:"regid"`
 }
 type UnregisterReplyMessage struct{
-	AppId	string	`json:"app_id"`
-	RegId	string	`json:"reg_id"`
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
 	Result	int		`json:"result"`
 }
 func handleUnregister(client *Client, header *Header, body []byte) int {
@@ -429,25 +430,28 @@ func handleHeartbeat(client *Client, header *Header, body []byte) int {
 }
 
 type PushMessage struct {
-	MsgId		int64	`json:"msg_id"`
-	AppId		string	`json:"app_id"`
-	MsgType		int		`json:"msg_type"`
-	Payload		string	`json:"payload"`
+	MsgId		int64	`json:"msgid"`
+	AppId		string	`json:"appid"`
+	Type		int		`json:"type"`  //1: notification  2:app message
+	Content		string	`json:"content"`
 }
 type PushReplyMessage struct {
-	MsgId	int64	`json:"msg_id"`
-	AppId	string	`json:"app_id"`
-	RegId	string	`json:"reg_id"`
+	MsgId	int64	`json:"msgid"`
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
 }
 func handlePushReply(client *Client, header *Header, body []byte) int {
+	log.Printf("handle push reply")
 	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Printf("json decode failed")
 		return -1
 	}
 
 	// unknown regid
 	app, ok := client.regApps[msg.RegId]
 	if !ok {
+		log.Printf("unkonw regid %s", msg.RegId)
 		return 0
 	}
 

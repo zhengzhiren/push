@@ -50,11 +50,12 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		}
 		this.lock.RUnlock()
 		// 从后端存储获取 last_msgid
-		info, err := storage.StorageInstance.GetApp(appId, regId)
-		if err != nil {
+		info := storage.StorageInstance.GetApp(appId, regId)
+		if info == nil {
 			log.Printf("not in storage")
 			return nil
 		}
+		log.Printf("got last msgid %d", info.LastMsgId)
 		last_msgid = info.LastMsgId
 	} else {
 		// 第一次注册，分配一个新的regId

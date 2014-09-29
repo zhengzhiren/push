@@ -50,6 +50,7 @@ func newRedisStorage() *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
+	log.Printf("get offline msgs (%s) (>%d)", appId, msgId) 
 	key := appId + "_offline"
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
 	if err != nil {
@@ -70,7 +71,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 			log.Printf("invaild redis hash field:", err)
 			continue
 		}
-
+		log.Printf("msgid: %d", idx)
 		if idx <= msgId || expire <= now {
 			continue
 		} else {
@@ -86,6 +87,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 		args = append(args, skeys[t])
 	}
 
+	log.Print(args)
 	msgs, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
 	if err != nil {
 		log.Printf("failed to get offline msg:", err)
@@ -119,17 +121,17 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 	//return &pusherror.PushError{"add failed"}
 }
 
-func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo, error) {
+func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
 	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	var app AppInfo
 	if err := json.Unmarshal(msg, &app); err != nil {
-		return nil ,err
+		return nil
 	}
-	return &app, nil
+	return &app
 }
 
 /*

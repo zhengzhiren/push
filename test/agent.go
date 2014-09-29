@@ -5,7 +5,7 @@ import (
 	"log"
 	"io"
 	"os"
-	"fmt"
+	//"fmt"
 	"time"
 	"encoding/json"
 	//"strings"
@@ -68,6 +68,8 @@ func main() {
 	}
 	svraddr := os.Args[1]
 	devid := os.Args[2]
+	appid := os.Args[3]
+	regid := os.Args[4]
 
 	addr, _ := net.ResolveTCPAddr("tcp4", svraddr)
 	conn, err := net.DialTCP("tcp", nil, addr)
@@ -80,8 +82,7 @@ func main() {
 
 	sendInit(conn, devid)
 	time.Sleep(10)
-	regid := fmt.Sprintf("%s_myapp1", devid)
-	sendRegister(conn, "myapp1", "mykey1", "")
+	sendRegister(conn, appid, "mykey1", "")
 
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {
@@ -137,7 +138,7 @@ func main() {
 
 			response := comet.PushReplyMessage{
 				MsgId : request.MsgId,
-				AppId : request.AppId,
+				AppId : appid,
 				RegId : regid,
 			}
 
