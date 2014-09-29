@@ -127,7 +127,13 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 		return err
 	}
 	if _, err := r.pool.Get().Do("HSET", fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+		log.Infof("HSET failed, (%s)", err)
 		return err
+	}
+	if msgId > 0 {
+		if _, err := r.pool.Get().Do("HINCRBY", "db_msg_stat", fmt.Sprintf("%d", msgId), 1); err != nil {
+			log.Infof("HINCRBY failed, (%s)", err)
+		}
 	}
 	return nil
 	//return &pusherror.PushError{"add failed"}

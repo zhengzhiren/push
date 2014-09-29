@@ -102,6 +102,7 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 				conn.Write(pack.msg.Data)
 				log.Infof("send msg: (%d) (%s)", pack.msg.Header.Type, pack.msg.Data)
 				pack.client.nextSeq += 1
+				time.Sleep(1*time.Second)
 			case <-client.ctrl:
 				log.Infof("leave send routine")
 				return
