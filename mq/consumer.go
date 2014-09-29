@@ -6,7 +6,6 @@ import (
 	//"time"
 	"encoding/json"
 	"github.com/streadway/amqp"
-	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/storage"
 )
 
@@ -122,23 +121,8 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			log.Printf("failed to decode transMsg:", err)
 			continue
 		}
-		log.Print(m, " ", m["msgid"])
-		rawMsg := comet.RawMessage{}
-		t := []byte(storage.StorageInstance.GetMsg(m["appid"].(string), int64(m["msgid"].(float64))))
-		if err := json.Unmarshal(t, &rawMsg); err != nil {
-			log.Printf("failed to decode rawMsg:", err)
-			continue
-		}
-		log.Print(rawMsg)
-
-		/*msg := comet.PushMessage{
-			MsgId : 1000,
-			AppId : appid,
-			MsgType : 0,
-			Payload : cmd,
-		}
-		b, _ := json.Marshal(msg)
-		comet.SimplePushOutMessage(appid, 0, "", b)*/
+		log.Printf("@@@", storage.StorageInstance.GetMsg(m["appid"].(string), int64(m["msgid"].(float64))))
+		//comet.SimplePushOutMessage(appid, 0, "", b)
 	}
 	log.Printf("handle: deliveries channel closed")
 	done <- nil

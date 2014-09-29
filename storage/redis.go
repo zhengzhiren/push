@@ -2,15 +2,13 @@ package storage
 //package main
 
 import (
-	//"time"
+	"time"
 	"fmt"
 	"log"
-	"time"
 	"sort"
-	//"strconv"
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
-	//"github.com/chenyf/push/error"
+	"github.com/chenyf/push/message"
 )
 
 const (
@@ -75,7 +73,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 			log.Printf("invaild redis hash field:", err)
 			continue
 		}
-		log.Printf("msgid: %d", idx)
+
 		if idx <= msgId || expire <= now {
 			continue
 		} else {
@@ -91,23 +89,69 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 		args = append(args, skeys[t])
 	}
 
-	log.Print(args)
-	msgs, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
-	if err != nil {
-		log.Printf("failed to get offline msg:", err)
+	if len(args) == 1 {
+		log.Printf("no offline msg with appid[%s]", appId)
 		return nil
 	}
+
+	rmsgs, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
+	if err != nil {
+		log.Printf("failed to get offline rmsg:", err)
+		return nil
+	}
+
+	var msgs []string
+	for i := range rmsgs {
+		t := []byte(rmsgs[i])
+		m := message.RawMessage{}
+		if err := json.Unmarshal(t, &m); err != nil {
+			log.Printf("failed to decode raw msg:", err)
+			continue
+		}
+		msg := message.PushMessage{
+			MsgId: m.MsgId,
+			AppId: m.AppId,
+			Type: m.PushType,
+			Content: m.Content,
+		}
+
+		fmsg, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("failed to encode push message:", err)
+			continue
+		}
+		msgs = append(msgs, string(fmsg))
+	}
+
 	return msgs
 }
 
 // 从存储后端获取指定消息
 func (r *RedisStorage)GetMsg(appId string, msgId int64) string {
-	msg, err := redis.String(r.pool.Get().Do("HGET", appId, msgId))
+	ret, err := redis.Bytes(r.pool.Get().Do("HGET", appId, msgId))
 	if err != nil {
-		log.Printf("failed to get msg:", err)
+		log.Printf("failed to get raw msg:", err)
 		return ""
 	}
-	return msg
+	rmsg := message.RawMessage{}
+	if err := json.Unmarshal(ret, &rmsg); err != nil {
+		log.Printf("failed to decode raw msg:", err)
+		return ""
+	}
+
+	msg := message.PushMessage{
+		MsgId: rmsg.MsgId,
+		AppId: rmsg.AppId,
+		Type: rmsg.PushType,
+		Content: rmsg.Content,
+	}
+
+	fmsg, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("failed to encode push message:", err)
+		return ""
+	}
+	return string(fmsg)
 }
 
 func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
@@ -141,7 +185,8 @@ func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
 /*
 func main() {
 	r := newRedisStorage()
-	log.Print(r.GetMsg("12345678", 1))
-	log.Print(r.GetOfflineMsgs("12345678", 1))
+	log.Print(r.GetMsg("myapp1", 19))
+	log.Print("\n")
+	log.Print(r.GetOfflineMsgs("myapp1", 19))
 }
 */

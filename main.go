@@ -18,6 +18,7 @@ import (
 	"crypto/sha1"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
+	"github.com/chenyf/push/message"
 )
 
 type CommandRequest struct {
@@ -112,7 +113,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg := comet.PushMessage{
+	msg := message.PushMessage{
 		MsgId : input.MsgId,
 		AppId : input.AppId,
 		Type : input.MsgType,
@@ -149,7 +150,7 @@ func getCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := r.FormValue("cmd")
-	msg := comet.PushMessage{
+	msg := message.PushMessage{
 		MsgId : int64(mid),
 		AppId : appid,
 		Type : 0,
