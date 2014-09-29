@@ -2,9 +2,8 @@ package comet
 
 import (
 	"fmt"
-	"log"
 	"sync"
-	//"github.com/chenyf/push/error"
+	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
 )
 
@@ -32,7 +31,7 @@ func RegId(devid string, appKey string) string {
 
 func (this *AppManager)RemoveApp(regId string)  {
 	this.lock.Lock()
-	log.Printf("remove app (%s)", regId)
+	log.Infof("remove app (%s)", regId)
 	delete(this.appMap, regId)
 	this.lock.Unlock()
 }
@@ -43,7 +42,7 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		// 非第一次注册
 		this.lock.RLock()
 		if _, ok := this.appMap[regId]; ok {
-			log.Printf("in memory already")
+			log.Infof("in memory already")
 			this.lock.RUnlock()
 			return nil
 		}
@@ -51,17 +50,17 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		// 从后端存储获取 last_msgid
 		info := storage.StorageInstance.GetApp(appId, regId)
 		if info == nil {
-			log.Printf("not in storage")
+			log.Infof("not in storage")
 			return nil
 		}
-		log.Printf("got last msgid %d", info.LastMsgId)
+		log.Infof("got last msgid %d", info.LastMsgId)
 		last_msgid = info.LastMsgId
 	} else {
 		// 第一次注册，分配一个新的regId
 		regId = RegId(devId, appId)
 		// 记录到后端存储中
 		if err := storage.StorageInstance.UpdateApp(appId, regId, -1); err != nil {
-			log.Printf("storage add failed")
+			log.Infof("storage add failed")
 			return nil
 		}
 	}
@@ -72,7 +71,7 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		LastMsgId : last_msgid,
 	}
 	this.lock.Lock()
-	log.Printf("register app (%s) (%s) (%d)", appId, regId, last_msgid)
+	log.Infof("register app (%s) (%s) (%d)", appId, regId, last_msgid)
 	this.appMap[regId] = app
 	this.lock.Unlock()
 	return app
@@ -119,13 +118,13 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 		}
 	}
 	this.lock.RUnlock()
-	log.Printf("get %d apps", len(apps))
+	log.Infof("get %d apps", len(apps))
 	return apps
 }
 
 func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
 	if err := storage.StorageInstance.UpdateApp(appId, regId, msgId); err != nil {
-		log.Printf("storage update app failed")
+		log.Infof("storage update app failed")
 		return err
 	}
 	app.LastMsgId = msgId

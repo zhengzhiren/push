@@ -3,11 +3,11 @@ package storage
 import (
 	"time"
 	"fmt"
-	"log"
 	"sort"
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
 	"github.com/chenyf/push/conf"
+	log "github.com/cihub/seelog"
 )
 
 type RedisStorage struct {
@@ -23,11 +23,11 @@ func newRedisStorage() *RedisStorage {
 				c, err := redis.Dial("tcp", conf.Config.Redis.Server)
 				//c, err := redis.Dial("tcp", RedisServer)
 				if err != nil {
-					log.Printf("failed to connect Redis:", err)
+					log.Infof("failed to connect Redis:", err)
 					return nil, err
 				}
 				if _, err := c.Do("AUTH", conf.Config.Redis.Pass); err != nil {
-					log.Printf("failed to auth Redis:", err)
+					log.Infof("failed to auth Redis:", err)
 					return nil, err
 
 				}
@@ -43,11 +43,11 @@ func newRedisStorage() *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
-	log.Printf("get offline msgs (%s) (>%d)", appId, msgId)
+	log.Infof("get offline msgs (%s) (>%d)", appId, msgId)
 	key := appId + "_offline"
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
 	if err != nil {
-		log.Printf("failed to get fields of offline msg:", err)
+		log.Infof("failed to get fields of offline msg:", err)
 		return nil
 	}
 
@@ -61,7 +61,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
 			expire int64
 		)
 		if _, err := fmt.Sscanf(ret[i], "%v_%v", &idx, &expire); err != nil {
-			log.Printf("invaild redis hash field:", err)
+			log.Infof("invaild redis hash field:", err)
 			continue
 		}
 
@@ -86,7 +86,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
 
 	rmsgs, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
 	if err != nil {
-		log.Printf("failed to get offline rmsg:", err)
+		log.Infof("failed to get offline rmsg:", err)
 		return nil
 	}
 
@@ -95,7 +95,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
 		t := []byte(rmsgs[i])
 		msg := &RawMessage{}
 		if err := json.Unmarshal(t, msg); err != nil {
-			log.Printf("failed to decode raw msg:", err)
+			log.Infof("failed to decode raw msg:", err)
 			continue
 		}
 		msgs = append(msgs, msg)
@@ -107,12 +107,12 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
 func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *RawMessage {
 	ret, err := redis.Bytes(r.pool.Get().Do("HGET", appId, msgId))
 	if err != nil {
-		log.Printf("failed to get raw msg:", err)
+		log.Infof("failed to get raw msg:", err)
 		return nil
 	}
 	rmsg := &RawMessage{}
 	if err := json.Unmarshal(ret, rmsg); err != nil {
-		log.Printf("failed to decode raw msg:", err)
+		log.Infof("failed to decode raw msg:", err)
 		return nil
 	}
 	return rmsg

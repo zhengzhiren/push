@@ -2,8 +2,8 @@ package comet
 
 import (
 	//"fmt"
-	"log"
 	"encoding/json"
+	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
 )
 
@@ -15,7 +15,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 		for _, app := range(apps) {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
-				log.Printf("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
+				log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
 				client.SendMessage(MSG_PUSH, msg, nil)
 			}
 		}
@@ -24,7 +24,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 		if app != nil {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
-				log.Printf("push to (app %s) (device %s) (regid %s)", appId, app.DevId, recvUsers)
+				log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, recvUsers)
 				client.SendMessage(MSG_PUSH, msg, nil)
 			}
 		}
@@ -47,10 +47,10 @@ func SimplePushMessage(appId string, rawMsg *storage.RawMessage) error {
 			for _, app := range(apps) {
 				client := DevicesMap.Get(app.DevId).(*Client)
 				if client != nil {
-					log.Printf("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
+					log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
 					fmsg, err := json.Marshal(msg)
 					if err != nil {
-						log.Printf("failed to encode msg %v", msg)
+						log.Infof("failed to encode msg %v", msg)
 						continue
 					}
 					client.SendMessage(MSG_PUSH, fmsg, nil)

@@ -2,7 +2,7 @@ package mq
 
 import (
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	//"time"
 	"encoding/json"
 	"github.com/streadway/amqp"
@@ -29,17 +29,17 @@ func NewConsumer(amqpURI, exchange, exchangeType, queueName, key, ctag string, q
 
 	var err error
 
-	log.Printf("dialing %q", amqpURI)
+	log.Infof("dialing %q", amqpURI)
 	c.conn, err = amqp.Dial(amqpURI)
 	if err != nil {
 		return nil, fmt.Errorf("Dial: %s", err)
 	}
 
 	/*go func() {
-		log.Printf("closing: %s", <-c.conn.NotifyClose(make(chan *amqp.Error)))
+		log.Infof("closing: %s", <-c.conn.NotifyClose(make(chan *amqp.Error)))
 	}()*/
 
-	log.Printf("got Connection, getting Channel")
+	log.Infof("got Connection, getting Channel")
 	c.channel, err = c.conn.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("Channel: %s", err)
@@ -57,7 +57,7 @@ func NewConsumer(amqpURI, exchange, exchangeType, queueName, key, ctag string, q
 		return nil, fmt.Errorf("Queue Declare: %s", err)
 	}
 
-	log.Printf("declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
+	log.Infof("declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
 		queue.Name, queue.Messages, queue.Consumers, key)
 
 	if err = c.channel.QueueBind(
@@ -102,7 +102,7 @@ func (c *Consumer) Shutdown() error {
 		return fmt.Errorf("AMQP connection close error: %s", err)
 	}
 
-	defer log.Printf("AMQP shutdown OK")
+	defer log.Infof("AMQP shutdown OK")
 
 	// wait for handle() to exit
 	return <-c.done
@@ -110,7 +110,7 @@ func (c *Consumer) Shutdown() error {
 
 func handle(deliveries <-chan amqp.Delivery, done chan error) {
 	for d := range deliveries {
-		log.Printf(
+		log.Infof(
 			"got %dB delivery: [%v] %q",
 			len(d.Body),
 			d.DeliveryTag,
@@ -119,12 +119,12 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 		d.Ack(false)
 		m := make(map[string]interface{})
 		if err := json.Unmarshal(d.Body, &m); err != nil {
-			log.Printf("failed to decode raw msg:", err)
+			log.Infof("failed to decode raw msg:", err)
 			continue
 		}
 		rmsg := storage.StorageInstance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))
 		comet.SimplePushMessage(m["appid"].(string), rmsg)
 	}
-	log.Printf("handle: deliveries channel closed")
+	log.Infof("handle: deliveries channel closed")
 	done <- nil
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"os"
-	"log"
+	//"log"
 	"sync"
 	"strings"
 	"strconv"
@@ -19,6 +19,7 @@ import (
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
+	log "github.com/cihub/seelog"
 )
 
 type CommandRequest struct {
@@ -166,8 +167,17 @@ func main() {
 	}
 	err := conf.LoadConfig(config_file)
 	if err != nil {
-		log.Fatalf("LoadConfig (%s) failed: (%s)", config_file, err)
+		fmt.Printf("LoadConfig (%s) failed: (%s)\n", config_file, err)
+		os.Exit(1)
 	}
+
+	logger, err := log.LoggerFromConfigAsFile("./etc/log.xml")
+	if err != nil {
+		fmt.Printf("Load log config failed: (%s)\n", err)
+		os.Exit(1)
+	}
+
+	log.ReplaceLogger(logger)
 
 	waitGroup := &sync.WaitGroup{}
 	var mqConsumer *mq.Consumer = nil
@@ -182,28 +192,30 @@ func main() {
 			conf.Config.Rabbit.ConsumerTag,
 			conf.Config.Rabbit.QOS)
 		if err != nil {
-			log.Fatal(err)
+			log.Critical(err)
+			os.Exit(1)
 		}
 	}
 
 	listener, err := cometServer.Init(conf.Config.Comet)
 	if err != nil {
-		log.Fatal(err)
+		log.Critical(err)
+		os.Exit(1)
 	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		sig := <-c
-		log.Printf("Received signal '%v', exiting\n", sig)
+		log.Infof("Received signal '%v', exiting\n", sig)
 		///utils.RemovePidFile(srv.	runtime.config.Pidfile)
 		cometServer.Stop()
-		log.Printf("leave 1")
+		log.Infof("leave 1")
 		if !*flTest {
 			mqConsumer.Shutdown()
 		}
 		waitGroup.Done()
-		log.Printf("leave 2")
+		log.Infof("leave 2")
 	}()
 
 	go func() {
@@ -212,7 +224,7 @@ func main() {
 
 	if !*flTest {
 		go func() {
-			log.Printf("mq running")
+			log.Infof("mq running")
 			mqConsumer.Consume()
 		}()
 	}
@@ -223,7 +235,8 @@ func main() {
 		http.HandleFunc("/status", getStatus)
 		err := http.ListenAndServe(conf.Config.Web, nil)
 		if err != nil {
-			log.Fatal("http listen: ", err)
+			log.Critical("http listen: ", err)
+			os.Exit(1)
 		}
 	}()
 	waitGroup.Wait()
