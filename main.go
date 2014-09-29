@@ -31,16 +31,6 @@ type CommandResponse struct {
 	Error	string	`json:"error"`
 }
 
-var (
-	uri          = flag.String("uri", "amqp://guest:guest@10.154.156.121:5672/", "AMQP URI")
-	exchange     = flag.String("exchange", "test-exchange", "Durable, non-auto-deleted AMQP exchange name")
-	exchangeType = flag.String("exchange-type", "direct", "Exchange type - direct|fanout|topic|x-custom")
-	queue        = flag.String("queue", "test-queue", "Ephemeral AMQP queue name")
-	bindingKey   = flag.String("key", "test-key", "AMQP binding key")
-	consumerTag  = flag.String("consumer-tag", "simple-consumer", "AMQP consumer tag (should not be blank)")
-	qos          = flag.Int("qos", 1, "message qos")
-)
-
 func getStatus(w http.ResponseWriter, r *http.Request) {
 	size := comet.DevicesMap.Size()
 	fmt.Fprintf(w, "total register device: %d\n", size)
@@ -164,23 +154,26 @@ func main() {
 
 	var (
 		//flRoot               = flag.String("g", "/tmp/echoserver", "Path to use as the root of the docker runtime")
+		//flDebug		= flag.Bool("D", false, "Enable debug mode")
+		flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
+		flConfig	= flag.String("c", "./etc/conf.json", "Config file")
 	)
 
 	flag.Parse()
-	/*job := eng.Job("init")
-	if err := job.Run(); err != nil {
-		log.Fatal(err)
+	config_file := "./etc/conf.json"
+	if flConfig != nil {
+		config_file = *flConfig
 	}
-	*/
-
-	err := conf.LoadConfig("./etc/conf.json")
+	err := conf.LoadConfig(config_file)
 	if err != nil {
-		log.Fatalf("LoadConfig failed: (%s)", err)
+		log.Fatalf("LoadConfig (%s) failed: (%s)", config_file, err)
 	}
 
 	waitGroup := &sync.WaitGroup{}
+	var mqConsumer *mq.Consumer = nil
 	cometServer := comet.NewServer()
-	mqConsumer, err := mq.NewConsumer(
+	if !*flTest {
+		mqConsumer, err = mq.NewConsumer(
 			conf.Config.Rabbit.Uri,
 			conf.Config.Rabbit.Exchange,
 			conf.Config.Rabbit.ExchangeType,
@@ -188,8 +181,9 @@ func main() {
 			conf.Config.Rabbit.Key,
 			conf.Config.Rabbit.ConsumerTag,
 			conf.Config.Rabbit.QOS)
-	if err != nil {
+		if err != nil {
 			log.Fatal(err)
+		}
 	}
 
 	listener, err := cometServer.Init(conf.Config.Comet)
@@ -205,7 +199,9 @@ func main() {
 		///utils.RemovePidFile(srv.	runtime.config.Pidfile)
 		cometServer.Stop()
 		log.Printf("leave 1")
-		mqConsumer.Shutdown()
+		if !*flTest {
+			mqConsumer.Shutdown()
+		}
 		waitGroup.Done()
 		log.Printf("leave 2")
 	}()
@@ -214,10 +210,12 @@ func main() {
 		cometServer.Run(listener)
 	}()
 
-	go func() {
-		log.Printf("mq running")
-		mqConsumer.Consume()
-	}()
+	if !*flTest {
+		go func() {
+			log.Printf("mq running")
+			mqConsumer.Consume()
+		}()
+	}
 	waitGroup.Add(1)
 	go func() {
 		http.HandleFunc("/router/command", postRouterCommand)
@@ -228,13 +226,6 @@ func main() {
 			log.Fatal("http listen: ", err)
 		}
 	}()
-	/*
-	job = eng.Job("restapi")
-	job.SetenvBool("Logging", true)
-	if err := job.Run(); err != nil {
-		log.Fatal(err)
-	}
-	*/
 	waitGroup.Wait()
 }
 
