@@ -7,12 +7,6 @@ type PushMessage struct {
 	Content		string	`json:"content"`
 }
 
-type PushReplyMessage struct {
-	MsgId	int64	`json:"msgid"`
-	AppId	string	`json:"appid"`
-	RegId	string	`json:"regid"`
-}
-
 type RawMessage struct {
 	MsgId		int64		`json:"msgid"`
 	AppId		string		`json:"appid"`

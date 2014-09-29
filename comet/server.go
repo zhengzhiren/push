@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
-	"github.com/chenyf/push/message"
+	//"github.com/chenyf/push/message"
 	//"github.com/bitly/go-simplejson"
 )
 
@@ -99,7 +99,7 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
-				log.Printf("send msg ok, (%d) (%s)", pack.msg.Header.Type, pack.msg.Data)
+				log.Printf("send msg: (%d) (%s)", pack.msg.Header.Type, pack.msg.Data)
 				pack.client.nextSeq += 1
 			case <-client.ctrl:
 				log.Printf("leave send routine")
@@ -313,7 +313,7 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	}
 
 	devid := msg.DeviceId
-	log.Printf("recv init devid (%s)", devid)
+	log.Printf(">>>INIT devid (%s)", devid)
 	if DevicesMap.Check(devid) {
 		log.Printf("device (%s) init already", devid)
 		conn.Close()
@@ -345,13 +345,11 @@ type RegisterReplyMessage struct{
 }
 // app注册后，才可以接收消息
 func handleRegister(client *Client, header *Header, body []byte) int {
-	log.Printf("handle register")
 	var msg RegisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	log.Printf("appid(%s) appkey(%s) regid(%s)", msg.AppId, msg.AppKey, msg.RegId)
-
+	log.Printf(">>>REGISTER appid(%s) appkey(%s) regid(%s)", msg.AppId, msg.AppKey, msg.RegId)
 	if msg.RegId != "" {
 		if _, ok := client.regApps[msg.RegId]; ok {
 			reply := RegisterReplyMessage{
@@ -364,7 +362,6 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 			return 0
 		}
 	}
-
 	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	if app == nil {
 		log.Printf("AMInstance register app failed")
@@ -389,7 +386,7 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 
 	// handle offline messages
 	msgs := storage.StorageInstance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
-	log.Printf("get %d offline messages for (app %s) (regid %s)", len(msgs), msg.AppId, app.RegId)
+	log.Printf("get %d offline messages: (%s) (>%d)", len(msgs), msg.AppId, app.LastMsgId)
 	for _, msg := range(msgs) {
 		client.SendMessage(MSG_PUSH, []byte(msg), nil)
 	}
@@ -407,12 +404,11 @@ type UnregisterReplyMessage struct{
 	Result	int		`json:"result"`
 }
 func handleUnregister(client *Client, header *Header, body []byte) int {
-	log.Printf("handle unregister")
 	var msg UnregisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return -1
 	}
-	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
+	log.Printf(">>>UNREGISTER (appid %s) (appkey %s) (regid%s)", msg.AppId, msg.AppKey, msg.RegId)
 	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	result := 0
 	reply := RegisterReplyMessage{
@@ -430,14 +426,19 @@ func handleHeartbeat(client *Client, header *Header, body []byte) int {
 	return 0
 }
 
+type PushReplyMessage struct {
+	MsgId	int64	`json:"msgid"`
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+}
 func handlePushReply(client *Client, header *Header, body []byte) int {
-	log.Printf("handle push reply")
-	var msg message.PushReplyMessage
+	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Printf("json decode failed")
 		return -1
 	}
 
+	log.Printf(">>>PUSH_REPLY (appid %s) (regid %s) (msgid %d)", msg.AppId, msg.RegId, msg.MsgId)
 	// unknown regid
 	app, ok := client.regApps[msg.RegId]
 	if !ok {

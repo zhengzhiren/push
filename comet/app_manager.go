@@ -38,7 +38,6 @@ func (this *AppManager)RemoveApp(regId string)  {
 }
 
 func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (*App) {
-	log.Printf("register (%s) (%s)", appId, regId)
 	var last_msgid int64 = -1
 	if regId != "" {
 		// 非第一次注册
@@ -73,7 +72,7 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		LastMsgId : last_msgid,
 	}
 	this.lock.Lock()
-	log.Printf("register app (%s) (%s)", appId, regId)
+	log.Printf("register app (%s) (%s) (%d)", appId, regId, last_msgid)
 	this.appMap[regId] = app
 	this.lock.Unlock()
 	return app
@@ -126,6 +125,7 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 
 func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
 	if err := storage.StorageInstance.UpdateApp(appId, regId, msgId); err != nil {
+		log.Printf("storage update app failed")
 		return err
 	}
 	app.LastMsgId = msgId

@@ -5,7 +5,7 @@ import (
 	"log"
 	"io"
 	"os"
-	//"fmt"
+	"fmt"
 	"time"
 	"encoding/json"
 	//"strings"
@@ -63,8 +63,8 @@ func sendRegister(conn *net.TCPConn, appid string, appkey string, regid string) 
 }
 
 func main() {
-	if len(os.Args) <= 2 {
-		log.Printf("Usage: server_addr devid")
+	if len(os.Args) <= 4 {
+		log.Printf("Usage: server_addr devid appid regid")
 		return
 	}
 	svraddr := os.Args[1]
@@ -83,7 +83,7 @@ func main() {
 
 	sendInit(conn, devid)
 	time.Sleep(10)
-	sendRegister(conn, appid, "mykey1", "")
+	sendRegister(conn, appid, "mykey1", regid)
 
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {
@@ -136,11 +136,10 @@ func main() {
 				log.Printf("invalid request, not JSON\n")
 				return
 			}
-
-			response := message.PushReplyMessage{
+			response := comet.PushReplyMessage{
 				MsgId : request.MsgId,
 				AppId : appid,
-				RegId : regid,
+				RegId : fmt.Sprintf("%s_%s", devid, appid),
 			}
 
 			b, _ := json.Marshal(response)

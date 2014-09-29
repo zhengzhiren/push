@@ -1,0 +1,18 @@
+{
+	"comet" 			: "0.0.0.0:20000",
+	"web"				: "0.0.0.0:19999",
+	"rabbit" : {
+		"uri" 			: "amqp://guest:guest@10.154.156.121:5672/",
+		"exchange" 		: "test-exchange",
+		"exchange-type"	: "direct",
+		"queue" 		: "test-queue",
+		"key" 			: "test-key",
+		"consumer-tag" 	: "simple-consumer",
+		"qos" 			: 1
+	},
+
+	"redis" : {
+		"server"	: "10.154.156.121:6380",
+		"pass"		: "rpasswd"
+	}
+}

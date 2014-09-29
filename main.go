@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"crypto/hmac"
 	"crypto/sha1"
+	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/message"
@@ -167,21 +168,32 @@ func main() {
 	)
 
 	flag.Parse()
-
 	/*job := eng.Job("init")
 	if err := job.Run(); err != nil {
 		log.Fatal(err)
 	}
 	*/
 
+	err := conf.LoadConfig("./etc/conf.json")
+	if err != nil {
+		log.Fatalf("LoadConfig failed: (%s)", err)
+	}
+
 	waitGroup := &sync.WaitGroup{}
 	cometServer := comet.NewServer()
-	mqConsumer, err := mq.NewConsumer(*uri, *exchange, *exchangeType, *queue, *bindingKey, *consumerTag, *qos)
+	mqConsumer, err := mq.NewConsumer(
+			conf.Config.Rabbit.Uri,
+			conf.Config.Rabbit.Exchange,
+			conf.Config.Rabbit.ExchangeType,
+			conf.Config.Rabbit.Queue,
+			conf.Config.Rabbit.Key,
+			conf.Config.Rabbit.ConsumerTag,
+			conf.Config.Rabbit.QOS)
 	if err != nil {
 			log.Fatal(err)
 	}
 
-	listener, err := cometServer.Init("0.0.0.0:20000")
+	listener, err := cometServer.Init(conf.Config.Comet)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -212,7 +224,7 @@ func main() {
 		http.HandleFunc("/router/command", postRouterCommand)
 		http.HandleFunc("/command", getCommand)
 		http.HandleFunc("/status", getStatus)
-		err := http.ListenAndServe("0.0.0.0:19999", nil)
+		err := http.ListenAndServe(conf.Config.Web, nil)
 		if err != nil {
 			log.Fatal("http listen: ", err)
 		}

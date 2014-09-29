@@ -1,5 +1,4 @@
 package storage
-//package main
 
 import (
 	"time"
@@ -8,12 +7,8 @@ import (
 	"sort"
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
+	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/message"
-)
-
-const (
-	RedisServer = "10.154.156.121:6380"
-	RedisPasswd = "rpasswd"
 )
 
 type RedisStorage struct {
@@ -26,16 +21,13 @@ func newRedisStorage() *RedisStorage {
 			MaxIdle: 1,
 			IdleTimeout: 300 * time.Second,
 			Dial: func() (redis.Conn, error) {
-				c, err := redis.Dial("tcp", RedisServer)
+				c, err := redis.Dial("tcp", conf.Config.Redis.Server)
+				//c, err := redis.Dial("tcp", RedisServer)
 				if err != nil {
 					log.Printf("failed to connect Redis:", err)
 					return nil, err
 				}
-				if _, err := c.Do("AUTH", RedisPasswd); err != nil {
-					log.Printf("failed to auth Redis:", err)
-					return nil, err
-				}
-				if _, err := c.Do("AUTH", RedisPasswd); err != nil {
+				if _, err := c.Do("AUTH", conf.Config.Redis.Pass); err != nil {
 					log.Printf("failed to auth Redis:", err)
 					return nil, err
 
@@ -52,7 +44,7 @@ func newRedisStorage() *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
-	log.Printf("get offline msgs (%s) (>%d)", appId, msgId) 
+	log.Printf("get offline msgs (%s) (>%d)", appId, msgId)
 	key := appId + "_offline"
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
 	if err != nil {
@@ -90,7 +82,6 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 	}
 
 	if len(args) == 1 {
-		log.Printf("no offline msg with appid[%s]", appId)
 		return nil
 	}
 
@@ -122,7 +113,6 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 		}
 		msgs = append(msgs, string(fmsg))
 	}
-
 	return msgs
 }
 
