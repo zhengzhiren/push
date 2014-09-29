@@ -5,26 +5,6 @@ import (
 	"encoding/binary"
 )
 
-type RawMessage struct {
-	UserName string `json:"username"`
-	AppKey string `json:"appkey"`
-	//sendType 1广播 2单播 3组播(tag alias)
-	//sendTypeParams 1空(dev_list) 2devid 3tag_list alias_list
-	SendType int `json:"send_type"`
-	SendParams interface{} `json:"send_params"`
-	//1通知 2消息 
-	MsgType int `json:"msg_type"`
-	MsgTitle string `json:"msg_title"`
-	MsgContent string `json:"msg_content"`
-	ClientPlatform int `json:"client_platform"`
-        //sendMtdType 1实时 2定时 3离线
-	//sendMtdParams 1空 2定时时间 3离线时间
-	SendMthType int `json:"smth_type"`
-	SendMthParams interface{} `json:"smth_params"`
-	CreateTime int64 `json:"ctime"`
-	CustomContent string `json:"custom_content"`
-}
-
 type Header struct {
 	Type	uint8
 	Ver		uint8
