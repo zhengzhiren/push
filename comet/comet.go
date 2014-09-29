@@ -4,7 +4,7 @@ import (
 	//"fmt"
 	"log"
 	"encoding/json"
-	"github.com/chenyf/push/message"
+	"github.com/chenyf/push/storage"
 )
 
 func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
@@ -34,8 +34,8 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 	}
 }
 
-func SimplePushMessage(appId string, rawMsg *message.RawMessage) error {
-	msg := message.PushMessage{
+func SimplePushMessage(appId string, rawMsg *storage.RawMessage) error {
+	msg := PushMessage{
 		MsgId: rawMsg.MsgId,
 		AppId: appId,
 		Type: rawMsg.PushType,

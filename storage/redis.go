@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
 	"github.com/chenyf/push/conf"
-	"github.com/chenyf/push/message"
 )
 
 type RedisStorage struct {
@@ -43,7 +42,7 @@ func newRedisStorage() *RedisStorage {
 }
 
 // 从存储后端获取 > 指定时间的所有消息
-func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
+func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
 	log.Printf("get offline msgs (%s) (>%d)", appId, msgId)
 	key := appId + "_offline"
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
@@ -91,39 +90,27 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 		return nil
 	}
 
-	var msgs []string
+	var msgs []*RawMessage
 	for i := range rmsgs {
 		t := []byte(rmsgs[i])
-		m := message.RawMessage{}
-		if err := json.Unmarshal(t, &m); err != nil {
+		msg := &RawMessage{}
+		if err := json.Unmarshal(t, msg); err != nil {
 			log.Printf("failed to decode raw msg:", err)
 			continue
 		}
-		msg := message.PushMessage{
-			MsgId: m.MsgId,
-			AppId: m.AppId,
-			Type: m.PushType,
-			Content: m.Content,
-		}
-
-		fmsg, err := json.Marshal(msg)
-		if err != nil {
-			log.Printf("failed to encode push message:", err)
-			continue
-		}
-		msgs = append(msgs, string(fmsg))
+		msgs = append(msgs, msg)
 	}
 	return msgs
 }
 
 // 从存储后端获取指定消息
-func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *message.RawMessage {
+func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *RawMessage {
 	ret, err := redis.Bytes(r.pool.Get().Do("HGET", appId, msgId))
 	if err != nil {
 		log.Printf("failed to get raw msg:", err)
 		return nil
 	}
-	rmsg := &message.RawMessage{}
+	rmsg := &RawMessage{}
 	if err := json.Unmarshal(ret, rmsg); err != nil {
 		log.Printf("failed to decode raw msg:", err)
 		return nil

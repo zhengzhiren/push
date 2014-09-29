@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	//"strings"
 	"github.com/chenyf/push/comet"
-	"github.com/chenyf/push/message"
 )
 
 type CommandRequest struct {
@@ -131,7 +130,7 @@ func main() {
 
 		log.Printf("recv: (%d) (%d) (%s)", header.Type, header.Len, string(data))
 		if header.Type == comet.MSG_PUSH {
-			var request message.PushMessage
+			var request comet.PushMessage
 			if err := json.Unmarshal(data, &request); err != nil {
 				log.Printf("invalid request, not JSON\n")
 				return

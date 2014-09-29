@@ -267,13 +267,6 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 	CloseClient(client)
 }
 
-type InitMessage struct {
-	DeviceId	string				`json:"devid"`
-	Apps		[]RegisterMessage	`json:"apps"`
-}
-type InitReplyMessage struct {
-	Result	string `json:"result"`
-}
 func waitInit(conn *net.TCPConn) (*Client) {
 	conn.SetReadDeadline(time.Now().Add(10* time.Second))
 	buf := make([]byte, 10)
@@ -333,16 +326,6 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	return client
 }
 
-type RegisterMessage struct{
-	AppId	string	`json:"appid"`
-	AppKey	string	`json:"appkey"`
-	RegId	string	`json:"regid"`
-}
-type RegisterReplyMessage struct{
-	AppId	string	`json:"appid"`
-	RegId	string	`json:"regid"`
-	Result	int		`json:"result"`
-}
 // app注册后，才可以接收消息
 func handleRegister(client *Client, header *Header, body []byte) int {
 	var msg RegisterMessage
@@ -387,22 +370,19 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 	// handle offline messages
 	msgs := storage.StorageInstance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
 	log.Printf("get %d offline messages: (%s) (>%d)", len(msgs), msg.AppId, app.LastMsgId)
-	for _, msg := range(msgs) {
-		client.SendMessage(MSG_PUSH, []byte(msg), nil)
+	for _, rmsg := range(msgs) {
+		msg := PushMessage{
+			MsgId : rmsg.MsgId,
+			AppId : rmsg.AppId,
+			Type : rmsg.MsgType,
+			Content : rmsg.Content,
+		}
+		b, _ := json.Marshal(msg)
+		client.SendMessage(MSG_PUSH, b, nil)
 	}
 	return 0
 }
 
-type UnregisterMessage struct{
-	AppId	string	`json:"appid"`
-	AppKey	string	`json:"appkey"`
-	RegId	string	`json:"regid"`
-}
-type UnregisterReplyMessage struct{
-	AppId	string	`json:"appid"`
-	RegId	string	`json:"regid"`
-	Result	int		`json:"result"`
-}
 func handleUnregister(client *Client, header *Header, body []byte) int {
 	var msg UnregisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
@@ -426,11 +406,6 @@ func handleHeartbeat(client *Client, header *Header, body []byte) int {
 	return 0
 }
 
-type PushReplyMessage struct {
-	MsgId	int64	`json:"msgid"`
-	AppId	string	`json:"appid"`
-	RegId	string	`json:"regid"`
-}
 func handlePushReply(client *Client, header *Header, body []byte) int {
 	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {

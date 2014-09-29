@@ -48,3 +48,42 @@ func (header *Header)Deserialize(b []byte) (error) {
 	return nil
 }
 
+type InitMessage struct {
+	DeviceId	string				`json:"devid"`
+	Apps		[]RegisterMessage	`json:"apps"`
+}
+type InitReplyMessage struct {
+	Result	string `json:"result"`
+}
+type RegisterMessage struct{
+	AppId	string	`json:"appid"`
+	AppKey	string	`json:"appkey"`
+	RegId	string	`json:"regid"`
+}
+type RegisterReplyMessage struct{
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+	Result	int		`json:"result"`
+}
+type UnregisterMessage struct{
+	AppId	string	`json:"appid"`
+	AppKey	string	`json:"appkey"`
+	RegId	string	`json:"regid"`
+}
+type UnregisterReplyMessage struct{
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+	Result	int		`json:"result"`
+}
+type PushMessage struct {
+	MsgId		int64	`json:"msgid"`
+	AppId		string	`json:"appid"`
+	Type		int		`json:"type"`  //1: notification  2:app message
+	Content		string	`json:"content"`
+}
+type PushReplyMessage struct {
+	MsgId	int64	`json:"msgid"`
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+}
+
