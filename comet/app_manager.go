@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"github.com/chenyf/push/error"
+	//"github.com/chenyf/push/error"
 	"github.com/chenyf/push/storage"
 )
 
@@ -30,7 +30,14 @@ func RegId(devid string, appKey string) string {
 	return fmt.Sprintf("%s_%s", devid, appKey)
 }
 
-func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (string, error) {
+func (this *AppManager)RemoveApp(regId string)  {
+	this.lock.Lock()
+	log.Printf("remove app (%s)", regId)
+	delete(this.appMap, regId)
+	this.lock.Unlock()
+}
+
+func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (*App) {
 	log.Printf("register (%s) (%s)", appId, regId)
 	var last_msgid int64 = -1
 	if regId != "" {
@@ -39,23 +46,24 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		if _, ok := this.appMap[regId]; ok {
 			log.Printf("in memory already")
 			this.lock.RUnlock()
-			return regId, nil
+			return nil
 		}
 		this.lock.RUnlock()
 		// 从后端存储获取 last_msgid
-		app_info, err := storage.StorageInstance.GetApp(appId, regId)
-		if err != nil {
+		info := storage.StorageInstance.GetApp(appId, regId)
+		if info == nil {
 			log.Printf("not in storage")
-			return "", &pusherror.PushError{"regid not found in storage"}
+			return nil
 		}
-		last_msgid = app_info.LastMsgId
+		log.Printf("got last msgid %d", info.LastMsgId)
+		last_msgid = info.LastMsgId
 	} else {
 		// 第一次注册，分配一个新的regId
 		regId = RegId(devId, appId)
 		// 记录到后端存储中
 		if err := storage.StorageInstance.UpdateApp(appId, regId, -1); err != nil {
 			log.Printf("storage add failed")
-			return "", err
+			return nil
 		}
 	}
 	app := &App{
@@ -68,7 +76,7 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 	log.Printf("register app (%s) (%s)", appId, regId)
 	this.appMap[regId] = app
 	this.lock.Unlock()
-	return regId, nil
+	return app
 }
 
 func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, regId string) {
@@ -116,15 +124,7 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 	return apps
 }
 
-func (this *AppManager)UpdateApp(appId string, regId string, msgId int64) error {
-	app := this.Get(appId, regId)
-	if app == nil {
-		return nil
-	}
-	if msgId <= app.LastMsgId {
-		log.Printf("msgid mismatch: %d <= %d", msgId, app.LastMsgId)
-		return nil
-	}
+func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
 	if err := storage.StorageInstance.UpdateApp(appId, regId, msgId); err != nil {
 		return err
 	}

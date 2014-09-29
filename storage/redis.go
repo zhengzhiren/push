@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 	"sort"
+	//"strconv"
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
 	//"github.com/chenyf/push/error"
@@ -36,6 +37,11 @@ func newRedisStorage() *RedisStorage {
 					log.Printf("failed to auth Redis:", err)
 					return nil, err
 				}
+				if _, err := c.Do("AUTH", RedisPasswd); err != nil {
+					log.Printf("failed to auth Redis:", err)
+					return nil, err
+
+				}
 				return c, err
 			},
 			TestOnBorrow: func(c redis.Conn, t time.Time) error {
@@ -48,6 +54,7 @@ func newRedisStorage() *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
+	log.Printf("get offline msgs (%s) (>%d)", appId, msgId) 
 	key := appId + "_offline"
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
 	if err != nil {
@@ -58,7 +65,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 	now := time.Now().Unix()
 	skeys := make(map[int64]interface{})
 	var sidxs []float64
-	
+
 	for i := range ret {
 		var (
 			idx int64
@@ -68,7 +75,7 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 			log.Printf("invaild redis hash field:", err)
 			continue
 		}
-
+		log.Printf("msgid: %d", idx)
 		if idx <= msgId || expire <= now {
 			continue
 		} else {
@@ -84,12 +91,13 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []string {
 		args = append(args, skeys[t])
 	}
 
-	msg, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
+	log.Print(args)
+	msgs, err := redis.Strings(r.pool.Get().Do("HMGET", args...))
 	if err != nil {
 		log.Printf("failed to get offline msg:", err)
 		return nil
 	}
-	return msg
+	return msgs
 }
 
 // 从存储后端获取指定消息
@@ -101,7 +109,6 @@ func (r *RedisStorage)GetMsg(appId string, msgId int64) string {
 	}
 	return msg
 }
-
 
 func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 	app := AppInfo{
@@ -118,17 +125,17 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 	//return &pusherror.PushError{"add failed"}
 }
 
-func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo, error) {
+func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
 	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	var app AppInfo
 	if err := json.Unmarshal(msg, &app); err != nil {
-		return nil ,err
+		return nil
 	}
-	return &app, nil
+	return &app
 }
 
 /*

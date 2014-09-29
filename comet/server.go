@@ -9,12 +9,27 @@ import (
 	//"fmt"
 	//"strings"
 	"encoding/json"
-	//"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
 	//"github.com/bitly/go-simplejson"
 )
 
 type MsgHandler func(*Client, *Header, []byte)(int)
+
+type Pack struct {
+	msg		*Message
+	client	*Client
+	reply	chan *Message
+}
+
+type Client struct {
+	devId		string
+	regApps		map[string]*App
+	outMsgs		chan *Pack
+	nextSeq		uint32
+	lastActive	time.Time
+	ctrl		chan bool
+}
 
 type Server struct {
 	exitCh         chan bool
@@ -38,21 +53,6 @@ func NewServer() *Server {
 	}
 }
 
-type Client struct {
-	devId	string
-	ctrl	chan bool
-	MsgOut	chan *Pack
-	WaitingChannels	map[uint32]chan *Message
-	NextSeqId uint32
-	LastAlive	time.Time
-}
-
-type Pack struct {
-	msg		*Message
-	client	*Client
-	reply	chan *Message
-}
-
 func (client *Client)SendMessage(msgType uint8, body []byte, reply chan *Message) {
 	header := Header{
 		Type:	msgType,
@@ -70,30 +70,21 @@ func (client *Client)SendMessage(msgType uint8, body []byte, reply chan *Message
 		client: client,
 		reply: reply,
 	}
-	client.MsgOut <- pack
+	client.outMsgs <- pack
 }
 
 var (
 	DevicesMap *safemap.SafeMap = safemap.NewSafeMap()
 )
 
-/*
-func HandleOfflineMsgs(appId string, client *Client) {
-	msg_list := storage.StorageInstance.GetOfflineMsgs(appId, client.Lastxxx)
-	for msg := range(msg_list) {
-		client.SendMessage(MSG_REQUEST, msg.Body, nil)
-	}
-}
-*/
-
 func InitClient(conn *net.TCPConn, devid string) (*Client) {
 	client := &Client {
 		devId: devid,
+		regApps: make(map[string]*App),
+		nextSeq: 1,
+		lastActive: time.Now(),
+		outMsgs: make(chan *Pack, 100),
 		ctrl: make(chan bool),
-		MsgOut: make(chan *Pack, 100),
-		WaitingChannels: make(map[uint32]chan *Message),
-		NextSeqId: 1,
-		LastAlive: time.Now(),
 	}
 	DevicesMap.Set(devid, client)
 
@@ -101,18 +92,14 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 		log.Printf("enter send routine")
 		for {
 			select {
-			case pack := <-client.MsgOut:
-				seqid := pack.client.NextSeqId
+			case pack := <-client.outMsgs:
+				seqid := pack.client.nextSeq
 				pack.msg.Header.Seq = seqid
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
 				log.Printf("send msg ok, (%d) (%s)", pack.msg.Header.Type, pack.msg.Data)
-				pack.client.NextSeqId += 1
-				// add reply channel
-				if pack.reply != nil {
-					pack.client.WaitingChannels[seqid] = pack.reply
-				}
+				pack.client.nextSeq += 1
 			case <-client.ctrl:
 				log.Printf("leave send routine")
 				return
@@ -127,105 +114,16 @@ func CloseClient(client *Client) {
 	DevicesMap.Delete(client.devId)
 }
 
-type PushMessage struct {
-	MsgId		int64	`json:"msg_id"`
-	AppId		string	`json:"app_id"`
-	MsgType		int		`json:"msg_type"`
-	Payload		string	`json:"payload"`
-}
-type PushReplyMessage struct {
-	MsgId	int64	`json:"msg_id"`
-	AppId	string	`json:"app_id"`
-	RegId	string	`json:"reg_id"`
-}
-func handlePushReply(client *Client, header *Header, body []byte) int {
-	var msg PushReplyMessage
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return -1
-	}
-	if err := AMInstance.UpdateApp(msg.AppId, msg.RegId, msg.MsgId); err != nil {
-		log.Printf("update app failed, (%s)", err)
-	}
-	return 0
-}
-
-type RegisterMessage struct{
-	AppId	string	`json:"app_id"`
-	AppKey	string	`json:"app_key"`
-	RegId	string	`json:"reg_id"`
-}
-type RegisterReplyMessage struct{
-	AppId	string	`json:"app_id"`
-	RegId	string	`json:"reg_id"`
-	Result	int		`json:"result"`
-}
-// app注册后，才可以接收消息
-func handleRegister(client *Client, header *Header, body []byte) int {
-	log.Printf("handle register")
-	var msg RegisterMessage
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return -1
-	}
-	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
-	regid, err := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
-	result := 0
-	if err != nil {
-		result = 1
-	}
-	reply := RegisterReplyMessage{
-		AppId : msg.AppId,
-		RegId : regid,
-		Result : result,
-	}
-	b, _ := json.Marshal(reply)
-	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
-	return 0
-}
-
-type UnregisterMessage struct{
-	AppId	string	`json:"app_id"`
-	AppKey	string	`json:"app_key"`
-	RegId	string	`json:"reg_id"`
-}
-type UnregisterReplyMessage struct{
-	AppId	string	`json:"app_id"`
-	RegId	string	`json:"reg_id"`
-	Result	int		`json:"result"`
-}
-func handleUnregister(client *Client, header *Header, body []byte) int {
-	log.Printf("handle unregister")
-	var msg UnregisterMessage
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return -1
-	}
-	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
-	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
-	result := 0
-	reply := RegisterReplyMessage{
-		AppId : msg.AppId,
-		RegId : msg.RegId,
-		Result : result,
-	}
-	b, _ := json.Marshal(reply)
-	client.SendMessage(MSG_UNREGISTER_REPLY, b, nil)
-	return 0
-}
-
-func handleHeartbeat(client *Client, header *Header, body []byte) int {
-	client.LastAlive = time.Now()
-	return 0
-}
-
-func (this *Server) SetAcceptTimeout(acceptTimeout time.Duration) {
-	this.acceptTimeout = acceptTimeout
-}
-
 func (this *Server) SetReadTimeout(readTimeout time.Duration) {
 	this.readTimeout = readTimeout
 }
 
 func (this *Server) SetWriteTimeout(writeTimeout time.Duration) {
 	this.writeTimeout = writeTimeout
+}
+
+func (this *Server) SetAcceptTimeout(acceptTimeout time.Duration) {
+	this.acceptTimeout = acceptTimeout
 }
 
 func (this *Server) SetMaxPktLen(maxMsgLen uint32) {
@@ -295,8 +193,82 @@ func (this *Server) Stop() {
 	log.Printf("comet server stopped")
 }
 
+// handle a TCP connection
+func (this *Server)handleConnection(conn *net.TCPConn) {
+	log.Printf("accept connection (%v)", conn)
+	// handle register first
+	client := waitInit(conn)
+	if client == nil {
+		return
+	}
+
+	for {
+		/*
+		select {
+		case <- this.exitCh:
+			log.Printf("ask me quit\n")
+			return
+		default:
+		}
+		*/
+
+		now := time.Now()
+		if now.After(client.lastActive.Add(90*time.Second)) {
+			log.Printf("heartbeat timeout")
+			break
+		}
+
+		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
+		conn.SetReadDeadline(now.Add(10* time.Second))
+		//headSize := 10
+		buf := make([]byte, 10)
+		n, err := io.ReadFull(conn, buf)
+		if err != nil {
+			if e, ok := err.(*net.OpError); ok && e.Timeout() {
+				//log.Printf("read timeout, %d", n)
+				continue
+			}
+			log.Printf("readfull failed (%v)", err)
+			break
+		}
+		var header Header
+		if err := header.Deserialize(buf[0:n]); err != nil {
+			break
+		}
+		if header.Type != 0 {
+			log.Printf("recv msg: %d, len %d", header.Type, header.Len)
+		}
+		data := []byte{}
+		if header.Len > 0 {
+			data = make([]byte, header.Len)
+			if _, err := io.ReadFull(conn, data); err != nil {
+				if e, ok := err.(*net.OpError); ok && e.Timeout() {
+					continue
+				}
+				log.Printf("read from client failed: (%v)", err)
+				break
+			}
+			log.Printf("body (%s)", data)
+		}
+
+		handler, ok := this.funcMap[header.Type]; if ok {
+			ret := handler(client, &header, data)
+			if ret < 0 {
+				break
+			}
+		}
+	}
+	// don't use defer to improve performance
+	log.Printf("close connection (%v)", conn)
+	for regid, _ := range(client.regApps) {
+		AMInstance.RemoveApp(regid)
+	}
+	CloseClient(client)
+}
+
 type InitMessage struct {
-	DeviceId	string	`json:"device_id"`
+	DeviceId	string				`json:"devid"`
+	Apps		[]RegisterMessage	`json:"apps"`
 }
 type InitReplyMessage struct {
 	Result	string `json:"result"`
@@ -347,6 +319,11 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 	client := InitClient(conn, devid)
+
+	for _, app := range(msg.Apps) {
+		AMInstance.RegisterApp(client.devId, app.AppId, app.AppKey, app.RegId)
+	}
+
 	reply := InitReplyMessage{
 		Result : "0",
 	}
@@ -355,73 +332,136 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	return client
 }
 
-// handle a TCP connection
-func (this *Server)handleConnection(conn *net.TCPConn) {
-	log.Printf("accept connection (%v)", conn)
-	// handle register first
-	client := waitInit(conn)
-	if client == nil {
-		return
+type RegisterMessage struct{
+	AppId	string	`json:"appid"`
+	AppKey	string	`json:"appkey"`
+	RegId	string	`json:"regid"`
+}
+type RegisterReplyMessage struct{
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+	Result	int		`json:"result"`
+}
+// app注册后，才可以接收消息
+func handleRegister(client *Client, header *Header, body []byte) int {
+	log.Printf("handle register")
+	var msg RegisterMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		return -1
+	}
+	log.Printf("appid(%s) appkey(%s) regid(%s)", msg.AppId, msg.AppKey, msg.RegId)
+
+	if msg.RegId != "" {
+		if _, ok := client.regApps[msg.RegId]; ok {
+			reply := RegisterReplyMessage{
+				AppId : msg.AppId,
+				RegId : msg.RegId,
+				Result : 0,
+			}
+			b, _ := json.Marshal(reply)
+			client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+			return 0
+		}
 	}
 
-	for {
-		/*
-		select {
-		case <- this.exitCh:
-			log.Printf("ask me quit\n")
-			return
-		default:
+	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	if app == nil {
+		log.Printf("AMInstance register app failed")
+		reply := RegisterReplyMessage{
+			AppId : msg.AppId,
+			RegId : msg.RegId,
+			Result : -1,
 		}
-		*/
-
-		now := time.Now()
-		if now.After(client.LastAlive.Add(90*time.Second)) {
-			log.Printf("heartbeat timeout")
-			break
-		}
-
-		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
-		conn.SetReadDeadline(now.Add(10* time.Second))
-		//headSize := 10
-		buf := make([]byte, 10)
-		n, err := io.ReadFull(conn, buf)
-		if err != nil {
-			if e, ok := err.(*net.OpError); ok && e.Timeout() {
-				//log.Printf("read timeout, %d", n)
-				continue
-			}
-			log.Printf("readfull failed (%v)", err)
-			break
-		}
-		var header Header
-		if err := header.Deserialize(buf[0:n]); err != nil {
-			break
-		}
-		if header.Type != 0 {
-			log.Printf("recv msg: %d, len %d", header.Type, header.Len)
-		}
-		data := []byte{}
-		if header.Len > 0 {
-			data = make([]byte, header.Len)
-			if _, err := io.ReadFull(conn, data); err != nil {
-				if e, ok := err.(*net.OpError); ok && e.Timeout() {
-					continue
-				}
-				log.Printf("read from client failed: (%v)", err)
-				break
-			}
-			log.Printf("body (%s)", data)
-		}
-
-		handler, ok := this.funcMap[header.Type]; if ok {
-			ret := handler(client, &header, data)
-			if ret < 0 {
-				break
-			}
-		}
+		b, _ := json.Marshal(reply)
+		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+		return 0
 	}
-	// don't use defer to improve performance
-	log.Printf("close connection (%v)", conn)
-	CloseClient(client)
+
+	client.regApps[app.RegId] = app
+	reply := RegisterReplyMessage{
+		AppId : msg.AppId,
+		RegId : app.RegId,
+		Result : 0,
+	}
+	b, _ := json.Marshal(reply)
+	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+
+	// handle offline messages
+	msgs := storage.StorageInstance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
+	log.Printf("get %d offline messages for (app %s) (regid %s)", len(msgs), msg.AppId, app.RegId)
+	for _, msg := range(msgs) {
+		client.SendMessage(MSG_PUSH, []byte(msg), nil)
+	}
+	return 0
+}
+
+type UnregisterMessage struct{
+	AppId	string	`json:"appid"`
+	AppKey	string	`json:"appkey"`
+	RegId	string	`json:"regid"`
+}
+type UnregisterReplyMessage struct{
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+	Result	int		`json:"result"`
+}
+func handleUnregister(client *Client, header *Header, body []byte) int {
+	log.Printf("handle unregister")
+	var msg UnregisterMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		return -1
+	}
+	log.Printf("(%s) (%s) (%s)", msg.AppId, msg.AppKey, msg.RegId)
+	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
+	result := 0
+	reply := RegisterReplyMessage{
+		AppId : msg.AppId,
+		RegId : msg.RegId,
+		Result : result,
+	}
+	b, _ := json.Marshal(reply)
+	client.SendMessage(MSG_UNREGISTER_REPLY, b, nil)
+	return 0
+}
+
+func handleHeartbeat(client *Client, header *Header, body []byte) int {
+	client.lastActive = time.Now()
+	return 0
+}
+
+type PushMessage struct {
+	MsgId		int64	`json:"msgid"`
+	AppId		string	`json:"appid"`
+	Type		int		`json:"type"`  //1: notification  2:app message
+	Content		string	`json:"content"`
+}
+type PushReplyMessage struct {
+	MsgId	int64	`json:"msgid"`
+	AppId	string	`json:"appid"`
+	RegId	string	`json:"regid"`
+}
+func handlePushReply(client *Client, header *Header, body []byte) int {
+	log.Printf("handle push reply")
+	var msg PushReplyMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Printf("json decode failed")
+		return -1
+	}
+
+	// unknown regid
+	app, ok := client.regApps[msg.RegId]
+	if !ok {
+		log.Printf("unkonw regid %s", msg.RegId)
+		return 0
+	}
+
+	if msg.MsgId <= app.LastMsgId {
+		log.Printf("msgid mismatch: %d <= %d", msg.MsgId, app.LastMsgId)
+		return 0
+	}
+	if err := AMInstance.UpdateApp(msg.AppId, msg.RegId, msg.MsgId, app); err != nil {
+		log.Printf("update app failed, (%s)", err)
+	}
+	return 0
 }
 

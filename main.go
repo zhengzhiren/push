@@ -115,8 +115,8 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	msg := comet.PushMessage{
 		MsgId : input.MsgId,
 		AppId : input.AppId,
-		MsgType : input.MsgType,
-		Payload : input.Payload,
+		Type : input.MsgType,
+		Content : input.Payload,
 	}
 	b, _ := json.Marshal(msg)
 	regid := ""
@@ -152,8 +152,8 @@ func getCommand(w http.ResponseWriter, r *http.Request) {
 	msg := comet.PushMessage{
 		MsgId : int64(mid),
 		AppId : appid,
-		MsgType : 0,
-		Payload : cmd,
+		Type : 0,
+		Content : cmd,
 	}
 	b, _ := json.Marshal(msg)
 	comet.PushOutMessage(appid, push_type, "", b)

@@ -14,7 +14,7 @@ type AppInfo struct{
 type Storage interface {
 	GetOfflineMsgs(appId string, ctime int64) []string
 	GetMsg(appId string, msgId int64) string
-	GetApp(appId string, regId string) (*AppInfo, error)
+	GetApp(appId string, regId string) (*AppInfo)
 	UpdateApp(appId string, regId string, msgId int64) error
 }
 
