@@ -186,10 +186,6 @@ func main() {
 		mqConsumer, err = mq.NewConsumer(
 			conf.Config.Rabbit.Uri,
 			conf.Config.Rabbit.Exchange,
-			conf.Config.Rabbit.ExchangeType,
-			conf.Config.Rabbit.Queue,
-			conf.Config.Rabbit.Key,
-			conf.Config.Rabbit.ConsumerTag,
 			conf.Config.Rabbit.QOS)
 		if err != nil {
 			log.Critical(err)

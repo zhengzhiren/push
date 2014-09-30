@@ -8,6 +8,7 @@ import (
 	"github.com/streadway/amqp"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/comet"
+	"github.com/chenyf/push/utils"
 )
 
 type Consumer struct {
@@ -18,7 +19,9 @@ type Consumer struct {
 	done    chan error
 }
 
-func NewConsumer(amqpURI, exchange, exchangeType, queueName, key, ctag string, qos int) (*Consumer, error) {
+func NewConsumer(amqpURI, exchange string, qos int) (*Consumer, error) { 
+	queueName := utils.GetLocalIP()
+	ctag := queueName + "_tag"
 	c := &Consumer{
 		conn:    nil,
 		channel: nil,
@@ -57,12 +60,12 @@ func NewConsumer(amqpURI, exchange, exchangeType, queueName, key, ctag string, q
 		return nil, fmt.Errorf("Queue Declare: %s", err)
 	}
 
-	log.Infof("declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
-		queue.Name, queue.Messages, queue.Consumers, key)
+	log.Infof("declared Queue (%q %d messages, %d consumers), binding to Exchange (%s)",
+		queue.Name, queue.Messages, queue.Consumers, exchange)
 
 	if err = c.channel.QueueBind(
 		queue.Name, // name of the queue
-		key,        // bindingKey
+		"",        // bindingKey
 		exchange,   // sourceExchange
 		false,      // noWait
 		nil,        // arguments

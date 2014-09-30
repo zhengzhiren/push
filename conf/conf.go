@@ -7,22 +7,18 @@ import (
 
 type ConfigStruct struct {
 	Comet string		`json:"comet"`
-	Web string			`json:"web"`
+	Web string		`json:"web"`
 
 	Rabbit struct {
-		Uri string				`json:"uri"`
+		Uri string			`json:"uri"`
 		Exchange string			`json:"exchange"`
-		ExchangeType string		`json:"exchange-type"`
-		Queue string			`json:"queue"`
-		Key string				`json:"key"`
-		ConsumerTag string		`json:"consumer-tag"`
-		QOS int					`json:"qos"`
+		QOS int				`json:"qos"`
 	}					`json:"rabbit"`
 
 	Redis struct {
 		Server string		`json:"server"`
-		Pass string			`json:"pass"`
-	}					`json:"redis"`
+		Pass string		`json:"pass"`
+	}				`json:"redis"`
 }
 
 var (
