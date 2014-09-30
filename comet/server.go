@@ -12,7 +12,6 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
-	//"github.com/chenyf/push/message"
 	//"github.com/bitly/go-simplejson"
 )
 
@@ -302,7 +301,7 @@ func waitInit(conn *net.TCPConn) (*Client) {
 
 	var msg InitMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Infof("JSON decode failed")
+		log.Warnf("JSON decode failed")
 		conn.Close()
 		return nil
 	}
@@ -310,16 +309,21 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	devid := msg.DeviceId
 	log.Infof(">>>INIT devid (%s)", devid)
 	if DevicesMap.Check(devid) {
-		log.Infof("device (%s) init already", devid)
+		log.Warnf("device (%s) init in this server already", devid)
 		conn.Close()
 		return nil
 	}
-	client := InitClient(conn, devid)
 
+	if storage.StorageInstance.AddDevice(devid) {
+		log.Warnf("storage add device (%s) failed", devid)
+		conn.Close()
+		return nil
+	}
+
+	client := InitClient(conn, devid)
 	for _, app := range(msg.Apps) {
 		AMInstance.RegisterApp(client.devId, app.AppId, app.AppKey, app.RegId)
 	}
-
 	reply := InitReplyMessage{
 		Result : "0",
 	}

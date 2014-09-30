@@ -107,12 +107,12 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, msgId int64) []*RawMessage {
 func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *RawMessage {
 	ret, err := redis.Bytes(r.pool.Get().Do("HGET", appId, msgId))
 	if err != nil {
-		log.Infof("failed to get raw msg:", err)
+		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
 	}
 	rmsg := &RawMessage{}
 	if err := json.Unmarshal(ret, rmsg); err != nil {
-		log.Infof("failed to decode raw msg:", err)
+		log.Warnf("failed to decode raw msg:", err)
 		return nil
 	}
 	return rmsg
@@ -122,17 +122,14 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 	app := AppInfo{
 		LastMsgId : msgId,
 	}
-	b, err := json.Marshal(app)
-	if err != nil {
-		return err
-	}
+	b, _ := json.Marshal(app)
 	if _, err := r.pool.Get().Do("HSET", fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
-		log.Infof("HSET failed, (%s)", err)
+		log.Warnf("redis: HSET failed (%s)", err)
 		return err
 	}
 	if msgId > 0 {
 		if _, err := r.pool.Get().Do("HINCRBY", "db_msg_stat", fmt.Sprintf("%d", msgId), 1); err != nil {
-			log.Infof("HINCRBY failed, (%s)", err)
+			log.Warnf("redis: HINCRBY failed, (%s)", err)
 		}
 	}
 	return nil
@@ -142,14 +139,26 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
 	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
 	if err != nil {
+		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
 	}
-
 	var app AppInfo
 	if err := json.Unmarshal(msg, &app); err != nil {
 		return nil
 	}
 	return &app
+}
+
+func (r *RedisStorage)AddDevice(devId string) bool {
+	result, err := redis.Int(r.pool.Get().Do("HSETNX", "db_device", devId, "1"))
+	if err != nil {
+		log.Warnf("redis: HSETNX failed (%s)", err)
+		return false
+	}
+	if result == 1 {
+		return true
+	}
+	return false
 }
 
 /*

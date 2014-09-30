@@ -23,6 +23,7 @@ type Storage interface {
 	GetRawMsg(appId string, msgId int64) *RawMessage
 	GetApp(appId string, regId string) (*AppInfo)
 	UpdateApp(appId string, regId string, msgId int64) error
+	AddDevice(devId string) bool
 }
 
 var (
