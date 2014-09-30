@@ -123,7 +123,7 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 		LastMsgId : msgId,
 	}
 	b, _ := json.Marshal(app)
-	if _, err := r.pool.Get().Do("HSET", "db_apps", regId, b); err != nil {
+	if _, err := r.pool.Get().Do("HSET", fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
 		log.Warnf("redis: HSET failed (%s)", err)
 		return err
 	}
@@ -136,7 +136,7 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 }
 
 func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
-	msg, err := redis.Bytes(r.pool.Get().Do("HGET", "db_apps", regId))
+	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil

@@ -265,7 +265,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 	for regid, _ := range(client.regApps) {
 		AMInstance.RemoveApp(regid)
 	}
-	storage.StorageInstance.RemoveDevice(client.devId)
+	//storage.StorageInstance.RemoveDevice(client.devId)
 	CloseClient(client)
 }
 
@@ -315,11 +315,12 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 
+	/*
 	if !storage.StorageInstance.AddDevice(devid) {
 		log.Warnf("storage add device (%s) failed", devid)
 		conn.Close()
 		return nil
-	}
+	}*/
 
 	client := InitClient(conn, devid)
 	for _, app := range(msg.Apps) {
