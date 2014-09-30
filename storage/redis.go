@@ -123,7 +123,7 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 		LastMsgId : msgId,
 	}
 	b, _ := json.Marshal(app)
-	if _, err := r.pool.Get().Do("HSET", fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+	if _, err := r.pool.Get().Do("HSET", "db_apps", regId, b); err != nil {
 		log.Warnf("redis: HSET failed (%s)", err)
 		return err
 	}
@@ -133,11 +133,10 @@ func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
 		}
 	}
 	return nil
-	//return &pusherror.PushError{"add failed"}
 }
 
 func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
-	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
+	msg, err := redis.Bytes(r.pool.Get().Do("HGET", "db_apps", regId))
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
@@ -159,6 +158,13 @@ func (r *RedisStorage)AddDevice(devId string) bool {
 		return true
 	}
 	return false
+}
+
+func (r *RedisStorage)RemoveDevice(devId string) {
+	_, err := r.pool.Get().Do("HDEL", "db_device", devId)
+	if err != nil {
+		log.Warnf("redis: HDEL failed (%s)", err)
+	}
 }
 
 /*

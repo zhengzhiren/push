@@ -24,6 +24,7 @@ type Storage interface {
 	GetApp(appId string, regId string) (*AppInfo)
 	UpdateApp(appId string, regId string, msgId int64) error
 	AddDevice(devId string) bool
+	RemoveDevice(devId string)
 }
 
 var (
