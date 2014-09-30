@@ -1135,3 +1135,12 @@ func CopyFile(src, dst string) (int64, error) {
 	defer df.Close()
 	return io.Copy(df, sf)
 }
+
+func GetLocalIP() string {
+	output, err := exec.Command("hostname", "-I").Output()
+	if err != nil {
+		return "0.0.0.0"
+	}
+
+	return strings.Split(string(output), " ")[0]
+}
