@@ -3,6 +3,7 @@ package comet
 import (
 	"fmt"
 	"sync"
+	"encoding/json"
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
 )
@@ -13,6 +14,11 @@ type App struct {
 	AppId		string
 	LastMsgId	int64
 }
+
+type AppInfo struct{
+	LastMsgId	int64	`json:"last_msgid"`
+}
+
 type AppManager struct {
 	lock *sync.RWMutex
 	appMap map[string]*App
@@ -48,9 +54,13 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		}
 		this.lock.RUnlock()
 		// 从后端存储获取 last_msgid
-		info := storage.StorageInstance.GetApp(appId, regId)
-		if info == nil {
-			log.Infof("not in storage")
+		val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
+		if err != nil {
+			return nil
+		}
+		var info AppInfo
+		if err := json.Unmarshal(val, &info); err != nil {
+			log.Infof("invalid app info from storage")
 			return nil
 		}
 		log.Infof("got last msgid %d", info.LastMsgId)
@@ -58,9 +68,12 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 	} else {
 		// 第一次注册，分配一个新的regId
 		regId = RegId(devId, appId)
+		info := AppInfo{
+			LastMsgId : -1,
+		}
+		val, _ := json.Marshal(info)
 		// 记录到后端存储中
-		if err := storage.StorageInstance.UpdateApp(appId, regId, -1); err != nil {
-			log.Infof("storage add failed")
+		if err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, val); err != nil {
 			return nil
 		}
 	}
@@ -123,10 +136,15 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 }
 
 func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
-	if err := storage.StorageInstance.UpdateApp(appId, regId, msgId); err != nil {
-		log.Infof("storage update app failed")
+	info := AppInfo{
+		LastMsgId : msgId,
+	}
+	val, _ := json.Marshal(info)
+	if err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, val); err != nil {
 		return err
 	}
+	storage.StorageInstance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
 	app.LastMsgId = msgId
 	return nil
 }
+

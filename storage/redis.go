@@ -118,36 +118,6 @@ func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *RawMessage {
 	return rmsg
 }
 
-func (r *RedisStorage)UpdateApp(appId string, regId string, msgId int64) error {
-	app := AppInfo{
-		LastMsgId : msgId,
-	}
-	b, _ := json.Marshal(app)
-	if _, err := r.pool.Get().Do("HSET", fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
-		log.Warnf("redis: HSET failed (%s)", err)
-		return err
-	}
-	if msgId > 0 {
-		if _, err := r.pool.Get().Do("HINCRBY", "db_msg_stat", fmt.Sprintf("%d", msgId), 1); err != nil {
-			log.Warnf("redis: HINCRBY failed, (%s)", err)
-		}
-	}
-	return nil
-}
-
-func (r *RedisStorage)GetApp(appId string, regId string) (*AppInfo) {
-	msg, err := redis.Bytes(r.pool.Get().Do("HGET", fmt.Sprintf("db_app_%s", appId), regId))
-	if err != nil {
-		log.Warnf("redis: HGET failed (%s)", err)
-		return nil
-	}
-	var app AppInfo
-	if err := json.Unmarshal(msg, &app); err != nil {
-		return nil
-	}
-	return &app
-}
-
 func (r *RedisStorage)AddDevice(devId string) bool {
 	result, err := redis.Int(r.pool.Get().Do("HSETNX", "db_device", devId, "1"))
 	if err != nil {
@@ -167,11 +137,46 @@ func (r *RedisStorage)RemoveDevice(devId string) {
 	}
 }
 
-/*
-func main() {
-	r := newRedisStorage()
-	log.Print(r.GetMsg("myapp1", 19))
-	log.Print("\n")
-	log.Print(r.GetOfflineMsgs("myapp1", 19))
+func (r *RedisStorage)HashGet(db string, key string) ([]byte, error) {
+	val, err := redis.Bytes(r.pool.Get().Do("HGET", db, key))
+	if err != nil {
+		log.Warnf("redis: HGET failed (%s)", err)
+		return nil, err
+	}
+	return val, nil
 }
-*/
+
+func (r *RedisStorage)HashSet(db string, key string, val []byte) error {
+	if _, err := r.pool.Get().Do("HSET", db, key, val); err != nil {
+		log.Warnf("redis: HSET failed (%s)", err)
+		return err
+	}
+	return nil
+}
+
+func (r *RedisStorage)HashSetNotExist(db string, key string, val []byte) error {
+	_, err := redis.Int(r.pool.Get().Do("HSETNX", db, key, val))
+	if err != nil {
+		log.Warnf("redis: HSETNX failed (%s)", err)
+		return err
+	}
+	return nil
+}
+
+func (r *RedisStorage)HashDel(db string, key string) error {
+	_, err := r.pool.Get().Do("HDEL", db, key)
+	if err != nil {
+		log.Warnf("redis: HDEL failed (%s)", err)
+		return err
+	}
+	return nil
+}
+
+func (r *RedisStorage)HashIncrBy(db string, key string, val int) error {
+	if _, err := r.pool.Get().Do("HINCRBY", db, key, val); err != nil {
+		log.Warnf("redis: HINCRBY failed, (%s)", err)
+		return err
+	}
+	return nil
+}
+

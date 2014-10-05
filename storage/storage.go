@@ -3,10 +3,6 @@ package storage
 import (
 )
 
-type AppInfo struct{
-	LastMsgId	int64	`json:"last_msgid"`
-}
-
 type RawMessage struct {
 	MsgId		int64		`json:"msgid"`
 	AppId		string		`json:"appid"`
@@ -21,10 +17,15 @@ type RawMessage struct {
 type Storage interface {
 	GetOfflineMsgs(appId string, ctime int64) []*RawMessage
 	GetRawMsg(appId string, msgId int64) *RawMessage
-	GetApp(appId string, regId string) (*AppInfo)
-	UpdateApp(appId string, regId string, msgId int64) error
+
 	AddDevice(devId string) bool
 	RemoveDevice(devId string)
+
+	HashSet(db string, key string, val []byte) error
+	HashSetNotExist(db string, key string, val []byte) error
+	HashGet(db string, key string) ([]byte, error)
+	HashDel(db string, key string) error
+	HashIncrBy(db string, key string, val int) error
 }
 
 var (
