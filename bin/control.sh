@@ -8,11 +8,11 @@ function start()
 {
 	stop
 	sleep 3
-	supervisord -c $THIS_DIR/../conf/supervisord.conf
+	supervisord -c $THIS_DIR/../etc/supervisord.conf
 	[ $? -ne 0 ] && { echo "start supervisord failed"; exit 1; }
 	retry=0
 	while [ $retry -lt 5 ]; do
-		supervisorctl -c $THIS_DIR/../conf/supervisord.conf status pushd |grep RUNNING >/dev/null
+		supervisorctl -c $THIS_DIR/../etc/supervisord.conf status pushd |grep RUNNING >/dev/null
 		[ $? -eq 0 ] && { break; }
 		retry=$(($retry+1))
 		sleep 1
@@ -23,7 +23,7 @@ function start()
 
 function stop()
 {
-	supervisorctl -c $THIS_DIR/../conf/supervisord.conf shutdown >/dev/null 2>&1
+	supervisorctl -c $THIS_DIR/../etc/supervisord.conf shutdown >/dev/null 2>&1
 	return 0
 	#ps axf|grep supervisord |grep push-server
 	
@@ -33,7 +33,6 @@ function restart()
 {
 	:
 }
-
 
 case $cmd in
 	start)

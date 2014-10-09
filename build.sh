@@ -11,6 +11,6 @@ rm -rf output/*
 cp pushd output/
 cp setupenv.sh output/
 cp test/pushtest output/
-cp -aR etc output/conf
+cp -aR etc output/
 cp -aR bin output/
 
