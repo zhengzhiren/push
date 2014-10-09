@@ -12,7 +12,7 @@ function start()
 	[ $? -ne 0 ] && { echo "start supervisord failed"; exit 1; }
 	retry=0
 	while [ $retry -lt 5 ]; do
-		supervisorctl -c $THIS_DIR/../conf/supervisord.conf status push-server |grep RUNNING >/dev/null
+		supervisorctl -c $THIS_DIR/../conf/supervisord.conf status pushd |grep RUNNING >/dev/null
 		[ $? -eq 0 ] && { break; }
 		retry=$(($retry+1))
 		sleep 1
