@@ -199,7 +199,7 @@ func (this *Server) Stop() {
 
 // handle a TCP connection
 func (this *Server)handleConnection(conn *net.TCPConn) {
-	log.Infof("accept connection (%v)", conn)
+	log.Infof("accept connection from (%s)", conn.RemoteAddr())
 	// handle register first
 	client := waitInit(conn)
 	if client == nil {
@@ -280,26 +280,26 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	buf := make([]byte, HEADER_SIZE)
 	n, err := io.ReadFull(conn, buf)
 	if err != nil {
-		log.Infof("readfull header failed (%v)", err)
+		log.Warnf("readfull header failed (%v)", err)
 		conn.Close()
 		return nil
 	}
 
 	var header Header
 	if err := header.Deserialize(buf[0:n]); err != nil {
-		log.Infof("parse header (%v)", err)
+		log.Warnf("parse header failed: (%v)", err)
 		conn.Close()
 		return nil
 	}
 
 	if header.Len > MAX_BODY_LEN {
-		log.Warnf("header len too big %d", header.Len)
+		log.Warnf("header len too big: %d", header.Len)
 		conn.Close()
 		return nil
 	}
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(conn, data); err != nil {
-		log.Infof("readfull body failed: (%v)", err)
+		log.Warnf("readfull body failed: (%v)", err)
 		conn.Close()
 		return nil
 	}
