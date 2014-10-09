@@ -9,6 +9,7 @@ cd -
 mkdir -p output
 rm -rf output/*
 cp push output/
+cp setupenv.sh output/
 cp test/test output/
 cp -aR etc output/
 
