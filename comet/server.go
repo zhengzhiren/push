@@ -92,7 +92,7 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 	DevicesMap.Set(devid, client)
 
 	go func() {
-		log.Infof("enter send routine")
+		log.Infof("%p: enter send routine", conn)
 		for {
 			select {
 			case pack := <-client.outMsgs:
@@ -101,11 +101,11 @@ func InitClient(conn *net.TCPConn, devid string) (*Client) {
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
-				log.Infof("send msg: (%d) (%s)", pack.msg.Header.Type, pack.msg.Data)
+				log.Infof("%p: send msg: (%d) (%s)", conn, pack.msg.Header.Type, pack.msg.Data)
 				pack.client.nextSeq += 1
 				time.Sleep(1*time.Second)
 			case <-client.ctrl:
-				log.Infof("leave send routine")
+				log.Infof("%p: leave send routine", conn)
 				return
 			}
 		}
@@ -199,7 +199,7 @@ func (this *Server) Stop() {
 
 // handle a TCP connection
 func (this *Server)handleConnection(conn *net.TCPConn) {
-	log.Infof("accept connection from (%s) (%v)", conn.RemoteAddr(), conn)
+	log.Infof("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
 	// handle register first
 	client := waitInit(conn)
 	if client == nil {
@@ -218,7 +218,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 
 		now := time.Now()
 		if now.After(client.lastActive.Add(90*time.Second)) {
-			log.Infof("%v: heartbeat timeout", conn)
+			log.Infof("%p: heartbeat timeout", conn)
 			break
 		}
 
@@ -231,7 +231,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 				//log.Infof("read timeout, %d", n)
 				continue
 			}
-			log.Infof("%v: readfull failed (%v)", conn, err)
+			log.Infof("%p: readfull failed (%v)", conn, err)
 			break
 		}
 		var header Header
@@ -240,7 +240,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 		}
 
 		if header.Len > MAX_BODY_LEN {
-			log.Warnf("%v: header len too big %d", conn, header.Len)
+			log.Warnf("%p: header len too big %d", conn, header.Len)
 			break
 		}
 		/*
@@ -254,10 +254,10 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
 					continue
 				}
-				log.Infof("%v: read from client failed: (%v)", conn, err)
+				log.Infof("%p: read from client failed: (%v)", conn, err)
 				break
 			}
-			log.Infof("%v: body (%s)", conn, data)
+			log.Infof("%p: body (%s)", conn, data)
 		}
 
 		handler, ok := this.funcMap[header.Type]; if ok {
@@ -268,7 +268,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 		}
 	}
 	// don't use defer to improve performance
-	log.Infof("%v: close connection", conn)
+	log.Infof("%p: close connection", conn)
 	for regid, _ := range(client.regApps) {
 		AMInstance.RemoveApp(regid)
 	}
@@ -281,47 +281,47 @@ func waitInit(conn *net.TCPConn) (*Client) {
 	buf := make([]byte, HEADER_SIZE)
 	n, err := io.ReadFull(conn, buf)
 	if err != nil {
-		log.Infof("%v: readfull header failed (%v)", conn, err)
+		log.Infof("%p: readfull header failed (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
 
 	var header Header
 	if err := header.Deserialize(buf[0:n]); err != nil {
-		log.Warnf("%v: parse header failed: (%v)", conn, err)
+		log.Warnf("%p: parse header failed: (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
 
 	if header.Len > MAX_BODY_LEN {
-		log.Warnf("%v: header len too big: %d", conn, header.Len)
+		log.Warnf("%p: header len too big: %d", conn, header.Len)
 		conn.Close()
 		return nil
 	}
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(conn, data); err != nil {
-		log.Infof("%v: readfull body failed: (%v)", conn, err)
+		log.Infof("%p: readfull body failed: (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
 
 	if header.Type != MSG_INIT {
-		log.Warnf("%v: not register message, %d", conn, header.Type)
+		log.Warnf("%p: not register message, %d", conn, header.Type)
 		conn.Close()
 		return nil
 	}
 
 	var msg InitMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Warnf("%v: JSON decode failed: (%v)", conn, err)
+		log.Warnf("%p: JSON decode failed: (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
 
 	devid := msg.DeviceId
-	log.Infof("%v: INIT devid (%s)", conn, devid)
+	log.Infof("%p: INIT devid (%s)", conn, devid)
 	if DevicesMap.Check(devid) {
-		log.Warnf("%v: device (%s) init in this server already", conn, devid)
+		log.Warnf("%p: device (%s) init in this server already", conn, devid)
 		conn.Close()
 		return nil
 	}
@@ -349,10 +349,10 @@ func waitInit(conn *net.TCPConn) (*Client) {
 func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	var msg RegisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Warnf("%v: json decode failed: (%v)", conn, err)
+		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Infof("%v: REGISTER appid(%s) appkey(%s) regid(%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
+	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
 	if msg.RegId != "" {
 		if _, ok := client.regApps[msg.RegId]; ok {
 			reply := RegisterReplyMessage{
@@ -367,7 +367,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	if app == nil {
-		log.Warnf("AMInstance register app failed")
+		log.Warnf("%p: AMInstance register app failed", conn)
 		reply := RegisterReplyMessage{
 			AppId : msg.AppId,
 			RegId : msg.RegId,
@@ -389,7 +389,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 	// handle offline messages
 	msgs := storage.StorageInstance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
-	log.Infof("%v: get %d offline messages: (%s) (>%d)", conn, len(msgs), msg.AppId, app.LastMsgId)
+	log.Infof("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), msg.AppId, app.LastMsgId)
 	for _, rmsg := range(msgs) {
 		msg := PushMessage{
 			MsgId : rmsg.MsgId,
@@ -406,10 +406,10 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	var msg UnregisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Warnf("%v: json decode failed: (%v)", conn, err)
+		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Infof("%v: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
+	log.Infof("%p: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
 	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	result := 0
 	reply := RegisterReplyMessage{
@@ -430,24 +430,24 @@ func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []b
 func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Warnf("%v: json decode failed: (%v)", conn, err)
+		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
 
-	log.Infof("%v: PUSH_REPLY (appid %s) (regid %s) (msgid %d)", conn, msg.AppId, msg.RegId, msg.MsgId)
+	log.Infof("%p: PUSH_REPLY (appid %s) (regid %s) (msgid %d)", conn, msg.AppId, msg.RegId, msg.MsgId)
 	// unknown regid
 	app, ok := client.regApps[msg.RegId]
 	if !ok {
-		log.Warnf("%v: unkonw regid %s", conn, msg.RegId)
+		log.Warnf("%p: unkonw regid %s", conn, msg.RegId)
 		return 0
 	}
 
 	if msg.MsgId <= app.LastMsgId {
-		log.Warnf("%v: msgid mismatch: %d <= %d", conn, msg.MsgId, app.LastMsgId)
+		log.Warnf("%p: msgid mismatch: %d <= %d", conn, msg.MsgId, app.LastMsgId)
 		return 0
 	}
 	if err := AMInstance.UpdateApp(msg.AppId, msg.RegId, msg.MsgId, app); err != nil {
-		log.Warnf("%v: update app failed, (%s)", conn, err)
+		log.Warnf("%p: update app failed, (%s)", conn, err)
 	}
 	return 0
 }
