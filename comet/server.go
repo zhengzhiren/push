@@ -14,6 +14,9 @@ import (
 	"github.com/chenyf/push/utils/safemap"
 	//"github.com/bitly/go-simplejson"
 )
+const (
+	MAX_HEADER_LEN = 1024
+)
 
 type MsgHandler func(*Client, *Header, []byte)(int)
 
@@ -237,6 +240,11 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 		if err := header.Deserialize(buf[0:n]); err != nil {
 			break
 		}
+
+		if header.Len > MAX_HEADER_LEN {
+			log.Warnf("header len too big %d", header.Len)
+			break
+		}
 		if header.Type != 0 {
 			log.Infof("recv msg: %d, len %d", header.Type, header.Len)
 		}
@@ -286,6 +294,11 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 
+	if header.Len > MAX_HEADER_LEN {
+		log.Warnf("header len too big %d", header.Len)
+		conn.Close()
+		return nil
+	}
 	//log.Infof("body len %d", header.Len)
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(conn, data); err != nil {
