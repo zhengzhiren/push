@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"net/http"
 	"fmt"
-	//"time"
 	"encoding/json"
 	"crypto/hmac"
 	"crypto/sha1"
@@ -20,6 +19,7 @@ import (
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
+	"github.com/chenyf/push/zk"
 )
 
 type CommandRequest struct {
@@ -195,6 +195,11 @@ func main() {
 
 	listener, err := cometServer.Init(conf.Config.Comet)
 	if err != nil {
+		log.Critical(err)
+		os.Exit(1)
+	}
+
+	err = zk.InitZk(); if err != nil {
 		log.Critical(err)
 		os.Exit(1)
 	}

@@ -10,5 +10,13 @@
 	"redis" : {
 		"server"	: "10.154.156.121:6380",
 		"pass"		: "rpasswd"
-	}
+	},
+
+	"zookeeper" : {
+		"addr": "10.154.156.121:2181",
+		"timeout": 30,
+		"path": "/push",
+		"node": "node1",
+		"node_info": "10.154.156.121:20000"
+	} 
 }
