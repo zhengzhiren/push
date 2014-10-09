@@ -1,7 +1,6 @@
 package comet
 
 import (
-	//"log"
 	"io"
 	"net"
 	"sync"
@@ -15,7 +14,7 @@ import (
 	//"github.com/bitly/go-simplejson"
 )
 const (
-	MAX_HEADER_LEN = 1024
+	MAX_BODY_LEN = 1024
 )
 
 type MsgHandler func(*Client, *Header, []byte)(int)
@@ -225,8 +224,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 
 		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
 		conn.SetReadDeadline(now.Add(10* time.Second))
-		//headSize := 10
-		buf := make([]byte, 10)
+		buf := make([]byte, HEADER_SIZE)
 		n, err := io.ReadFull(conn, buf)
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok && e.Timeout() {
@@ -241,7 +239,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 			break
 		}
 
-		if header.Len > MAX_HEADER_LEN {
+		if header.Len > MAX_BODY_LEN {
 			log.Warnf("header len too big %d", header.Len)
 			break
 		}
@@ -279,7 +277,7 @@ func (this *Server)handleConnection(conn *net.TCPConn) {
 
 func waitInit(conn *net.TCPConn) (*Client) {
 	conn.SetReadDeadline(time.Now().Add(10* time.Second))
-	buf := make([]byte, 10)
+	buf := make([]byte, HEADER_SIZE)
 	n, err := io.ReadFull(conn, buf)
 	if err != nil {
 		log.Infof("readfull header failed (%v)", err)
@@ -294,12 +292,11 @@ func waitInit(conn *net.TCPConn) (*Client) {
 		return nil
 	}
 
-	if header.Len > MAX_HEADER_LEN {
+	if header.Len > MAX_BODY_LEN {
 		log.Warnf("header len too big %d", header.Len)
 		conn.Close()
 		return nil
 	}
-	//log.Infof("body len %d", header.Len)
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(conn, data); err != nil {
 		log.Infof("readfull body failed: (%v)", err)
@@ -315,7 +312,7 @@ func waitInit(conn *net.TCPConn) (*Client) {
 
 	var msg InitMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Warnf("JSON decode failed")
+		log.Warnf("JSON decode failed: (%v)", err)
 		conn.Close()
 		return nil
 	}
@@ -368,7 +365,7 @@ func handleRegister(client *Client, header *Header, body []byte) int {
 	}
 	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	if app == nil {
-		log.Infof("AMInstance register app failed")
+		log.Warnf("AMInstance register app failed")
 		reply := RegisterReplyMessage{
 			AppId : msg.AppId,
 			RegId : msg.RegId,
@@ -430,7 +427,7 @@ func handleHeartbeat(client *Client, header *Header, body []byte) int {
 func handlePushReply(client *Client, header *Header, body []byte) int {
 	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Infof("json decode failed")
+		log.Infof("json decode failed: (%v)", err)
 		return -1
 	}
 

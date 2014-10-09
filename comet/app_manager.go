@@ -15,6 +15,7 @@ type App struct {
 	LastMsgId	int64
 }
 
+// struct will save into storage
 type AppInfo struct{
 	LastMsgId	int64	`json:"last_msgid"`
 }
@@ -27,7 +28,7 @@ type AppManager struct {
 var (
 	AMInstance *AppManager = &AppManager{
 		lock: new(sync.RWMutex),
-		appMap: make(map[string]*App), 
+		appMap: make(map[string]*App),
 	}
 )
 
@@ -37,18 +38,19 @@ func RegId(devid string, appKey string) string {
 
 func (this *AppManager)RemoveApp(regId string)  {
 	this.lock.Lock()
-	log.Infof("remove app (%s)", regId)
+	//log.Infof("remove app (%s)", regId)
 	delete(this.appMap, regId)
 	this.lock.Unlock()
 }
 
+// APP注册
 func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (*App) {
 	var last_msgid int64 = -1
 	if regId != "" {
 		// 非第一次注册
 		this.lock.RLock()
 		if _, ok := this.appMap[regId]; ok {
-			log.Infof("in memory already")
+			log.Warnf("in memory already")
 			this.lock.RUnlock()
 			return nil
 		}
@@ -60,7 +62,7 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		}
 		var info AppInfo
 		if err := json.Unmarshal(val, &info); err != nil {
-			log.Infof("invalid app info from storage")
+			log.Warnf("invalid app info from storage")
 			return nil
 		}
 		log.Infof("got last msgid %d", info.LastMsgId)
@@ -91,36 +93,27 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 }
 
 func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, regId string) {
-	/*
-	if this.appMap.Check(regId) {
-		this.appMap.Delete(regId)
+	if regId == "" {
+		return
 	}
-	*/
+	this.lock.Lock()
+	_, ok := this.appMap[regId]
+	if ok {
+		storage.StorageInstance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
+		delete(this.appMap, regId)
+	}
+	this.lock.Unlock()
 }
 
 func (this *AppManager)Get(appId string, regId string) *App {
-	this.lock.Lock()
+	this.lock.RLock()
 	app, ok := this.appMap[regId]; if ok {
-		this.lock.Unlock()
+		this.lock.RUnlock()
 		return app
 	}
-	this.lock.Unlock()
+	this.lock.RUnlock()
 	return nil
 }
-
-/*
-func (this *AppManager)Set(appId string, regId string, app *App) {
-	this.appMap.Set(regId, app)
-}
-
-func (this *AppManager)Check(appId string, regId string) bool {
-	return this.appMap.Check(regId)
-}
-
-func (this *AppManager)Delete(appId string, regId string) {
-	this.appMap.Delete(regId)
-}
-*/
 
 func (this *AppManager)GetApps(appId string) ([]*App) {
 	apps := make([]*App, 0, len(this.appMap))
@@ -139,8 +132,8 @@ func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *A
 	info := AppInfo{
 		LastMsgId : msgId,
 	}
-	val, _ := json.Marshal(info)
-	if err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, val); err != nil {
+	b, _ := json.Marshal(info)
+	if err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
 		return err
 	}
 	storage.StorageInstance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
