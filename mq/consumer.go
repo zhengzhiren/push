@@ -131,3 +131,4 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 	log.Infof("handle: deliveries channel closed")
 	done <- nil
 }
+

@@ -11,9 +11,12 @@ type ConfigStruct struct {
 	Web string		`json:"web"`
 
 	Rabbit struct {
-		Uri string			`json:"uri"`
+		Uri string				`json:"uri"`
 		Exchange string			`json:"exchange"`
-		QOS int				`json:"qos"`
+		ExchangeType string		`json:"exchange_type"`
+		Key string				`json:"key"`
+		Reliable bool			`json:"reliable"`
+		QOS int					`json:"qos"`
 	}					`json:"rabbit"`
 
 	Redis struct {
