@@ -157,11 +157,11 @@ func main() {
 		//flRoot               = flag.String("g", "/tmp/echoserver", "Path to use as the root of the docker runtime")
 		//flDebug		= flag.Bool("D", false, "Enable debug mode")
 		flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
-		flConfig	= flag.String("c", "./etc/conf.json", "Config file")
+		flConfig	= flag.String("c", "./conf/conf.json", "Config file")
 	)
 
 	flag.Parse()
-	config_file := "./etc/conf.json"
+	config_file := "./conf/conf.json"
 	if flConfig != nil {
 		config_file = *flConfig
 	}
@@ -171,7 +171,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger, err := log.LoggerFromConfigAsFile("./etc/log.xml")
+	logger, err := log.LoggerFromConfigAsFile("./conf/log.xml")
 	if err != nil {
 		fmt.Printf("Load log config failed: (%s)\n", err)
 		os.Exit(1)
