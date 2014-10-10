@@ -1,7 +1,7 @@
 <seelog minlevel="trace">
 	<outputs formatid="common">
 		<console />
-		<rollingfile type="size" filename="/letv/log/push/server/pushd.log" maxsize="100000" maxrolls="5"/>
+		<rollingfile type="size" filename="/letv/log/push/pushapi/pushapi.log" maxsize="102400000" maxrolls="5"/>
 	</outputs>
 	<formats>
 		<format id="common" format="%Date/%Time [%LEV] %Msg%n" />
