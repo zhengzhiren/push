@@ -11,9 +11,11 @@ import (
 	"time"
 	"sync"
 	"encoding/json"
-	"github.com/garyburd/redigo/redis"
+	"strconv"
+	"io/ioutil"
 	"github.com/streadway/amqp"
 	"github.com/chenyf/push/api/zk"
+	"github.com/chenyf/push/storage"
 )
 
 const (
@@ -25,19 +27,20 @@ const (
 )
 
 type Message struct {
+	Token	string			`json:"token"`
 	MsgId		int64		`json:"msgid"`
 	AppId		string		`json:"appid"`
 	CTime		int64		`json:"ctime"`
 	Platform	string		`json:"platform"`
-	MsgType		int		`json:"msg_type"`
-	PushType	int		`json:"push_type"`
+	MsgType		int			`json:"msg_type"`
+	PushType	int			`json:"push_type"`
 	Content		string		`json:"content"`
 	Options		interface{}	`json:"options"`
 }
 
 type PResponse struct {
-	ErrNo	int	`json:"errno"`
-	ErrMsg	string	`json:"errmsg"`
+	ErrNo	int				`json:"errno"`
+	ErrMsg	string			`json:"errmsg"`
 }
 
 type Producer struct {
@@ -60,6 +63,35 @@ var (
 )
 
 var msgBox = make(chan Message, 10)
+
+type tokenResult struct {
+	bean	struct {
+		result	string		`json:"result"`
+	}		`json:"bean"`
+	status	string			`json:"status"`
+	errcode	string			`json:"errorCode"`
+}
+
+func checkAuth(m *Message) (bool, string) {
+	url := fmt.Sprintf("http://api.sso.letv.com/api/checkTicket/tk/%s", m.Token)
+	res, err := http.Get(url)
+	if err != nil {
+		return false, ""
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return false, ""
+	}
+	var tr tokenResult
+	err = json.Unmarshal(body, &tr)
+	if err != nil {
+		return false, ""
+	}
+	if tr.status != "1" || tr.errcode != "0" {
+		return false, ""
+	}
+	return true, tr.bean.result
+}
 
 func checkMessage(m *Message) bool {
 	ret := true
@@ -89,58 +121,67 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		response.ErrNo  = 1001
 		response.ErrMsg = "must using 'POST' method\n"
-		goto ERROR
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		response.ErrNo  = 1002
 		response.ErrMsg = "invaild POST body"
-		goto ERROR
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
 	}
 	if msg.CTime == 0 {
 		msg.CTime = time.Now().Unix()
 	}
 	//log.Print(msg)
-
-	if !checkMessage(&msg) {
+	ok, uid := checkAuth(&msg)
+	if !ok {
 		response.ErrNo  = 1003
-		response.ErrMsg = "invaild Message"
-		goto ERROR
-
-	} else {
-		response.ErrMsg = ""
-		msgBox <- msg
-	}
-
-	ERROR:
+		response.ErrMsg = "auth failed"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
+		return
+	}
+	log.Printf("uid: (%s)", uid)
+	if !checkMessage(&msg) {
+		response.ErrNo  = 1004
+		response.ErrMsg = "invaild Message"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
+	}
+	uid2, err := storage.StorageInstance.HashGet("db_apps", msg.AppId)
+	if err !=nil || uid != string(uid2) {
+		response.ErrNo  = 1005
+		response.ErrMsg = "user auth failed"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
+	}
+
+	response.ErrMsg = ""
+	msgBox <- msg
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
 }
 
-func setMsgID(c redis.Conn) error {
-	ret, err := c.Do("EXISTS", MsgID)
-	if err != nil {
-		log.Printf("failed to set MsgID", err)
+func setMsgID() error {
+	if err := storage.StorageInstance.SetNotExist(MsgID, []byte("0")); err != nil {
+		log.Printf("failed to set MsgID: %s", err)
 		return err
 	}
-
-	if ret == 0 {
-		if _, err := c.Do("SET", MsgID, 0); err != nil {
-			log.Printf("failed to set MsgID:", err)
-			return err
-		}
-	}
 	return nil
-
 }
 
-func getMsgID(c redis.Conn) int64 {
-	id, err := redis.Int64(c.Do("INCR", MsgID))
-	if err != nil {
-		log.Printf("failed to get MsgID", err)
+func getMsgID() int64 {
+	if n, err := storage.StorageInstance.IncrBy(MsgID, 1); err != nil {
+		log.Printf("failed to incr MsgID", err)
 		return 0
 	} else {
-		return id
+		return n
 	}
 }
 
@@ -205,7 +246,6 @@ func (p *Producer) publish(data []byte) error {
 	); err != nil {
 		return fmt.Errorf("Exchange Publish: %s", err)
 	}
-	
 	return nil
 }
 
@@ -219,6 +259,7 @@ func confirmOne(ack, nack chan uint64) {
 }
 
 func main() {
+	/*
 	pool := &redis.Pool{
 		MaxIdle: 1,
 		IdleTimeout: 300 * time.Second,
@@ -239,7 +280,8 @@ func main() {
 			return err
 		},
 	}
-	setMsgID(pool.Get())
+	*/
+	setMsgID()
 
 	producer, err := NewProducer(*uri, *exchangeName, *exchangeType, *routingKey, *reliable)
 	if err != nil {
@@ -258,7 +300,6 @@ func main() {
 		sig := <-c
 		log.Printf("Received signal '%v', exiting\n", sig)
 		close(msgBox)
-		pool.Close()
 		producer.channel.Close()
 		producer.conn.Close()
 		waitGroup.Done()
@@ -281,7 +322,7 @@ func main() {
 					os.Exit(0)
 				}
 
-				mid := getMsgID(pool.Get())
+				mid := getMsgID()
 				if mid == 0 {
 					log.Printf("invaild MsgID")
 					continue
@@ -296,14 +337,17 @@ func main() {
 					continue
 				}
 
-				if _, err := pool.Get().Do("HSET", m.AppId, mid, v); err != nil {
+				if err := storage.StorageInstance.HashSet(m.AppId, strconv.FormatInt(mid, 10), v); err != nil {
 					log.Printf("failed to put Msg into redis:", err)
 					continue
 				}
 				if m.Options != nil {
 					ttl, ok := m.Options.(map[string]interface{})[TimeToLive]
 					if ok && int64(ttl.(float64)) > 0 {
-						if _, err := pool.Get().Do("HSET", m.AppId + "_offline", fmt.Sprintf("%v_%v", mid, int64(ttl.(float64))+m.CTime), v); err != nil {
+						if err := storage.StorageInstance.HashSet(
+								m.AppId+"_offline",
+								fmt.Sprintf("%v_%v",
+								mid, int64(ttl.(float64))+m.CTime), v); err != nil {
 							log.Printf("failed to put offline Msg into redis:", err)
 							continue
 						}
@@ -329,3 +373,4 @@ func main() {
 
 	waitGroup.Wait()
 }
+

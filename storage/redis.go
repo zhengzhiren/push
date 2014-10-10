@@ -180,3 +180,21 @@ func (r *RedisStorage)HashIncrBy(db string, key string, val int) error {
 	return nil
 }
 
+func (r *RedisStorage)SetNotExist(key string, val []byte) error {
+	_, err := redis.Int(r.pool.Get().Do("SETNX", key, val))
+	if err != nil {
+		log.Warnf("redis: SETNX failed (%s)", err)
+		return err
+	}
+	return nil
+}
+
+func (r *RedisStorage)IncrBy(key string, val int64) (int64, error) {
+	n, err := redis.Int64(r.pool.Get().Do("INCRBY", key, val))
+	if err != nil {
+		log.Warnf("redis: INCRBY failed, (%s)", err)
+		return 0, err
+	}
+	return n, nil
+}
+
