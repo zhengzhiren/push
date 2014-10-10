@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"io/ioutil"
 	"github.com/streadway/amqp"
-	"github.com/chenyf/push/api/zk"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/zk"
 )
 
 const (
