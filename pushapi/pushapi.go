@@ -181,14 +181,14 @@ func confirmOne(ack, nack chan uint64) {
 }
 
 func main() {
-	config_file := "./etc/conf.json"
+	config_file := "./conf/conf.json"
 	err := conf.LoadConfig(config_file)
 	if err != nil {
 		fmt.Printf("LoadConfig (%s) failed: (%s)\n", config_file, err)
 		os.Exit(1)
 	}
 
-	logger, err := log.LoggerFromConfigAsFile("./etc/log.xml")
+	logger, err := log.LoggerFromConfigAsFile("./conf/log.xml")
 	if err != nil {
 		fmt.Printf("Load log config failed: (%s)\n", err)
 		os.Exit(1)
