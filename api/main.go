@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"github.com/garyburd/redigo/redis"
 	"github.com/streadway/amqp"
-	"github.com/chenyf/push-api/zk"
+	"github.com/chenyf/push/api/zk"
 )
 
 const (

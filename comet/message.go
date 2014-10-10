@@ -58,6 +58,7 @@ type InitReplyMessage struct {
 type RegisterMessage struct{
 	AppId	string	`json:"appid"`
 	AppKey	string	`json:"appkey"`
+	Token	string	`json:"token"`
 	RegId	string	`json:"regid"`
 }
 type RegisterReplyMessage struct{
