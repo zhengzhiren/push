@@ -25,7 +25,7 @@ func Connect(addrs string, timeout time.Duration) (*zk.Conn, error) {
 	go func() {
 		for {
 			event := <-session
-			log.Debug("get a event: %s", event.State.String())
+			log.Infof("get a event: %s", event.State.String())
 		}
 	}()
 	return conn, nil
@@ -37,7 +37,7 @@ func GetNodesW(conn *zk.Conn, path string) ([]string, <-chan zk.Event, error) {
 		if err == zk.ErrNoNode {
 			return nil, nil, ErrNodeNotExist
 		}
-		log.Error("zk.ChildrenW(\"%s\") error(%v)", path, err)
+		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", path, err)
 		return nil, nil, err
 	}
 	if stat == nil {
@@ -55,7 +55,7 @@ func GetNodes(conn *zk.Conn, path string) ([]string, error) {
 		if err == zk.ErrNoNode {
 			return nil, ErrNodeNotExist
 		}
-		log.Error("zk.Children(\"%s\") error(%v)", path, err)
+		log.Errorf("zk.Children(\"%s\") error(%v)", path, err)
 		return nil, err
 	}
 	if stat == nil {
@@ -68,25 +68,25 @@ func GetNodes(conn *zk.Conn, path string) ([]string, error) {
 }
 
 func Register(conn *zk.Conn, fpath string, data []byte) error {
-	tpath, err := conn.Create(fpath, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-	if err != nil {
+	conn.Create(fpath, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	/*if err != nil {
 		return err
-	}
-	log.Debug("create zk node:%s", tpath)
+	}*/
+	log.Infof("create zk node:%s", fpath)
 	// watch self
 	go func() {
 		for {
-			exist, _, watch, err := conn.ExistsW(tpath)
+			exist, _, watch, err := conn.ExistsW(fpath)
 			if err != nil {
-				log.Warn("failed zk node \"%s\" set watch, [%v]", tpath, err)
+				log.Warnf("failed zk node \"%s\" set watch, [%v]", fpath, err)
 				return
 			}
 			if !exist {
-				log.Warn("zk node \"%s\" not exist, [%v]", tpath, err)
+				log.Warnf("zk node \"%s\" not exist, [%v]", fpath, err)
 				return
 			}
 			event := <-watch
-			log.Info("\"%s\" receive a event %v", tpath, event)
+			log.Infof("\"%s\" receive a event %v", fpath, event)
 		}
 	}()
 	return nil
@@ -106,3 +106,4 @@ func InitZk() error {
 	}
 	return nil
 }
+

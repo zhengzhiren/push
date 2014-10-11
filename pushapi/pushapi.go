@@ -12,8 +12,8 @@ import (
 	"sync"
 	"encoding/json"
 	"strconv"
-	"io/ioutil"
 	"github.com/chenyf/push/conf"
+	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/zk"
@@ -56,27 +56,6 @@ type tokenResult struct {
 	}		`json:"bean"`
 	status	string			`json:"status"`
 	errcode	string			`json:"errorCode"`
-}
-
-func checkAuth(m *Message) (bool, string) {
-	url := fmt.Sprintf("http://api.sso.letv.com/api/checkTicket/tk/%s", m.Token)
-	res, err := http.Get(url)
-	if err != nil {
-		return false, ""
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return false, ""
-	}
-	var tr tokenResult
-	err = json.Unmarshal(body, &tr)
-	if err != nil {
-		return false, ""
-	}
-	if tr.status != "1" || tr.errcode != "0" {
-		return false, ""
-	}
-	return true, tr.bean.result
 }
 
 func checkMessage(m *Message) bool {
@@ -123,7 +102,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		msg.CTime = time.Now().Unix()
 	}
 	//log.Print(msg)
-	ok, uid := checkAuth(&msg)
+	ok, uid := auth.CheckAuth(msg.Token)
 	if !ok {
 		response.ErrNo  = 1003
 		response.ErrMsg = "auth failed"

@@ -353,6 +353,12 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		return -1
 	}
 	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
+
+	if msg.Token != "" {
+
+
+	}
+
 	if msg.RegId != "" {
 		if _, ok := client.regApps[msg.RegId]; ok {
 			reply := RegisterReplyMessage{
@@ -365,6 +371,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 			return 0
 		}
 	}
+
 	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	if app == nil {
 		log.Warnf("%p: AMInstance register app failed", conn)
