@@ -60,6 +60,10 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		if err != nil {
 			return nil
 		}
+		if val == nil {
+			log.Warnf("not found regid from storage")
+			return nil
+		}
 		var info AppInfo
 		if err := json.Unmarshal(val, &info); err != nil {
 			log.Warnf("invalid app info from storage")
@@ -75,7 +79,7 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		}
 		val, _ := json.Marshal(info)
 		// 记录到后端存储中
-		if err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, val); err != nil {
+		if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, val); err != nil {
 			return nil
 		}
 	}
@@ -133,7 +137,7 @@ func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *A
 		LastMsgId : msgId,
 	}
 	b, _ := json.Marshal(info)
-	if err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+	if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
 		return err
 	}
 	storage.StorageInstance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)

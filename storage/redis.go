@@ -138,63 +138,62 @@ func (r *RedisStorage)RemoveDevice(devId string) {
 }
 
 func (r *RedisStorage)HashGet(db string, key string) ([]byte, error) {
-	val, err := redis.Bytes(r.pool.Get().Do("HGET", db, key))
+	ret, err := r.pool.Get().Do("HGET", db, key)
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil, err
 	}
-	return val, nil
-}
-
-func (r *RedisStorage)HashSet(db string, key string, val []byte) error {
-	if _, err := r.pool.Get().Do("HSET", db, key, val); err != nil {
-		log.Warnf("redis: HSET failed (%s)", err)
-		return err
+	if r != nil {
+		return redis.Bytes(ret, nil)
 	}
-	return nil
+	return nil, nil
 }
 
-func (r *RedisStorage)HashSetNotExist(db string, key string, val []byte) error {
-	_, err := redis.Int(r.pool.Get().Do("HSETNX", db, key, val))
+func (r *RedisStorage)HashSet(db string, key string, val []byte) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("HSET", db, key, val))
+	if err != nil {
+		log.Warnf("redis: HSET failed (%s)", err)
+	}
+	return ret, err
+}
+
+func (r *RedisStorage)HashSetNotExist(db string, key string, val []byte) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("HSETNX", db, key, val))
 	if err != nil {
 		log.Warnf("redis: HSETNX failed (%s)", err)
-		return err
 	}
-	return nil
+	return ret, err
 }
 
-func (r *RedisStorage)HashDel(db string, key string) error {
-	_, err := r.pool.Get().Do("HDEL", db, key)
+func (r *RedisStorage)HashDel(db string, key string) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("HDEL", db, key))
 	if err != nil {
 		log.Warnf("redis: HDEL failed (%s)", err)
-		return err
 	}
-	return nil
+	return ret, err
 }
 
-func (r *RedisStorage)HashIncrBy(db string, key string, val int) error {
-	if _, err := r.pool.Get().Do("HINCRBY", db, key, val); err != nil {
+func (r *RedisStorage)HashIncrBy(db string, key string, val int64) (int64, error) {
+	ret, err := redis.Int64(r.pool.Get().Do("HINCRBY", db, key, val))
+	if err != nil {
 		log.Warnf("redis: HINCRBY failed, (%s)", err)
-		return err
 	}
-	return nil
+	return ret, err
 }
 
-func (r *RedisStorage)SetNotExist(key string, val []byte) error {
-	_, err := redis.Int(r.pool.Get().Do("SETNX", key, val))
+func (r *RedisStorage)SetNotExist(key string, val []byte) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("SETNX", key, val))
 	if err != nil {
 		log.Warnf("redis: SETNX failed (%s)", err)
-		return err
 	}
-	return nil
+	return ret, err
 }
 
 func (r *RedisStorage)IncrBy(key string, val int64) (int64, error) {
-	n, err := redis.Int64(r.pool.Get().Do("INCRBY", key, val))
+	ret, err := redis.Int64(r.pool.Get().Do("INCRBY", key, val))
 	if err != nil {
 		log.Warnf("redis: INCRBY failed, (%s)", err)
-		return 0, err
 	}
-	return n, nil
+	return ret, nil
 }
 

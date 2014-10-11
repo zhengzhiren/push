@@ -155,7 +155,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 func setMsgID() error {
-	if err := storage.StorageInstance.SetNotExist(MsgID, []byte("0")); err != nil {
+	if _, err := storage.StorageInstance.SetNotExist(MsgID, []byte("0")); err != nil {
 		log.Infof("failed to set MsgID: %s", err)
 		return err
 	}
@@ -256,14 +256,14 @@ func main() {
 					continue
 				}
 
-				if err := storage.StorageInstance.HashSet(m.AppId, strconv.FormatInt(mid, 10), v); err != nil {
+				if _, err := storage.StorageInstance.HashSet(m.AppId, strconv.FormatInt(mid, 10), v); err != nil {
 					log.Infof("failed to put Msg into redis:", err)
 					continue
 				}
 				if m.Options != nil {
 					ttl, ok := m.Options.(map[string]interface{})[TimeToLive]
 					if ok && int64(ttl.(float64)) > 0 {
-						if err := storage.StorageInstance.HashSet(
+						if _, err := storage.StorageInstance.HashSet(
 								m.AppId+"_offline",
 								fmt.Sprintf("%v_%v",
 								mid, int64(ttl.(float64))+m.CTime), v); err != nil {

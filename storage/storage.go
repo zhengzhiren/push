@@ -21,12 +21,12 @@ type Storage interface {
 	AddDevice(devId string) bool
 	RemoveDevice(devId string)
 
-	HashSet(db string, key string, val []byte) error
-	HashSetNotExist(db string, key string, val []byte) error
 	HashGet(db string, key string) ([]byte, error)
-	HashDel(db string, key string) error
-	HashIncrBy(db string, key string, val int) error
-	SetNotExist(key string, val []byte) error
+	HashSet(db string, key string, val []byte) (int, error)
+	HashSetNotExist(db string, key string, val []byte) (int, error)
+	HashDel(db string, key string) (int, error)
+	HashIncrBy(db string, key string, val int64) (int64, error)
+	SetNotExist(key string, val []byte) (int, error)
 	IncrBy(key string, val int64) (int64, error)
 }
 
