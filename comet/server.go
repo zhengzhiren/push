@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/utils/safemap"
 	//"github.com/bitly/go-simplejson"
 )
@@ -354,10 +355,16 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
 
+	var uid string
 	if msg.Token != "" {
-
-
+		ok, uid := auth.CheckAuth(msg.Token)
+		if !ok {
+			log.Warnf("%p: auth failed", conn)
+			return -1
+		}
+		log.Info("%p: uid is (%s)", conn, uid)
 	}
+	log.Info("%p: uid is (%s)", conn, uid)
 
 	if msg.RegId != "" {
 		if _, ok := client.regApps[msg.RegId]; ok {
