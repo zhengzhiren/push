@@ -20,7 +20,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 			}
 		}
 	case 1: //regid
-		app := AMInstance.Get(appId, recvUsers)
+		app := AMInstance.GetApp(appId, recvUsers)
 		if app != nil {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
@@ -28,8 +28,10 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 				client.SendMessage(MSG_PUSH, msg, nil)
 			}
 		}
-	case 2:	//alias
-	case 3: //tag list
+	case 2:	//userid
+		//apps := AMInstance.GetAppsByUser(appId, recvUsers)
+	case 3: //alias
+	case 4: //tag list
 	default:
 	}
 }

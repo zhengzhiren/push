@@ -26,8 +26,12 @@ type Storage interface {
 	HashSetNotExist(db string, key string, val []byte) (int, error)
 	HashDel(db string, key string) (int, error)
 	HashIncrBy(db string, key string, val int64) (int64, error)
+
 	SetNotExist(key string, val []byte) (int, error)
 	IncrBy(key string, val int64) (int64, error)
+
+	SetAdd(key string, val string) (int, error)
+	SetMove(key string, val string) (int, error)
 }
 
 var (

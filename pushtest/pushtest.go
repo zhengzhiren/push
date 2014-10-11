@@ -12,17 +12,6 @@ import (
 	"github.com/chenyf/push/comet"
 )
 
-type CommandRequest struct {
-	Uid		string	`json:"uid"`
-	Cmd		string	`json:"cmd"`
-}
-
-type CommandResponse struct {
-	Status		int		`json:"status"`
-	Error		string	`json:"error"`
-	Response	string	`json:"response"`
-}
-
 func sendInit(conn *net.TCPConn, devid string) {
 	init_msg := comet.InitMessage{
 		DeviceId : devid,
@@ -41,11 +30,12 @@ func sendInit(conn *net.TCPConn, devid string) {
 	log.Printf("write out %d, %d", n1, n2)
 }
 
-func sendRegister(conn *net.TCPConn, appid string, appkey string, regid string) {
+func sendRegister(conn *net.TCPConn, appid string, appkey string, regid string, token string) {
 	reg_msg := comet.RegisterMessage{
 		AppId : appid,
 		AppKey : appkey,
 		RegId : regid,
+		Token : token,
 	}
 
 	b2, _ := json.Marshal(reg_msg)
@@ -62,14 +52,15 @@ func sendRegister(conn *net.TCPConn, appid string, appkey string, regid string) 
 }
 
 func main() {
-	if len(os.Args) <= 4 {
-		log.Printf("Usage: server_addr devid appid regid")
+	if len(os.Args) <= 5 {
+		log.Printf("Usage: server_addr devid appid regid token")
 		return
 	}
 	svraddr := os.Args[1]
 	devid := os.Args[2]
 	appid := os.Args[3]
 	regid := os.Args[4]
+	token := os.Args[5]
 
 	addr, _ := net.ResolveTCPAddr("tcp4", svraddr)
 	conn, err := net.DialTCP("tcp", nil, addr)
@@ -82,7 +73,7 @@ func main() {
 
 	sendInit(conn, devid)
 	time.Sleep(10)
-	sendRegister(conn, appid, "mykey1", regid)
+	sendRegister(conn, appid, "mykey1", regid, token)
 
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {

@@ -109,7 +109,7 @@ func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, 
 	this.lock.Unlock()
 }
 
-func (this *AppManager)Get(appId string, regId string) *App {
+func (this *AppManager)GetApp(appId string, regId string) *App {
 	this.lock.RLock()
 	app, ok := this.appMap[regId]; if ok {
 		this.lock.RUnlock()

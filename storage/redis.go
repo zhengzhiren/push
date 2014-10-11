@@ -197,3 +197,19 @@ func (r *RedisStorage)IncrBy(key string, val int64) (int64, error) {
 	return ret, nil
 }
 
+func (r *RedisStorage)SetAdd(key string, val string) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("SADD", key, val))
+	if err != nil {
+		log.Warnf("redis: SADD failed, (%s)", err)
+	}
+	return ret, err
+}
+
+func (r *RedisStorage)SetMove(key string, val string) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("SMOVE", key, val))
+	if err != nil {
+		log.Warnf("redis: SMOVE failed, (%s)", err)
+	}
+	return ret, err
+}
+

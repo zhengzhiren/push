@@ -5,7 +5,7 @@ import (
 	"net"
 	"sync"
 	"time"
-	//"fmt"
+	"fmt"
 	//"strings"
 	"encoding/json"
 	log "github.com/cihub/seelog"
@@ -391,6 +391,8 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
 		return 0
 	}
+
+	storage.StorageInstance.SetAdd(fmt.Sprintf("db_user_app_%s", uid), msg.RegId)
 
 	client.regApps[app.RegId] = app
 	reply := RegisterReplyMessage{

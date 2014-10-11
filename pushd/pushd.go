@@ -71,6 +71,7 @@ type InputMsg struct {
 	MsgId		int64	`json:"msg_id"`
 	Payload		string	`json:"payload"`
 }
+
 func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	var response CommandResponse
 	response.Status = 1
