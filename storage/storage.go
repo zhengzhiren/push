@@ -21,6 +21,7 @@ type Storage interface {
 	AddDevice(devId string) bool
 	RemoveDevice(devId string)
 
+	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
 	HashSet(db string, key string, val []byte) (int, error)
 	HashSetNotExist(db string, key string, val []byte) (int, error)
@@ -32,6 +33,7 @@ type Storage interface {
 
 	SetAdd(key string, val string) (int, error)
 	SetMove(key string, val string) (int, error)
+	SetMembers(key string) ([]string, error)
 }
 
 var (

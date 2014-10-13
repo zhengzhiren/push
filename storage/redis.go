@@ -137,6 +137,14 @@ func (r *RedisStorage)RemoveDevice(devId string) {
 	}
 }
 
+func (r *RedisStorage)HashGetAll(db string) ([]string, error) {
+	ret, err := redis.Strings(r.pool.Get().Do("HGETALL", db))
+	if err != nil {
+		log.Warnf("redis: HGET failed (%s)", err)
+	}
+	return ret, err
+}
+
 func (r *RedisStorage)HashGet(db string, key string) ([]byte, error) {
 	ret, err := r.pool.Get().Do("HGET", db, key)
 	if err != nil {
@@ -209,6 +217,14 @@ func (r *RedisStorage)SetMove(key string, val string) (int, error) {
 	ret, err := redis.Int(r.pool.Get().Do("SMOVE", key, val))
 	if err != nil {
 		log.Warnf("redis: SMOVE failed, (%s)", err)
+	}
+	return ret, err
+}
+
+func (r *RedisStorage)SetMembers(key string) ([]string, error) {
+	ret, err := redis.Strings(r.pool.Get().Do("SMEMBERS", key))
+	if err != nil {
+		log.Warnf("redis: SMEMBERS failed, (%s)", err)
 	}
 	return ret, err
 }

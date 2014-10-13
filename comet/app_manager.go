@@ -16,7 +16,9 @@ type App struct {
 }
 
 // struct will save into storage
-type AppInfo struct{
+type AppInfo struct {
+	AppId		string	`json:"app_id"`
+	UserId		string	`json:"user_id"`
 	LastMsgId	int64	`json:"last_msgid"`
 }
 
@@ -44,26 +46,19 @@ func (this *AppManager)RemoveApp(regId string)  {
 }
 
 // APP注册
-func (this *AppManager)RegisterApp(devId string, appId string, appKey string, regId string) (*App) {
-	var last_msgid int64 = -1
-	if regId != "" {
-		// 非第一次注册
-		this.lock.RLock()
-		if _, ok := this.appMap[regId]; ok {
-			log.Warnf("in memory already")
-			this.lock.RUnlock()
-			return nil
-		}
+func (this *AppManager)RegisterApp(devId string, appId string, regId string, userId string) (*App) {
+	this.lock.RLock()
+	if _, ok := this.appMap[regId]; ok {
+		log.Warnf("in memory already")
 		this.lock.RUnlock()
-		// 从后端存储获取 last_msgid
-		val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
-		if err != nil {
-			return nil
-		}
-		if val == nil {
-			log.Warnf("not found regid from storage")
-			return nil
-		}
+		return nil
+	}
+	this.lock.RUnlock()
+
+	// 如果已经在后端存储中存在，则获取 last_msgid
+	var last_msgid int64 = -1
+	val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
+	if err == nil && val != nil {
 		var info AppInfo
 		if err := json.Unmarshal(val, &info); err != nil {
 			log.Warnf("invalid app info from storage")
@@ -71,17 +66,6 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 		}
 		log.Infof("got last msgid %d", info.LastMsgId)
 		last_msgid = info.LastMsgId
-	} else {
-		// 第一次注册，分配一个新的regId
-		regId = RegId(devId, appId)
-		info := AppInfo{
-			LastMsgId : -1,
-		}
-		val, _ := json.Marshal(info)
-		// 记录到后端存储中
-		if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, val); err != nil {
-			return nil
-		}
 	}
 	app := &App{
 		RegId : regId,
@@ -93,10 +77,17 @@ func (this *AppManager)RegisterApp(devId string, appId string, appKey string, re
 	log.Infof("register app (%s) (%s) (%d)", appId, regId, last_msgid)
 	this.appMap[regId] = app
 	this.lock.Unlock()
+
+	// 记录这个设备上有哪些app
+	storage.StorageInstance.HashSetNotExist(fmt.Sprintf("db_device_app_%s", devId), regId, []byte(appId))
+	// 记录这个用户有哪些app
+	if userId != "" {
+		storage.StorageInstance.SetAdd(fmt.Sprintf("db_user_app_%s", userId), regId)
+	}
 	return app
 }
 
-func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, regId string) {
+func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, regId string, userId string) {
 	if regId == "" {
 		return
 	}
@@ -104,9 +95,26 @@ func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, 
 	_, ok := this.appMap[regId]
 	if ok {
 		storage.StorageInstance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
+		storage.StorageInstance.HashDel(fmt.Sprintf("db_device_app_%s", devId), regId)
+		if userId != "" {
+			storage.StorageInstance.SetMove(fmt.Sprintf("db_user_app_%s", userId), regId)
+		}
 		delete(this.appMap, regId)
 	}
 	this.lock.Unlock()
+}
+
+func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
+	info := AppInfo{
+		LastMsgId : msgId,
+	}
+	b, _ := json.Marshal(info)
+	if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+		return err
+	}
+	storage.StorageInstance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
+	app.LastMsgId = msgId
+	return nil
 }
 
 func (this *AppManager)GetApp(appId string, regId string) *App {
@@ -132,16 +140,26 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 	return apps
 }
 
-func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
-	info := AppInfo{
-		LastMsgId : msgId,
+func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
+	vals, err := storage.StorageInstance.HashGetAll(fmt.Sprintf("db_device_app_%s", devId))
+	if err != nil {
+		return nil
 	}
-	b, _ := json.Marshal(info)
-	if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
-		return err
+	infos := make(map[string]*AppInfo)
+	for index := 0; index < len(vals); index+=2 {
+		regid := vals[index]
+		appid := vals[index+1]
+
+		val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appid), regid)
+		if err == nil && val != nil {
+			var info AppInfo
+			if err := json.Unmarshal(val, &info); err != nil {
+				log.Warnf("invalid app info from storage")
+				continue
+			}
+			infos[regid] = &info
+		}
 	}
-	storage.StorageInstance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
-	app.LastMsgId = msgId
-	return nil
+	return infos
 }
 

@@ -1,7 +1,7 @@
 package comet
 
 import (
-	//"fmt"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -363,34 +363,14 @@ func waitInit(conn *net.TCPConn) *Client {
 		}*/
 
 	client := InitClient(conn, devid)
+	for _, app := range msg.Apps {
+		AMInstance.RegisterApp(client.devId, app.AppId, app.AppKey, app.RegId)
+	}
 	reply := InitReplyMessage{
 		Result: 0,
 	}
 	body, _ := json.Marshal(&reply)
 	client.SendMessage(MSG_INIT_REPLY, body, nil)
-
-	infos := AMInstance.LoadAppInfosByDevice(devid)
-	for regid, info := range infos {
-		app := AMInstance.RegisterApp(client.devId, info.AppId, regid, info.UserId)
-		if app == nil {
-			continue
-		}
-		client.regApps[regid] = app
-
-		// 处理离线消息
-		msgs := storage.StorageInstance.GetOfflineMsgs(app.AppId, app.LastMsgId)
-		log.Infof("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), app.AppId, app.LastMsgId)
-		for _, rmsg := range msgs {
-			msg := PushMessage{
-				MsgId:   rmsg.MsgId,
-				AppId:   rmsg.AppId,
-				Type:    rmsg.MsgType,
-				Content: rmsg.Content,
-			}
-			b, _ := json.Marshal(msg)
-			client.SendMessage(MSG_PUSH, b, nil)
-		}
-	}
 	return client
 }
 
@@ -403,7 +383,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
 
-	var uid string = ""
+	var uid string
 	if msg.Token != "" {
 		ok, uid := auth.CheckAuth(msg.Token)
 		if !ok {
@@ -414,21 +394,21 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 	log.Info("%p: uid is (%s)", conn, uid)
 
-	regid := RegId(client.devId, msg.AppKey)
-	if _, ok := client.regApps[regid]; ok {
-		// 已经在内存中，直接返回
-		reply := RegisterReplyMessage{
-			AppId:  msg.AppId,
-			RegId:  regid,
-			Result: 0,
+	if msg.RegId != "" {
+		if _, ok := client.regApps[msg.RegId]; ok {
+			// 已经注册过，直接返回
+			reply := RegisterReplyMessage{
+				AppId:  msg.AppId,
+				RegId:  msg.RegId,
+				Result: 0,
+			}
+			b, _ := json.Marshal(reply)
+			client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+			return 0
 		}
-		b, _ := json.Marshal(reply)
-		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
-		return 0
 	}
 
-	// 到app管理中心去注册
-	app := AMInstance.RegisterApp(client.devId, msg.AppId, regid, uid)
+	app := AMInstance.RegisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	if app == nil {
 		log.Warnf("%p: AMInstance register app failed", conn)
 		reply := RegisterReplyMessage{
@@ -440,17 +420,19 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
 		return 0
 	}
-	// 记录到client管理的hash table中
-	client.regApps[regid] = app
+
+	storage.StorageInstance.SetAdd(fmt.Sprintf("db_user_app_%s", uid), msg.RegId)
+
+	client.regApps[app.RegId] = app
 	reply := RegisterReplyMessage{
 		AppId:  msg.AppId,
-		RegId:  regid,
+		RegId:  app.RegId,
 		Result: 0,
 	}
 	b, _ := json.Marshal(reply)
 	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
 
-	// 处理离线消息
+	// handle offline messages
 	msgs := storage.StorageInstance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
 	log.Infof("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), msg.AppId, app.LastMsgId)
 	for _, rmsg := range msgs {
@@ -473,19 +455,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		return -1
 	}
 	log.Infof("%p: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
-
-	var uid string = ""
-	if msg.Token != "" {
-		ok, uid := auth.CheckAuth(msg.Token)
-		if !ok {
-			log.Warnf("%p: auth failed", conn)
-			return -1
-		}
-		log.Info("%p: uid is (%s)", conn, uid)
-	}
-	log.Info("%p: uid is (%s)", conn, uid)
-
-	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId, uid)
+	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId)
 	result := 0
 	reply := RegisterReplyMessage{
 		AppId:  msg.AppId,
