@@ -220,7 +220,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		select {
 		case <-this.exitCh:
 			log.Infof("ask me quit\n")
-			goto out
+			break
 		default:
 		}
 
@@ -269,11 +269,11 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
 					if now.After(startTime.Add(60 * time.Second)) {
 						log.Infof("%p: read packet data timeout", conn)
-						goto out
+						break
 					}
 				} else {
 					log.Infof("%p: read from client failed: (%v)", conn, err)
-					goto out
+					break
 				}
 			}
 			if n > 0 {
@@ -292,10 +292,13 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			if ret < 0 {
 				break
 			}
+		} else {
+			// unknown packet type, close the socket
+			log.Warnf("unknown msg: %d, len %d", header.Type, header.Len)
+			break
 		}
 	}
 
-out:
 	// don't use defer to improve performance
 	log.Infof("%p: close connection", conn)
 	for regid, _ := range client.regApps {
