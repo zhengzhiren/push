@@ -157,7 +157,7 @@ func main() {
 	var (
 		//flRoot               = flag.String("g", "/tmp/echoserver", "Path to use as the root of the docker runtime")
 		//flDebug		= flag.Bool("D", false, "Enable debug mode")
-		flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
+		//flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
 		flConfig	= flag.String("c", "./conf/conf.json", "Config file")
 	)
 
@@ -183,7 +183,7 @@ func main() {
 	waitGroup := &sync.WaitGroup{}
 	var mqConsumer *mq.Consumer = nil
 	cometServer := comet.NewServer()
-	if !*flTest {
+	if conf.Config.Rabbit.Enable {
 		mqConsumer, err = mq.NewConsumer(
 			conf.Config.Rabbit.Uri,
 			conf.Config.Rabbit.Exchange,
@@ -200,9 +200,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = zk.InitZk(); if err != nil {
-		log.Critical(err)
-		os.Exit(1)
+	if conf.Config.ZooKeeper.Enable {
+		err = zk.InitZk(); if err != nil {
+			log.Critical(err)
+			os.Exit(1)
+		}
 	}
 
 	c := make(chan os.Signal, 1)
@@ -213,7 +215,7 @@ func main() {
 		///utils.RemovePidFile(srv.	runtime.config.Pidfile)
 		cometServer.Stop()
 		log.Infof("leave 1")
-		if !*flTest {
+		if conf.Config.Rabbit.Enable {
 			mqConsumer.Shutdown()
 		}
 		waitGroup.Done()
@@ -224,7 +226,7 @@ func main() {
 		cometServer.Run(listener)
 	}()
 
-	if !*flTest {
+	if conf.Config.Rabbit.Enable {
 		go func() {
 			log.Infof("mq running")
 			mqConsumer.Consume()

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"encoding/json"
+	"crypto/sha1"
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
 )
@@ -18,7 +19,6 @@ type App struct {
 // struct will save into storage
 type AppInfo struct {
 	AppId		string	`json:"app_id"`
-	UserId		string	`json:"user_id"`
 	LastMsgId	int64	`json:"last_msgid"`
 }
 
@@ -34,8 +34,8 @@ var (
 	}
 )
 
-func RegId(devid string, appKey string) string {
-	return fmt.Sprintf("%s_%s", devid, appKey)
+func RegId(devid string, appId string, userId string) string {
+	return fmt.Sprintf("%x", (sha1.Sum([]byte(fmt.Sprintf("%s_%s_%s", devid, appId, userId)))))
 }
 
 func (this *AppManager)RemoveApp(regId string)  {
@@ -94,16 +94,14 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 		}
 		log.Infof("got last msgid %d", info.LastMsgId)
 	} else {
-		info.AppId = appId
-		info.UserId = userId
 		info.LastMsgId = -1
 	}
 	app := this.AddApp(devId, regId, &info)
 	// 记录这个设备上有哪些app
-	storage.StorageInstance.HashSet(fmt.Sprintf("db_device_app_%s", devId), info.AppId, []byte(regId))
+	storage.StorageInstance.HashSet(fmt.Sprintf("db_device_%s", devId), info.AppId, []byte(regId))
 	// 记录这个用户有哪些app
 	if userId != "" {
-		storage.StorageInstance.SetAdd(fmt.Sprintf("db_user_app_%s", info.UserId), regId)
+		storage.StorageInstance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
 	}
 	return app
 }
@@ -113,16 +111,17 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 		return
 	}
 	storage.StorageInstance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
-	storage.StorageInstance.HashDel(fmt.Sprintf("db_device_app_%s", devId), appId)
+	storage.StorageInstance.HashDel(fmt.Sprintf("db_device_%s", devId), appId)
 	if userId != "" {
-		storage.StorageInstance.SetMove(fmt.Sprintf("db_user_app_%s", userId), regId)
+		storage.StorageInstance.HashDel(fmt.Sprintf("db_user_%s", userId), regId)
 	}
 	this.DelApp(devId, regId)
 }
 
 func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
-	info := AppInfo{
-		LastMsgId : msgId,
+	info := AppInfo {
+		AppId		: appId,
+		LastMsgId	: msgId,
 	}
 	b, _ := json.Marshal(info)
 	if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
@@ -157,14 +156,14 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 }
 
 func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
-	vals, err := storage.StorageInstance.HashGetAll(fmt.Sprintf("db_device_app_%s", devId))
+	vals, err := storage.StorageInstance.HashGetAll(fmt.Sprintf("db_device_%s", devId))
 	if err != nil {
 		return nil
 	}
 	infos := make(map[string]*AppInfo)
 	for index := 0; index < len(vals); index+=2 {
-		regid := vals[index]
-		appid := vals[index+1]
+		appid := vals[index]
+		regid := vals[index+1]
 
 		val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appid), regid)
 		if err == nil && val != nil {

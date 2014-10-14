@@ -2,21 +2,23 @@
 	"comet" 			: "0.0.0.0:20000",
 	"web"				: "0.0.0.0:19999",
 	"rabbit" : {
+		"enable"		: false,
 		"uri" 			: "amqp://guest:guest@10.154.156.121:5672/",
 		"exchange" 		: "test-exchange",
 		"qos" 			: 1
 	},
 
 	"redis" : {
-		"server"	: "10.154.156.121:6380",
-		"pass"		: "rpasswd"
+		"server"		: "10.154.156.121:6380",
+		"pass"			: "rpasswd"
 	},
 
 	"zookeeper" : {
-		"addr": "10.154.156.121:2181",
-		"timeout": 30,
-		"path": "/push",
-		"node": "node1",
-		"node_info": "10.154.156.121:20000"
+		"enable"		: false,
+		"addr"			: "10.154.156.121:2181",
+		"timeout"		: 30,
+		"path"			: "/push",
+		"node"			: "node1",
+		"node_info"		: "10.154.156.121:20000"
 	} 
 }

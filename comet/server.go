@@ -143,8 +143,8 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Errorf("failed to listen, (%v)", err)
 		return nil, err
 	}
-	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
-	this.funcMap[MSG_REGISTER] = handleRegister
+	this.funcMap[MSG_HEARTBEAT]  = handleHeartbeat
+	this.funcMap[MSG_REGISTER]   = handleRegister
 	this.funcMap[MSG_UNREGISTER] = handleUnregister
 	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
 	return l, nil
@@ -301,7 +301,6 @@ out:
 	for regid, _ := range client.regApps {
 		AMInstance.RemoveApp(regid)
 	}
-	//storage.StorageInstance.RemoveDevice(client.devId)
 	CloseClient(client)
 }
 
@@ -356,13 +355,6 @@ func waitInit(conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	/*
-		if !storage.StorageInstance.AddDevice(devid) {
-			log.Warnf("storage add device (%s) failed", devid)
-			conn.Close()
-			return nil
-		}*/
-
 	client := InitClient(conn, devid)
 	reply := InitReplyMessage{
 		Result: 0,
@@ -373,6 +365,7 @@ func waitInit(conn *net.TCPConn) *Client {
 	// 看存储系统中是否有此设备的数据
 	infos := AMInstance.LoadAppInfosByDevice(devid)
 	for regid, info := range infos {
+		log.Infof("load app (%s) (%s) of device (%s)", info.AppId, regid, devid)
 		app := AMInstance.AddApp(client.devId, regid, info)
 		client.regApps[regid] = app
 
@@ -400,20 +393,19 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
+	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s) token(%s)", conn, msg.AppId, msg.AppKey, msg.RegId, msg.Token)
 
 	var uid string = ""
+	var ok bool
 	if msg.Token != "" {
-		ok, uid := auth.CheckAuth(msg.Token)
+		ok, uid = auth.CheckAuth(msg.Token)
 		if !ok {
 			log.Warnf("%p: auth failed", conn)
 			return -1
 		}
-		log.Info("%p: uid is (%s)", conn, uid)
 	}
-	log.Info("%p: uid is (%s)", conn, uid)
-
-	regid := RegId(client.devId, msg.AppKey)
+	regid := RegId(client.devId, msg.AppId, uid)
+	log.Infof("%p: uid (%s), regid (%s)", conn, uid, regid)
 	if _, ok := client.regApps[regid]; ok {
 		// 已经在内存中，直接返回
 		reply := RegisterReplyMessage{
@@ -474,16 +466,15 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	log.Infof("%p: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
 
 	var uid string = ""
+	var ok bool
 	if msg.Token != "" {
-		ok, uid := auth.CheckAuth(msg.Token)
+		ok, uid = auth.CheckAuth(msg.Token)
 		if !ok {
 			log.Warnf("%p: auth failed", conn)
 			return -1
 		}
-		log.Info("%p: uid is (%s)", conn, uid)
 	}
-	log.Info("%p: uid is (%s)", conn, uid)
-
+	log.Infof("%p: uid is (%s)", conn, uid)
 	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, uid)
 	result := 0
 	reply := RegisterReplyMessage{

@@ -8,9 +8,10 @@ import (
 
 type ConfigStruct struct {
 	Comet string		`json:"comet"`
-	Web string		`json:"web"`
+	Web string			`json:"web"`
 
 	Rabbit struct {
+		Enable bool				`json:"enable"`
 		Uri string				`json:"uri"`
 		Exchange string			`json:"exchange"`
 		ExchangeType string		`json:"exchange_type"`
@@ -25,11 +26,12 @@ type ConfigStruct struct {
 	}				`json:"redis"`
 
 	ZooKeeper struct {
-		Addr string		`json:"addr"`
+		Enable bool				`json:"enable"`
+		Addr string				`json:"addr"`
 		Timeout time.Duration	`json:"timeout"`
-		Path string		`json:"path"`
-		Node string		`json:"node"`
-		NodeInfo string		`json:"node_info"`
+		Path string				`json:"path"`
+		Node string				`json:"node"`
+		NodeInfo string			`json:"node_info"`
 	}				`json:"zookeeper"`
 }
 
