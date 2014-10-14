@@ -1,8 +1,10 @@
 #!/bin/bash
 
 cmd=$1
-
 THIS_DIR=$(dirname $(readlink -f $0) )
+
+ulimit -c unlimited
+ulimit -n 10240
 
 function start()
 {
