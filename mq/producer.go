@@ -1,8 +1,7 @@
 package mq
 
 import (
-	"fmt"
-	//"time"
+	log "github.com/cihub/seelog"
 	"github.com/streadway/amqp"
 )
 
@@ -24,12 +23,12 @@ func NewProducer(amqpURI, exchangeName, exchangeType, routingKey string, reliabl
 	var err error
 	p.conn, err = amqp.Dial(amqpURI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial mq: %s", err)
+		return nil, log.Errorf("failed to dial mq: %s", err)
 	}
 
 	p.channel, err = p.conn.Channel()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get channel: %s", err)
+		return nil, log.Errorf("failed to get channel: %s", err)
 	}
 
 	if err = p.channel.ExchangeDeclare(
@@ -41,16 +40,15 @@ func NewProducer(amqpURI, exchangeName, exchangeType, routingKey string, reliabl
 		false,        // noWait
 		nil,          // arguments
 	); err != nil {
-		return nil, fmt.Errorf("failed to declare exchange: %s", err)
+		return nil, log.Errorf("failed to declare exchange: %s", err)
 	}
 
 	/*if reliable {
 		if err = p.channel.Confirm(false); err != nil {
-			return nil, fmt.Errorf("failed to put channel into confirm mode: %s", err)
+			return nil, log.Errorf("failed to put channel into confirm mode: %s", err)
 		}
 	}*/
-
-	return p, nil	
+	return p, nil
 }
 
 func (p *Producer) Publish(data []byte) error {
@@ -72,7 +70,7 @@ func (p *Producer) Publish(data []byte) error {
 			// a bunch of application/implementation-specific fields
 		},
 	); err != nil {
-		return fmt.Errorf("Exchange Publish: %s", err)
+		return log.Errorf("Exchange Publish: %s", err)
 	}
 	return nil
 }

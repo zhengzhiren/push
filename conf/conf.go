@@ -9,6 +9,7 @@ import (
 type ConfigStruct struct {
 	Comet string		`json:"comet"`
 	Web string			`json:"web"`
+	PushAPI string		`json:"pushapi"`
 
 	Rabbit struct {
 		Enable bool				`json:"enable"`

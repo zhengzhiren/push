@@ -1,9 +1,11 @@
 {
 	"comet" 			: "0.0.0.0:20000",
 	"web"				: "0.0.0.0:19999",
+	"pushapi"			: "0.0.0.0:8080",
 	"rabbit" : {
 		"uri" 			: "amqp://guest:guest@10.154.156.121:5672/",
 		"exchange" 		: "test-exchange",
+		"exchange_type" : "fanout",
 		"qos" 			: 1
 	},
 

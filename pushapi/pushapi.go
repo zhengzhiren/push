@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"os"
 	log "github.com/cihub/seelog"
 	"os/signal"
@@ -42,21 +41,7 @@ type PResponse struct {
 	ErrMsg	string			`json:"errmsg"`
 }
 
-var (
-	zkAddr	     = flag.String("zkaddr", "10.154.156.121:2181", "zookeeper addrs")
-	zkTimeout    = flag.Duration("zktimeout", 30, "zookeeper timeout")
-	zkPath       = flag.String("zkpath", "/push", "zookeeper path")
-)
-
 var msgBox = make(chan Message, 10)
-
-type tokenResult struct {
-	bean	struct {
-		result	string		`json:"result"`
-	}		`json:"bean"`
-	status	string			`json:"status"`
-	errcode	string			`json:"errorCode"`
-}
 
 func checkMessage(m *Message) bool {
 	ret := true
@@ -66,14 +51,14 @@ func checkMessage(m *Message) bool {
 	return ret
 }
 
-func getComet(w http.ResponseWriter, r *http.Request) {
+func getPushServer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Method Not Allowed", 405)
 		return
 	}
 	node := zk.GetComet()
 	if node == nil {
-		http.Error(w, "No active comet", 404)
+		http.Error(w, "No active server", 404)
 		return
 	}
 	fmt.Fprintf(w, node.TcpAddr)
@@ -166,7 +151,6 @@ func main() {
 		fmt.Printf("LoadConfig (%s) failed: (%s)\n", config_file, err)
 		os.Exit(1)
 	}
-
 	logger, err := log.LoggerFromConfigAsFile("./conf/log.xml")
 	if err != nil {
 		fmt.Printf("Load log config failed: (%s)\n", err)
@@ -174,7 +158,6 @@ func main() {
 	}
 
 	log.ReplaceLogger(logger)
-
 	setMsgID()
 
 	mqProducer, err := mq.NewProducer(
@@ -182,12 +165,13 @@ func main() {
 		conf.Config.Rabbit.Exchange,
 		conf.Config.Rabbit.ExchangeType,
 		conf.Config.Rabbit.Key,
-		conf.Config.Rabbit.Reliable)
+		false)
 	if err != nil {
+		fmt.Printf("new producer failed: %s", err)
 		log.Warnf("%s", err)
 		os.Exit(1)
 	}
-	err = zk.InitZK(*zkAddr, (*zkTimeout)*time.Second, *zkPath)
+	err = zk.InitWatcher(conf.Config.ZooKeeper.Addr, conf.Config.ZooKeeper.Timeout*time.Second, conf.Config.ZooKeeper.Path)
 	if err != nil {
 		log.Warnf("%s", err)
 		os.Exit(1)
@@ -208,10 +192,10 @@ func main() {
 	waitGroup.Add(1)
 	go func() {
 		http.HandleFunc("/v1/push/message", postSendMsg)
-		http.HandleFunc("/v1/comet", getComet)
-		err := http.ListenAndServe("0.0.0.0:8080", nil)
+		http.HandleFunc("/v1/push/server", getPushServer)
+		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
-			log.Infof("failed to http listen:", err)
+			log.Infof("failed to http listen: (%s)", err)
 		}
 	}()
 
