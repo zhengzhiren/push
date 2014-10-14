@@ -102,7 +102,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		msg.CTime = time.Now().Unix()
 	}
 	//log.Print(msg)
-	ok, uid := auth.CheckAuth(msg.Token)
+	ok, uid := auth.Instance.Auth(msg.Token)
 	if !ok {
 		response.ErrNo  = 1003
 		response.ErrMsg = "auth failed"

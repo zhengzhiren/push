@@ -20,5 +20,8 @@
 		"path"			: "/push",
 		"node"			: "node1",
 		"node_info"		: "10.154.156.121:20000"
-	} 
+	},
+	"auth" : {
+		"letv_url"		: "http://api.sso.letv.com/api/checkTicket/tk"
+	},
 }

@@ -398,7 +398,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	var uid string = ""
 	var ok bool
 	if msg.Token != "" {
-		ok, uid = auth.CheckAuth(msg.Token)
+		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%p: auth failed", conn)
 			return -1
@@ -468,7 +468,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	var uid string = ""
 	var ok bool
 	if msg.Token != "" {
-		ok, uid = auth.CheckAuth(msg.Token)
+		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%p: auth failed", conn)
 			return -1

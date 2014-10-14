@@ -33,6 +33,10 @@ type ConfigStruct struct {
 		Node string				`json:"node"`
 		NodeInfo string			`json:"node_info"`
 	}				`json:"zookeeper"`
+
+	Auth struct {
+		LetvUrl string			`json:"letv_url"`
+	}				`json:"auth"`
 }
 
 var (
