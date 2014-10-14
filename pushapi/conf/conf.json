@@ -20,6 +20,7 @@
 		"node_info"		: "10.154.156.121:20000"
 	},
 	"auth" : {
+		"provider"		: "letv",
 		"letv_url"		: "http://api.sso.letv.com/api/checkTicket/tk"
-	},
+	}
 }

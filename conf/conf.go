@@ -35,6 +35,7 @@ type ConfigStruct struct {
 	}				`json:"zookeeper"`
 
 	Auth struct {
+		Provider string			`json:"provider"`
 		LetvUrl string			`json:"letv_url"`
 	}				`json:"auth"`
 }

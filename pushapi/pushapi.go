@@ -192,6 +192,8 @@ func main() {
 		log.Warnf("%s", err)
 		os.Exit(1)
 	}
+
+	auth.NewInstance(conf.Config.Auth.Provider)
 	waitGroup := &sync.WaitGroup{}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)

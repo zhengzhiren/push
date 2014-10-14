@@ -5,6 +5,15 @@ type AuthChecker interface {
 }
 
 var (
-	Instance AuthChecker = newLetvAuth()
+	Instance AuthChecker = nil
 )
+
+func NewInstance(provider string) bool {
+	if provider == "letv" {
+		Instance = newLetvAuth() 
+		return true
+	}
+	return false
+}
+
 
