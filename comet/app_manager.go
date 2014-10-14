@@ -45,8 +45,37 @@ func (this *AppManager)RemoveApp(regId string)  {
 	this.lock.Unlock()
 }
 
+func (this *AppManager)AddApp(devId string, regId string, info *AppInfo) (*App) {
+	this.lock.RLock()
+	if app, ok := this.appMap[regId]; ok {
+		log.Warnf("in memory already")
+		this.lock.RUnlock()
+		return app
+	}
+	this.lock.RUnlock()
+	app := &App{
+		RegId : regId,
+		DevId : devId,
+		AppId : info.AppId,
+		LastMsgId : info.LastMsgId,
+	}
+	this.lock.Lock()
+	this.appMap[regId] = app
+	this.lock.Unlock()
+	return app
+}
+
+func (this *AppManager)DelApp(devId string, regId string) {
+	this.lock.Lock()
+	_, ok := this.appMap[regId]
+	if ok {
+		delete(this.appMap, regId)
+	}
+	this.lock.Unlock()
+}
+
 // APP注册
-func (this *AppManager)RegisterApp(devId string, appId string, regId string, userId string) (*App) {
+func (this *AppManager)RegisterApp(devId string, regId string, appId string, userId string) (*App) {
 	this.lock.RLock()
 	if _, ok := this.appMap[regId]; ok {
 		log.Warnf("in memory already")
@@ -56,52 +85,39 @@ func (this *AppManager)RegisterApp(devId string, appId string, regId string, use
 	this.lock.RUnlock()
 
 	// 如果已经在后端存储中存在，则获取 last_msgid
-	var last_msgid int64 = -1
+	var info AppInfo
 	val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
 	if err == nil && val != nil {
-		var info AppInfo
 		if err := json.Unmarshal(val, &info); err != nil {
 			log.Warnf("invalid app info from storage")
 			return nil
 		}
 		log.Infof("got last msgid %d", info.LastMsgId)
-		last_msgid = info.LastMsgId
+	} else {
+		info.AppId = appId
+		info.UserId = userId
+		info.LastMsgId = -1
 	}
-	app := &App{
-		RegId : regId,
-		DevId : devId,
-		AppId : appId,
-		LastMsgId : last_msgid,
-	}
-	this.lock.Lock()
-	log.Infof("register app (%s) (%s) (%d)", appId, regId, last_msgid)
-	this.appMap[regId] = app
-	this.lock.Unlock()
-
+	app := this.AddApp(devId, regId, &info)
 	// 记录这个设备上有哪些app
-	storage.StorageInstance.HashSetNotExist(fmt.Sprintf("db_device_app_%s", devId), regId, []byte(appId))
+	storage.StorageInstance.HashSet(fmt.Sprintf("db_device_app_%s", devId), info.AppId, []byte(regId))
 	// 记录这个用户有哪些app
 	if userId != "" {
-		storage.StorageInstance.SetAdd(fmt.Sprintf("db_user_app_%s", userId), regId)
+		storage.StorageInstance.SetAdd(fmt.Sprintf("db_user_app_%s", info.UserId), regId)
 	}
 	return app
 }
 
-func (this *AppManager)UnregisterApp(devId string, appId string, appKey string, regId string, userId string) {
+func (this *AppManager)UnregisterApp(devId string, regId string, appId string, userId string) {
 	if regId == "" {
 		return
 	}
-	this.lock.Lock()
-	_, ok := this.appMap[regId]
-	if ok {
-		storage.StorageInstance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
-		storage.StorageInstance.HashDel(fmt.Sprintf("db_device_app_%s", devId), regId)
-		if userId != "" {
-			storage.StorageInstance.SetMove(fmt.Sprintf("db_user_app_%s", userId), regId)
-		}
-		delete(this.appMap, regId)
+	storage.StorageInstance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
+	storage.StorageInstance.HashDel(fmt.Sprintf("db_device_app_%s", devId), appId)
+	if userId != "" {
+		storage.StorageInstance.SetMove(fmt.Sprintf("db_user_app_%s", userId), regId)
 	}
-	this.lock.Unlock()
+	this.DelApp(devId, regId)
 }
 
 func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {

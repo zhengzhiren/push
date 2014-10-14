@@ -306,7 +306,8 @@ out:
 }
 
 func waitInit(conn *net.TCPConn) *Client {
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	// 要求客户端尽快发送初始化消息
+	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 	buf := make([]byte, HEADER_SIZE)
 	n, err := io.ReadFull(conn, buf)
 	if err != nil {
@@ -369,12 +370,10 @@ func waitInit(conn *net.TCPConn) *Client {
 	body, _ := json.Marshal(&reply)
 	client.SendMessage(MSG_INIT_REPLY, body, nil)
 
+	// 看存储系统中是否有此设备的数据
 	infos := AMInstance.LoadAppInfosByDevice(devid)
 	for regid, info := range infos {
-		app := AMInstance.RegisterApp(client.devId, info.AppId, regid, info.UserId)
-		if app == nil {
-			continue
-		}
+		app := AMInstance.AddApp(client.devId, regid, info)
 		client.regApps[regid] = app
 
 		// 处理离线消息
@@ -428,7 +427,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 
 	// 到app管理中心去注册
-	app := AMInstance.RegisterApp(client.devId, msg.AppId, regid, uid)
+	app := AMInstance.RegisterApp(client.devId, regid, msg.AppId, uid)
 	if app == nil {
 		log.Warnf("%p: AMInstance register app failed", conn)
 		reply := RegisterReplyMessage{
@@ -485,7 +484,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	}
 	log.Info("%p: uid is (%s)", conn, uid)
 
-	AMInstance.UnregisterApp(client.devId, msg.AppId, msg.AppKey, msg.RegId, uid)
+	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, uid)
 	result := 0
 	reply := RegisterReplyMessage{
 		AppId:  msg.AppId,
