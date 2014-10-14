@@ -158,26 +158,26 @@ func (this *Server) Run(listener *net.TCPListener) {
 	}()
 
 	//go this.dealSpamConn()
-	log.Infof("comet server start\n")
+	log.Debugf("comet server start\n")
 	for {
 		select {
 		case <-this.exitCh:
-			log.Infof("ask me to quit")
+			log.Debugf("ask me to quit")
 			return
 		default:
 		}
 
 		listener.SetDeadline(time.Now().Add(2 * time.Second))
 		//listener.SetDeadline(time.Now().Add(this.acceptTimeout))
-		//log.Infof("before accept, %d", this.acceptTimeout)
+		//log.Debugf("before accept, %d", this.acceptTimeout)
 		conn, err := listener.AcceptTCP()
-		//log.Infof("after accept")
+		//log.Debugf("after accept")
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok && e.Timeout() {
-				//log.Infof("accept timeout")
+				//log.Debugf("accept timeout")
 				continue
 			}
-			log.Infof("accept failed: %v\n", err)
+			log.Debugf("accept failed: %v\n", err)
 			continue
 		}
 		/*
@@ -193,15 +193,15 @@ func (this *Server) Run(listener *net.TCPListener) {
 
 func (this *Server) Stop() {
 	// close后，所有的exitCh都返回false
-	log.Infof("stopping comet server")
+	log.Debugf("stopping comet server")
 	close(this.exitCh)
 	this.waitGroup.Wait()
-	log.Infof("comet server stopped")
+	log.Debugf("comet server stopped")
 }
 
 // handle a TCP connection
 func (this *Server) handleConnection(conn *net.TCPConn) {
-	log.Infof("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
+	log.Debugf("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
 	// handle register first
 	client := waitInit(conn)
 	if client == nil {
@@ -219,14 +219,14 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	for {
 		select {
 		case <-this.exitCh:
-			log.Infof("ask me quit\n")
+			log.Debugf("ask me quit\n")
 			goto out
 		default:
 		}
 
 		now := time.Now()
 		if now.After(client.lastActive.Add(90 * time.Second)) {
-			log.Infof("%p: heartbeat timeout", conn)
+			log.Debugf("%p: heartbeat timeout", conn)
 			break
 		}
 
@@ -238,10 +238,10 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			n, err := io.ReadFull(conn, buf)
 			if err != nil {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
-					//log.Infof("read timeout, %d", n)
+					//log.Debugf("read timeout, %d", n)
 					continue
 				}
-				log.Infof("%p: readfull failed (%v)", conn, err)
+				log.Debugf("%p: readfull failed (%v)", conn, err)
 				break
 			}
 			if err := header.Deserialize(buf[0:n]); err != nil {
@@ -254,7 +254,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			}
 			/*
 				if header.Type != 0 {
-					log.Infof("recv msg: %d, len %d", header.Type, header.Len)
+					log.Debugf("recv msg: %d, len %d", header.Type, header.Len)
 				}*/
 			if header.Len > 0 {
 				data = make([]byte, header.Len)
@@ -268,11 +268,11 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			if err != nil {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
 					if now.After(startTime.Add(60 * time.Second)) {
-						log.Infof("%p: read packet data timeout", conn)
+						log.Debugf("%p: read packet data timeout", conn)
 						goto out
 					}
 				} else {
-					log.Infof("%p: read from client failed: (%v)", conn, err)
+					log.Debugf("%p: read from client failed: (%v)", conn, err)
 					goto out
 				}
 			}
@@ -283,7 +283,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				continue
 			}
 			readHeader = true
-			log.Infof("%p: body (%s)", conn, data)
+			log.Debugf("%p: body (%s)", conn, data)
 		}
 
 		handler, ok := this.funcMap[header.Type]
@@ -297,7 +297,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 out:
 	// don't use defer to improve performance
-	log.Infof("%p: close connection", conn)
+	log.Debugf("%p: close connection", conn)
 	for regid, _ := range client.regApps {
 		AMInstance.RemoveApp(regid)
 	}
@@ -310,7 +310,7 @@ func waitInit(conn *net.TCPConn) *Client {
 	buf := make([]byte, HEADER_SIZE)
 	n, err := io.ReadFull(conn, buf)
 	if err != nil {
-		log.Infof("%p: readfull header failed (%v)", conn, err)
+		log.Debugf("%p: readfull header failed (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
@@ -329,7 +329,7 @@ func waitInit(conn *net.TCPConn) *Client {
 	}
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(conn, data); err != nil {
-		log.Infof("%p: readfull body failed: (%v)", conn, err)
+		log.Debugf("%p: readfull body failed: (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
@@ -348,7 +348,7 @@ func waitInit(conn *net.TCPConn) *Client {
 	}
 
 	devid := msg.DeviceId
-	log.Infof("%p: INIT devid (%s)", conn, devid)
+	log.Debugf("%p: INIT devid (%s)", conn, devid)
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)
 		conn.Close()
@@ -365,13 +365,13 @@ func waitInit(conn *net.TCPConn) *Client {
 	// 看存储系统中是否有此设备的数据
 	infos := AMInstance.LoadAppInfosByDevice(devid)
 	for regid, info := range infos {
-		log.Infof("load app (%s) (%s) of device (%s)", info.AppId, regid, devid)
+		log.Debugf("load app (%s) (%s) of device (%s)", info.AppId, regid, devid)
 		app := AMInstance.AddApp(client.devId, regid, info)
 		client.regApps[regid] = app
 
 		// 处理离线消息
-		msgs := storage.StorageInstance.GetOfflineMsgs(app.AppId, app.LastMsgId)
-		log.Infof("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), app.AppId, app.LastMsgId)
+		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.LastMsgId)
+		log.Debugf("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), app.AppId, app.LastMsgId)
 		for _, rmsg := range msgs {
 			msg := PushMessage{
 				MsgId:   rmsg.MsgId,
@@ -393,7 +393,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Infof("%p: REGISTER appid(%s) appkey(%s) regid(%s) token(%s)", conn, msg.AppId, msg.AppKey, msg.RegId, msg.Token)
+	log.Debugf("%p: REGISTER appid(%s) appkey(%s) regid(%s) token(%s)", conn, msg.AppId, msg.AppKey, msg.RegId, msg.Token)
 
 	var uid string = ""
 	var ok bool
@@ -405,7 +405,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		}
 	}
 	regid := RegId(client.devId, msg.AppId, uid)
-	log.Infof("%p: uid (%s), regid (%s)", conn, uid, regid)
+	log.Debugf("%p: uid (%s), regid (%s)", conn, uid, regid)
 	if _, ok := client.regApps[regid]; ok {
 		// 已经在内存中，直接返回
 		reply := RegisterReplyMessage{
@@ -442,8 +442,8 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
 
 	// 处理离线消息
-	msgs := storage.StorageInstance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
-	log.Infof("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), msg.AppId, app.LastMsgId)
+	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
+	log.Debugf("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), msg.AppId, app.LastMsgId)
 	for _, rmsg := range msgs {
 		msg := PushMessage{
 			MsgId:   rmsg.MsgId,
@@ -463,7 +463,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Infof("%p: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
+	log.Debugf("%p: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
 
 	var uid string = ""
 	var ok bool
@@ -474,7 +474,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 			return -1
 		}
 	}
-	log.Infof("%p: uid is (%s)", conn, uid)
+	log.Debugf("%p: uid is (%s)", conn, uid)
 	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, uid)
 	result := 0
 	reply := RegisterReplyMessage{
@@ -499,7 +499,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		return -1
 	}
 
-	log.Infof("%p: PUSH_REPLY (appid %s) (regid %s) (msgid %d)", conn, msg.AppId, msg.RegId, msg.MsgId)
+	log.Debugf("%p: PUSH_REPLY (appid %s) (regid %s) (msgid %d)", conn, msg.AppId, msg.RegId, msg.MsgId)
 	// unknown regid
 	app, ok := client.regApps[msg.RegId]
 	if !ok {

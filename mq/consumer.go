@@ -125,7 +125,7 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			log.Infof("failed to decode raw msg:", err)
 			continue
 		}
-		rmsg := storage.StorageInstance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))
+		rmsg := storage.Instance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))
 		comet.SimplePushMessage(m["appid"].(string), rmsg)
 	}
 	log.Infof("handle: deliveries channel closed")

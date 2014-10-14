@@ -118,7 +118,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(b))
 		return
 	}
-	uid2, err := storage.StorageInstance.HashGet("db_apps", msg.AppId)
+	uid2, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	if err !=nil || uid != string(uid2) {
 		response.ErrNo  = 1005
 		response.ErrMsg = "user auth failed"
@@ -134,7 +134,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 func setMsgID() error {
-	if _, err := storage.StorageInstance.SetNotExist(MsgID, []byte("0")); err != nil {
+	if _, err := storage.Instance.SetNotExist(MsgID, []byte("0")); err != nil {
 		log.Infof("failed to set MsgID: %s", err)
 		return err
 	}
@@ -142,7 +142,7 @@ func setMsgID() error {
 }
 
 func getMsgID() int64 {
-	if n, err := storage.StorageInstance.IncrBy(MsgID, 1); err != nil {
+	if n, err := storage.Instance.IncrBy(MsgID, 1); err != nil {
 		log.Infof("failed to incr MsgID", err)
 		return 0
 	} else {
@@ -235,14 +235,14 @@ func main() {
 					continue
 				}
 
-				if _, err := storage.StorageInstance.HashSet(m.AppId, strconv.FormatInt(mid, 10), v); err != nil {
+				if _, err := storage.Instance.HashSet(m.AppId, strconv.FormatInt(mid, 10), v); err != nil {
 					log.Infof("failed to put Msg into redis:", err)
 					continue
 				}
 				if m.Options != nil {
 					ttl, ok := m.Options.(map[string]interface{})[TimeToLive]
 					if ok && int64(ttl.(float64)) > 0 {
-						if _, err := storage.StorageInstance.HashSet(
+						if _, err := storage.Instance.HashSet(
 								m.AppId+"_offline",
 								fmt.Sprintf("%v_%v",
 								mid, int64(ttl.(float64))+m.CTime), v); err != nil {

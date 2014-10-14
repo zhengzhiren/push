@@ -37,6 +37,6 @@ type Storage interface {
 }
 
 var (
-	StorageInstance Storage = newRedisStorage()
+	Instance Storage = newRedisStorage()
 )
 

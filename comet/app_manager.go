@@ -86,7 +86,7 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 
 	// 如果已经在后端存储中存在，则获取 last_msgid
 	var info AppInfo
-	val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
+	val, err := storage.Instance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
 	if err == nil && val != nil {
 		if err := json.Unmarshal(val, &info); err != nil {
 			log.Warnf("invalid app info from storage")
@@ -98,10 +98,10 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 	}
 	app := this.AddApp(devId, regId, &info)
 	// 记录这个设备上有哪些app
-	storage.StorageInstance.HashSet(fmt.Sprintf("db_device_%s", devId), info.AppId, []byte(regId))
+	storage.Instance.HashSet(fmt.Sprintf("db_device_%s", devId), info.AppId, []byte(regId))
 	// 记录这个用户有哪些app
 	if userId != "" {
-		storage.StorageInstance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
+		storage.Instance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
 	}
 	return app
 }
@@ -110,10 +110,10 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 	if regId == "" {
 		return
 	}
-	storage.StorageInstance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
-	storage.StorageInstance.HashDel(fmt.Sprintf("db_device_%s", devId), appId)
+	storage.Instance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
+	storage.Instance.HashDel(fmt.Sprintf("db_device_%s", devId), appId)
 	if userId != "" {
-		storage.StorageInstance.HashDel(fmt.Sprintf("db_user_%s", userId), regId)
+		storage.Instance.HashDel(fmt.Sprintf("db_user_%s", userId), regId)
 	}
 	this.DelApp(devId, regId)
 }
@@ -124,10 +124,10 @@ func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *A
 		LastMsgId	: msgId,
 	}
 	b, _ := json.Marshal(info)
-	if _, err := storage.StorageInstance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
 		return err
 	}
-	storage.StorageInstance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
+	storage.Instance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
 	app.LastMsgId = msgId
 	return nil
 }
@@ -156,7 +156,7 @@ func (this *AppManager)GetApps(appId string) ([]*App) {
 }
 
 func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
-	vals, err := storage.StorageInstance.HashGetAll(fmt.Sprintf("db_device_%s", devId))
+	vals, err := storage.Instance.HashGetAll(fmt.Sprintf("db_device_%s", devId))
 	if err != nil {
 		return nil
 	}
@@ -165,7 +165,7 @@ func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
 		appid := vals[index]
 		regid := vals[index+1]
 
-		val, err := storage.StorageInstance.HashGet(fmt.Sprintf("db_app_%s", appid), regid)
+		val, err := storage.Instance.HashGet(fmt.Sprintf("db_app_%s", appid), regid)
 		if err == nil && val != nil {
 			var info AppInfo
 			if err := json.Unmarshal(val, &info); err != nil {
