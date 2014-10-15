@@ -348,6 +348,12 @@ func waitInit(conn *net.TCPConn) *Client {
 	}
 
 	devid := msg.DeviceId
+	if devid == "" {
+		log.Warnf("%p: invalid device id", conn)
+		conn.Close()
+		return nil
+	}
+
 	log.Debugf("%p: INIT devid (%s)", conn, devid)
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)

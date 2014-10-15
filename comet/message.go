@@ -54,7 +54,7 @@ type Base1 struct {
 }
 type InitMessage struct {
 	DeviceId string		`json:"devid"`
-	Apps     []Base1	`json:"apps"`
+	Apps     []Base1	`json:"apps,omitempty"`
 }
 
 type Base2 struct {
@@ -64,7 +64,7 @@ type Base2 struct {
 }
 type InitReplyMessage struct {
 	Result int			`json:"result"`
-	Apps   []Base2		`json:"apps"`
+	Apps   []Base2		`json:"apps,omitempty"`
 }
 type RegisterMessage struct {
 	AppId  string `json:"appid"`
