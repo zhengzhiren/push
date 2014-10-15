@@ -24,26 +24,14 @@ const (
 	MaxMsgCount = 9223372036854775807
 )
 
-type Message struct {
-	Token	string			`json:"token"`
-	MsgId		int64		`json:"msgid"`
-	AppId		string		`json:"appid"`
-	CTime		int64		`json:"ctime"`
-	Platform	string		`json:"platform"`
-	MsgType		int			`json:"msg_type"`
-	PushType	int			`json:"push_type"`
-	Content		string		`json:"content"`
-	Options		interface{}	`json:"options"`
-}
-
 type PResponse struct {
 	ErrNo	int				`json:"errno"`
 	ErrMsg	string			`json:"errmsg"`
 }
 
-var msgBox = make(chan Message, 10)
+var msgBox = make(chan storage.RawMessage, 10)
 
-func checkMessage(m *Message) bool {
+func checkMessage(m *storage.RawMessage) bool {
 	ret := true
 	if m.AppId == "" || m.Content == "" || m.MsgType == 0 || m.PushType == 0 {
 		ret = false
@@ -66,7 +54,7 @@ func getPushServer(w http.ResponseWriter, r *http.Request) {
 
 func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	var response PResponse
-	msg := Message{}
+	msg := storage.RawMessage{}
 	response.ErrNo = 0
 	if r.Method != "POST" {
 		response.ErrNo  = 1001
@@ -75,7 +63,6 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(b))
 		return
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		response.ErrNo  = 1002
 		response.ErrMsg = "invaild POST body"
@@ -83,10 +70,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(b))
 		return
 	}
-	if msg.CTime == 0 {
-		msg.CTime = time.Now().Unix()
-	}
-	//log.Print(msg)
+	msg.CTime = time.Now().Unix()
 	ok, uid := auth.Instance.Auth(msg.Token)
 	if !ok {
 		response.ErrNo  = 1003
@@ -167,13 +151,15 @@ func main() {
 		conf.Config.Rabbit.Key,
 		false)
 	if err != nil {
-		fmt.Printf("new producer failed: %s", err)
-		log.Warnf("%s", err)
+		log.Warnf("new mq produccer failed: %s", err)
 		os.Exit(1)
 	}
-	err = zk.InitWatcher(conf.Config.ZooKeeper.Addr, conf.Config.ZooKeeper.Timeout*time.Second, conf.Config.ZooKeeper.Path)
+	err = zk.InitWatcher(
+		conf.Config.ZooKeeper.Addr,
+		conf.Config.ZooKeeper.Timeout*time.Second,
+		conf.Config.ZooKeeper.Path)
 	if err != nil {
-		log.Warnf("%s", err)
+			log.Warnf("init zk watcher failed: %s", err)
 		os.Exit(1)
 	}
 
@@ -225,17 +211,14 @@ func main() {
 					log.Infof("failed to put Msg into redis:", err)
 					continue
 				}
-				if m.Options != nil {
-					ttl, ok := m.Options.(map[string]interface{})[TimeToLive]
-					if ok && int64(ttl.(float64)) > 0 {
-						if _, err := storage.Instance.HashSet(
-								m.AppId+"_offline",
-								fmt.Sprintf("%v_%v",
-								mid, int64(ttl.(float64))+m.CTime), v); err != nil {
-							log.Infof("failed to put offline Msg into redis:", err)
-							continue
-						}
-					}
+				var ttl int64 = 86400
+				if m.Options.TTL > 0 {
+					ttl = m.Options.TTL
+				}
+				_, err = storage.Instance.HashSet(m.AppId+"_offline", fmt.Sprintf("%v_%v", mid, ttl+m.CTime), v)
+				if err != nil {
+					log.Infof("failed to put offline Msg into redis:", err)
+					continue
 				}
 
 				d := map[string]interface{}{
