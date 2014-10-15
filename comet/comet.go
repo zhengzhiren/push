@@ -72,12 +72,12 @@ func SimplePushMessage(appId string, rawMsg *storage.RawMessage) error {
 				}
 			}
 		case 3: // userid list
-			/*for _, uid := range(rawMsg.PushParams.UserId) {
-				apps := AMInstance.GetApps(appId, uid)
+			for _, uid := range(rawMsg.PushParams.UserId) {
+				apps := AMInstance.GetAppsByUser(appId, uid)
 				for _, app := range(apps) {
 					pushMessage(appId, app, &msg)
 				}
-			}*/
+			}
 		default:
 	}
 	return nil
