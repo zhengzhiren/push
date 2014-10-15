@@ -87,8 +87,16 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(b))
 		return
 	}
-	uid2, err := storage.Instance.HashGet("db_apps", msg.AppId)
-	if err !=nil || uid != string(uid2) {
+	flag := false
+	vals, _ := storage.Instance.HashGetAll(fmt.Sprintf("db_user_%s", uid))
+	for index := 0; index < len(vals); index+=2 {
+		appid := vals[index+1]
+		if appid == msg.AppId {
+			flag = true
+			break
+		}
+	}
+	if !flag {
 		response.ErrNo  = 1005
 		response.ErrMsg = "user auth failed"
 		b, _ := json.Marshal(response)
