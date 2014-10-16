@@ -11,6 +11,8 @@ import (
 	"sync"
 	"encoding/json"
 	"strconv"
+	"strings"
+	uuid "github.com/codeskyblue/go-uuid"
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/storage"
@@ -21,11 +23,12 @@ import (
 const (
 	TimeToLive = "ttl"
 	MsgID = "msgid"
+	PappID = "pappid" //appid prefix
 	MaxMsgCount = 9223372036854775807
 )
 
 type PResponse struct {
-	ErrNo	int				`json:"errno"`
+	ErrNo	int			`json:"errno"`
 	ErrMsg	string			`json:"errmsg"`
 }
 
@@ -50,6 +53,79 @@ func getPushServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprintf(w, node.TcpAddr)
+}
+
+func setPappID() error {
+	if _, err := storage.Instance.SetNotExist(PappID, []byte("0")); err != nil {
+		log.Infof("failed to set AppID prefix: %s", err)
+		return err
+	}
+	return nil
+}
+
+func getPappID() int64 {
+	if n, err := storage.Instance.IncrBy(PappID, 1); err != nil {
+		log.Infof("failed to incr AppID prefix", err)
+		return 0
+	} else {
+		return n
+	}
+}
+
+func setPackage(uid string, pkg string, appid string) error {
+	if _, err := storage.Instance.HashSet(uid, appid, []byte(pkg)); err != nil {
+		log.Infof("failed to set Package: %s", err)
+		return err
+	}
+	return nil
+}
+
+func postGenId(w http.ResponseWriter, r *http.Request) {
+	var response PResponse
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+	var data map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+	ok, uid := auth.Instance.Auth(data["sso_tk"])
+	if !ok {
+		http.Error(w, "Unauthorized", 401)
+		return
+	}
+	tprefix := getPappID()
+	if tprefix == 0 {
+		response.ErrNo = 2001
+		response.ErrMsg = "no availed appid"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
+	}
+	prefix := strconv.FormatInt(tprefix, 10)
+	tappid := strings.Replace(uuid.New(), "-", "", -1)
+	//log.Infof("appid [%s], prefix [%s]", tappid, prefix)
+	plen := len(tappid)-len(prefix)
+	if plen <= 0 {
+		response.ErrNo = 2001
+		response.ErrMsg = "no availed appid"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
+	}
+	appid := tappid[0:plen] + prefix
+	//log.Infof("appid [%s]", appid)
+	if err := setPackage(uid, appid, data["package"]); err != nil {
+		response.ErrNo = 2002
+		response.ErrMsg = "failed to store package"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
+	}
+	b, _ := json.Marshal(map[string]string{"appid": appid})
+	fmt.Fprintf(w, string(b))
 }
 
 func postSendMsg(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +227,7 @@ func main() {
 
 	log.ReplaceLogger(logger)
 	setMsgID()
-
+	setPappID()
 	mqProducer, err := mq.NewProducer(
 		conf.Config.Rabbit.Uri,
 		conf.Config.Rabbit.Exchange,
@@ -187,6 +263,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/v1/push/message", postSendMsg)
 		http.HandleFunc("/v1/push/server", getPushServer)
+		http.HandleFunc("/v1/push/appid/gen", postGenId)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)
