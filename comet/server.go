@@ -302,6 +302,7 @@ out:
 		AMInstance.RemoveApp(regid)
 	}
 	CloseClient(client)
+	conn.Close()
 }
 
 func waitInit(conn *net.TCPConn) *Client {
