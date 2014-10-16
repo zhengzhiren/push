@@ -20,7 +20,7 @@ type Consumer struct {
 }
 
 func NewConsumer(amqpURI, exchange string, qos int) (*Consumer, error) { 
-	queueName := utils.GetLocalIP()
+	queueName := utils.GetLocalIP("eth1")
 	ctag := queueName + "_tag"
 	c := &Consumer{
 		conn:    nil,

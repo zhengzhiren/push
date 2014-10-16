@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"net"
 )
 
 var (
@@ -1136,11 +1137,19 @@ func CopyFile(src, dst string) (int64, error) {
 	return io.Copy(df, sf)
 }
 
-func GetLocalIP() string {
-	output, err := exec.Command("hostname", "-I").Output()
+func GetLocalIP(ifname string) string {
+	ip := "0.0.0.0"
+	ifs, err := net.InterfaceByName(ifname)
 	if err != nil {
-		return "0.0.0.0"
+		return ip
 	}
-
-	return strings.Split(string(output), " ")[0]
+	addrs, err := ifs.Addrs()
+	for _, addr := range addrs {
+		if i, ok := addr.(*net.IPNet); ok {
+			if i.IP.To4() != nil {
+				ip = i.IP.String()
+			}
+		}
+	}
+	return ip
 }

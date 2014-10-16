@@ -36,8 +36,6 @@ type ConfigStruct struct {
 		Addr string				`json:"addr"`
 		Timeout time.Duration	`json:"timeout"`
 		Path string				`json:"path"`
-		Node string				`json:"node"`
-		NodeInfo string			`json:"node_info"`
 	}				`json:"zookeeper"`
 
 	Auth struct {
