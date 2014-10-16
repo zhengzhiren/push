@@ -348,6 +348,12 @@ func waitInit(conn *net.TCPConn) *Client {
 	}
 
 	devid := msg.DeviceId
+	if devid == "" {
+		log.Warnf("%p: invalid device id", conn)
+		conn.Close()
+		return nil
+	}
+
 	log.Debugf("%p: INIT devid (%s)", conn, devid)
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)
@@ -359,17 +365,32 @@ func waitInit(conn *net.TCPConn) *Client {
 	reply := InitReplyMessage{
 		Result: 0,
 	}
+
+	if msg.Sync == 0 {
+		for _, info := range(msg.Apps) {
+			app := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
+			if app != nil {
+				client.regApps[info.RegId] = app
+			}
+		}
+	} else {
+		// 客户端要求同步服务端的数据
+		// 看存储系统中是否有此设备的数据
+		infos := AMInstance.LoadAppInfosByDevice(devid)
+		for regid, info := range infos {
+			log.Debugf("load app (%s) (%s) of device (%s)", info.AppId, regid, devid)
+			app := AMInstance.AddApp(client.devId, regid, info)
+			client.regApps[regid] = app
+			reply.Apps = append(reply.Apps, Base2{info.AppId, regid, ""})
+		}
+	}
+
+	// 先发送响应消息
 	body, _ := json.Marshal(&reply)
 	client.SendMessage(MSG_INIT_REPLY, body, nil)
 
-	// 看存储系统中是否有此设备的数据
-	infos := AMInstance.LoadAppInfosByDevice(devid)
-	for regid, info := range infos {
-		log.Debugf("load app (%s) (%s) of device (%s)", info.AppId, regid, devid)
-		app := AMInstance.AddApp(client.devId, regid, info)
-		client.regApps[regid] = app
-
-		// 处理离线消息
+	// 处理离线消息
+	for _, app := range(client.regApps) {
 		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.LastMsgId)
 		log.Debugf("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), app.AppId, app.LastMsgId)
 		for _, rmsg := range msgs {

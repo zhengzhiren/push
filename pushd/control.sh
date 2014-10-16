@@ -24,10 +24,16 @@ function start()
 
 function stop()
 {
+	supervisorctl -c $THIS_DIR/conf/supervisord.conf stop pushd >/dev/null 2>&1
+	sleep 2
 	supervisorctl -c $THIS_DIR/conf/supervisord.conf shutdown >/dev/null 2>&1
-	return 0
-	#ps axf|grep supervisord |grep push-server
-	
+	sleep 2
+	pid=$(ps axf|grep supervisord |grep pushd|awk '{print $1}')
+	[ $? -eq 0 ] && { kill -9 $pid; }
+
+	pid=$(ps axf|grep pushd |grep -v 'ps axf'|awk '{print $1}')
+	[ $? -eq 0 ] && { kill -9 $pid; }
+	return 0	
 }
 
 function restart()

@@ -132,6 +132,28 @@ func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *A
 	return nil
 }
 
+func (this *AppManager)GetAppsByUser(appId string, userId string) []*App {
+	vals, err := storage.Instance.HashGetAll(fmt.Sprintf("db_user_%s", userId))
+	if err != nil {
+		return nil
+	}
+	apps := make([]*App, 0, len(this.appMap))
+	this.lock.RLock()
+	for index := 0; index < len(vals); index+=2 {
+		regid := vals[index]
+		appid := vals[index+1]
+		if appid != appId {
+			continue
+		}
+		app, ok := this.appMap[regid]; if ok {
+			apps = append(apps, app)
+		}
+	}
+	this.lock.RUnlock()
+	log.Infof("get %d apps", len(apps))
+	return apps
+}
+
 func (this *AppManager)GetApp(appId string, regId string) *App {
 	this.lock.RLock()
 	app, ok := this.appMap[regId]; if ok {
