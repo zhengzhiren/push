@@ -43,6 +43,7 @@ type Server struct {
 	acceptTimeout time.Duration
 	readTimeout   time.Duration
 	writeTimeout  time.Duration
+	hbTimeout     time.Duration
 	maxMsgLen     uint32
 }
 
@@ -54,6 +55,7 @@ func NewServer() *Server {
 		acceptTimeout: 60,
 		readTimeout:   60,
 		writeTimeout:  60,
+		hbTimeout:     90,
 		maxMsgLen:     2048,
 	}
 }
@@ -120,16 +122,20 @@ func CloseClient(client *Client) {
 	DevicesMap.Delete(client.devId)
 }
 
-func (this *Server) SetReadTimeout(readTimeout time.Duration) {
-	this.readTimeout = readTimeout
+func (this *Server) SetReadTimeout(to time.Duration) {
+	this.readTimeout = to
 }
 
-func (this *Server) SetWriteTimeout(writeTimeout time.Duration) {
-	this.writeTimeout = writeTimeout
+func (this *Server) SetWriteTimeout(to time.Duration) {
+	this.writeTimeout = to
 }
 
-func (this *Server) SetAcceptTimeout(acceptTimeout time.Duration) {
-	this.acceptTimeout = acceptTimeout
+func (this *Server) SetAcceptTimeout(to time.Duration) {
+	this.acceptTimeout = to
+}
+
+func (this *Server) SetHeartbeatTimeout(to time.Duration) {
+	this.hbTimeout = to
 }
 
 func (this *Server) SetMaxPktLen(maxMsgLen uint32) {
@@ -209,23 +215,23 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	}
 
 	var (
-		readHeader = true
-		bytesRead  = 0
-		data       []byte
-		header     Header
-		startTime  time.Time
+		readHeader  = true
+		nRead int   = 0
+		data        []byte
+		header      Header
+		startTime   time.Time
 	)
 
 	for {
 		select {
-		case <-this.exitCh:
-			log.Debugf("ask me quit\n")
-			goto out
-		default:
+			case <-this.exitCh:
+				log.Debugf("ask me quit\n")
+				goto out
+			default:
 		}
 
 		now := time.Now()
-		if now.After(client.lastActive.Add(90 * time.Second)) {
+		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
 			log.Debugf("%p: heartbeat timeout", conn)
 			break
 		}
@@ -238,7 +244,6 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			n, err := io.ReadFull(conn, buf)
 			if err != nil {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
-					//log.Debugf("read timeout, %d", n)
 					continue
 				}
 				log.Debugf("%p: readfull failed (%v)", conn, err)
@@ -252,19 +257,15 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				log.Warnf("%p: header len too big %d", conn, header.Len)
 				break
 			}
-			/*
-				if header.Type != 0 {
-					log.Debugf("recv msg: %d, len %d", header.Type, header.Len)
-				}*/
 			if header.Len > 0 {
 				data = make([]byte, header.Len)
 				readHeader = false
-				bytesRead = 0
+				nRead = 0
 				startTime = time.Now()
 				continue
 			}
 		} else {
-			n, err := conn.Read(data[bytesRead:])
+			n, err := conn.Read(data[nRead:])
 			if err != nil {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
 					if now.After(startTime.Add(60 * time.Second)) {
@@ -277,9 +278,9 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				}
 			}
 			if n > 0 {
-				bytesRead += n
+				nRead += n
 			}
-			if uint32(bytesRead) < header.Len {
+			if uint32(nRead) < header.Len {
 				continue
 			}
 			readHeader = true
@@ -288,8 +289,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 		handler, ok := this.funcMap[header.Type]
 		if ok {
-			ret := handler(conn, client, &header, data)
-			if ret < 0 {
+			if ret := handler(conn, client, &header, data); ret < 0 {
 				break
 			}
 		}

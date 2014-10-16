@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"os"
-	//"log"
+	"time"
 	"sync"
 	"strings"
 	"strconv"
@@ -184,6 +184,19 @@ func main() {
 	waitGroup := &sync.WaitGroup{}
 	var mqConsumer *mq.Consumer = nil
 	cometServer := comet.NewServer()
+	if conf.Config.AcceptTimeout > 0 {
+		cometServer.SetAcceptTimeout(time.Duration(conf.Config.AcceptTimeout))
+	}
+	if conf.Config.ReadTimeout > 0 {
+		cometServer.SetReadTimeout(time.Duration(conf.Config.ReadTimeout))
+	}
+	if conf.Config.WriteTimeout > 0 {
+		cometServer.SetWriteTimeout(time.Duration(conf.Config.WriteTimeout))
+	}
+	if conf.Config.HeartbeatTimeout > 0 {
+		cometServer.SetHeartbeatTimeout(time.Duration(conf.Config.HeartbeatTimeout))
+	}
+
 	if conf.Config.Rabbit.Enable {
 		mqConsumer, err = mq.NewConsumer(
 			conf.Config.Rabbit.Uri,
