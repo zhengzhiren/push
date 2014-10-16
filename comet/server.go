@@ -205,6 +205,18 @@ func (this *Server) Stop() {
 	log.Debugf("comet server stopped")
 }
 
+func myread(conn *net.TCPConn, buf []byte) int {
+	n, err := io.ReadFull(conn, buf)
+	if err != nil {
+		if e, ok := err.(*net.OpError); ok && e.Timeout() {
+			return n
+		}
+		log.Debugf("%p: readfull failed (%v)", conn, err)
+		return -1
+	}
+	return n
+}
+
 // handle a TCP connection
 func (this *Server) handleConnection(conn *net.TCPConn) {
 	log.Debugf("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
@@ -217,9 +229,11 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	var (
 		readHeader  = true
 		nRead int   = 0
-		data        []byte
+		headBuf		[]byte = make([]byte, HEADER_SIZE)
+		dataBuf     []byte
 		header      Header
 		startTime   time.Time
+		foo bool    = false
 	)
 
 	for {
@@ -240,16 +254,23 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		conn.SetReadDeadline(now.Add(10 * time.Second))
 
 		if readHeader {
-			buf := make([]byte, HEADER_SIZE)
-			n, err := io.ReadFull(conn, buf)
-			if err != nil {
-				if e, ok := err.(*net.OpError); ok && e.Timeout() {
-					continue
+			if foo {
+				n := myread(conn, headBuf[0:1])
+				if n <= 0 {
+					break
 				}
-				log.Debugf("%p: readfull failed (%v)", conn, err)
-				break
+				/*if headBuf[0] ==  {
+					continue
+				}*/
+				if n = myread(conn, headBuf[1:]); n <= 0 {
+					break
+				}
+			} else {
+				if n := myread(conn, headBuf); n <= 0 {
+					break
+				}
 			}
-			if err := header.Deserialize(buf[0:n]); err != nil {
+			if err := header.Deserialize(headBuf[0:HEADER_SIZE]); err != nil {
 				break
 			}
 
@@ -258,14 +279,14 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				break
 			}
 			if header.Len > 0 {
-				data = make([]byte, header.Len)
+				dataBuf = make([]byte, header.Len)
 				readHeader = false
 				nRead = 0
 				startTime = time.Now()
 				continue
 			}
 		} else {
-			n, err := conn.Read(data[nRead:])
+			n, err := conn.Read(dataBuf[nRead:])
 			if err != nil {
 				if e, ok := err.(*net.OpError); ok && e.Timeout() {
 					if now.After(startTime.Add(60 * time.Second)) {
@@ -284,12 +305,11 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				continue
 			}
 			readHeader = true
-			log.Debugf("%p: body (%s)", conn, data)
+			log.Debugf("%p: body (%s)", conn, dataBuf)
 		}
 
-		handler, ok := this.funcMap[header.Type]
-		if ok {
-			if ret := handler(conn, client, &header, data); ret < 0 {
+		if handler, ok := this.funcMap[header.Type]; ok {
+			if ret := handler(conn, client, &header, dataBuf); ret < 0 {
 				break
 			}
 		}
@@ -309,15 +329,13 @@ func waitInit(conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
 	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 	buf := make([]byte, HEADER_SIZE)
-	n, err := io.ReadFull(conn, buf)
-	if err != nil {
-		log.Debugf("%p: readfull header failed (%v)", conn, err)
+	if n := myread(conn, buf); n <= 0 {
 		conn.Close()
 		return nil
 	}
 
 	var header Header
-	if err := header.Deserialize(buf[0:n]); err != nil {
+	if err := header.Deserialize(buf[0:HEADER_SIZE]); err != nil {
 		log.Warnf("%p: parse header failed: (%v)", conn, err)
 		conn.Close()
 		return nil
@@ -329,8 +347,7 @@ func waitInit(conn *net.TCPConn) *Client {
 		return nil
 	}
 	data := make([]byte, header.Len)
-	if _, err := io.ReadFull(conn, data); err != nil {
-		log.Debugf("%p: readfull body failed: (%v)", conn, err)
+	if n := myread(conn, data); n <= 0 {
 		conn.Close()
 		return nil
 	}
