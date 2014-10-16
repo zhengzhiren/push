@@ -6,7 +6,7 @@ import (
 	"time"
 	"path"
 	"encoding/json"
-	"math/rand"
+	_ "math/rand"
 )
 
 const (
@@ -119,13 +119,19 @@ func initCometNodeInfo(conn *zk.Conn, fpath string, ch chan *CometNodeEvent) err
 	return nil
 }
 
-func GetComet() *CometNodeInfo {
+func GetComet() []string {
 	if len(cometNodeInfoMap) == 0 {
 		return nil
 	}
+	/*
 	i := rand.Intn(len(cometNodeList))
 	node := cometNodeList[i]
-	return cometNodeInfoMap[node]
+	*/
+	var comets []string
+	for _, c := range cometNodeInfoMap {
+		comets = append(comets, c.TcpAddr)
+	}
+	return comets
 }
 
 func InitWatcher(addrs string, timeout time.Duration, fpath string) error {
