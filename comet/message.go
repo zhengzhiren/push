@@ -54,6 +54,7 @@ type Base1 struct {
 }
 type InitMessage struct {
 	DeviceId string		`json:"devid"`
+	Sync     int		`json:"sync,omitempty"`
 	Apps     []Base1	`json:"apps,omitempty"`
 }
 
