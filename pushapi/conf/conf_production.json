@@ -3,14 +3,14 @@
 	"web"				: "0.0.0.0:19999",
 	"pushapi"			: "0.0.0.0:8080",
 	"rabbit" : {
-		"uri" 			: "amqp://guest:guest@10.154.156.121:5672/",
+		"uri" 			: "amqp://guest:guest@10.135.28.70:5672/",
 		"exchange" 		: "test-exchange",
 		"exchange_type" : "fanout",
 		"qos" 			: 1
 	},
 
 	"redis" : {
-		"server"		: "10.154.156.121:6380",
+		"server"		: "10.135.28.70:6379",
 		"pass"			: "rpasswd"
 	},
 
@@ -19,8 +19,9 @@
 		"timeout"		: 30,
 		"path"			: "/push",
 		"node"			: "node1",
-		"node_info"		: "10.154.156.121:20000"
+		"node_info"		: "10.135.28.70:20000"
 	},
+
 	"auth" : {
 		"provider"		: "letv",
 		"letv_url"		: "http://api.sso.letv.com/api/checkTicket/tk"
