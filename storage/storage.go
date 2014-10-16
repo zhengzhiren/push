@@ -7,6 +7,7 @@ type RawMessage struct {
 	Token		string		`json:"token"`
 	MsgId		int64		`json:"msgid"`
 	AppId		string		`json:"appid"`
+	Pkg			string		`json:"pkg"`
 	CTime		int64		`json:"ctime"`
 	Platform	string		`json:"platform,omitempty"`
 	MsgType		int			`json:"msg_type"`

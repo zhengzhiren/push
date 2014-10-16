@@ -421,7 +421,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		return -1
 	}
 	if msg.AppId == "" {
-		log.Warnf("%p: appid is empty")
+		log.Warnf("%p: appid is empty", conn)
 		return -1
 	}
 
@@ -496,7 +496,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	}
 
 	if msg.AppId == "" || msg.RegId == "" {
-		log.Warnf("%p: appid or regis is empty")
+		log.Warnf("%p: appid or regis is empty", conn)
 		return -1
 	}
 
@@ -536,7 +536,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 	}
 
 	if msg.AppId == "" || msg.RegId == "" {
-		log.Warnf("%p: appid or regis is empty")
+		log.Warnf("%p: appid or regis is empty", conn)
 		return -1
 	}
 	// unknown regid
