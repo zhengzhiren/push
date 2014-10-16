@@ -107,15 +107,7 @@ func postGenId(w http.ResponseWriter, r *http.Request) {
 	prefix := strconv.FormatInt(tprefix, 10)
 	tappid := strings.Replace(uuid.New(), "-", "", -1)
 	//log.Infof("appid [%s], prefix [%s]", tappid, prefix)
-	plen := len(tappid)-len(prefix)
-	if plen <= 0 {
-		response.ErrNo = 2001
-		response.ErrMsg = "no availed appid"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-	appid := tappid[0:plen] + prefix
+	appid := tappid[0:(len(tappid)-len(prefix))] + prefix
 	//log.Infof("appid [%s]", appid)
 	if err := setPackage(uid, appid, data["package"]); err != nil {
 		response.ErrNo = 2002
