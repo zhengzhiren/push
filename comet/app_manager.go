@@ -94,6 +94,7 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 		}
 		log.Infof("got last msgid %d", info.LastMsgId)
 	} else {
+		info.AppId = appId
 		info.LastMsgId = -1
 	}
 	app := this.AddApp(devId, regId, &info)

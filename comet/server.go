@@ -341,9 +341,10 @@ func waitInit(conn *net.TCPConn) *Client {
 		return nil
 	}
 
+	log.Debugf("%p: INIT body(%s)", conn, data)
 	var msg InitMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Warnf("%p: JSON decode failed: (%v)", conn, err)
+		log.Warnf("%p: decode INIT body failed: (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
@@ -355,7 +356,6 @@ func waitInit(conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	log.Debugf("%p: INIT devid (%s)", conn, devid)
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)
 		conn.Close()
@@ -369,6 +369,10 @@ func waitInit(conn *net.TCPConn) *Client {
 
 	if msg.Sync == 0 {
 		for _, info := range(msg.Apps) {
+			if info.AppId == "" || info.RegId == "" {
+				log.Warnf("appid or regid is empty")
+				continue
+			}
 			app := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
 			if app != nil {
 				client.regApps[info.RegId] = app
@@ -393,7 +397,7 @@ func waitInit(conn *net.TCPConn) *Client {
 	// 处理离线消息
 	for _, app := range(client.regApps) {
 		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.LastMsgId)
-		log.Debugf("%p: get %d offline messages: (%s) (>%d)", conn, len(msgs), app.AppId, app.LastMsgId)
+		log.Debugf("%p: get %d offline messages: appid(%s) (>%d)", conn, len(msgs), app.AppId, app.LastMsgId)
 		for _, rmsg := range msgs {
 			msg := PushMessage{
 				MsgId:   rmsg.MsgId,
@@ -410,12 +414,16 @@ func waitInit(conn *net.TCPConn) *Client {
 
 // app注册后，才可以接收消息
 func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%p: REGISTER body(%s)", conn, body)
 	var msg RegisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Debugf("%p: REGISTER appid(%s) appkey(%s) regid(%s) token(%s)", conn, msg.AppId, msg.AppKey, msg.RegId, msg.Token)
+	if msg.AppId == "" {
+		log.Warnf("%p: appid is empty")
+		return -1
+	}
 
 	var uid string = ""
 	var ok bool
@@ -480,12 +488,17 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 }
 
 func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%p: UNREGISTER body(%s)", conn, body)
 	var msg UnregisterMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
-	log.Debugf("%p: UNREGISTER (appid %s) (appkey %s) (regid%s)", conn, msg.AppId, msg.AppKey, msg.RegId)
+
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%p: appid or regis is empty")
+		return -1
+	}
 
 	var uid string = ""
 	var ok bool
@@ -515,13 +528,17 @@ func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []b
 }
 
 func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%p: PUSH_REPLY body(%s)", conn, body)
 	var msg PushReplyMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%p: json decode failed: (%v)", conn, err)
 		return -1
 	}
 
-	log.Debugf("%p: PUSH_REPLY (appid %s) (regid %s) (msgid %d)", conn, msg.AppId, msg.RegId, msg.MsgId)
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%p: appid or regis is empty")
+		return -1
+	}
 	// unknown regid
 	app, ok := client.regApps[msg.RegId]
 	if !ok {
