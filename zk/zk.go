@@ -83,7 +83,7 @@ func InitZk() error {
 	if err != nil && err != zk.ErrNodeExists {
 		return err
 	}
-	data, _ := json.Marshal(utils.GetLocalIP("eth1"))
+	data, _ := json.Marshal(utils.GetLocalIP())
 	err = Register(conn, conf.Config.ZooKeeper.Path, data)
 	if err != nil {
 		return err

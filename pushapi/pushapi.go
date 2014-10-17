@@ -120,7 +120,7 @@ func postGenId(w http.ResponseWriter, r *http.Request) {
 	}
 	tprefix := getPappID()
 	if tprefix == 0 {
-		response.ErrNo = 1061
+		response.ErrNo = 1062
 		response.ErrMsg = "no availed appid"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
@@ -132,7 +132,7 @@ func postGenId(w http.ResponseWriter, r *http.Request) {
 	appid := tappid[0:(len(tappid)-len(prefix))] + prefix
 	//log.Infof("appid [%s]", appid)
 	if err := setPackage(uid, appid, pkg); err != nil {
-		response.ErrNo = 2002
+		response.ErrNo = 1063
 		response.ErrMsg = "failed to store package"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
@@ -179,7 +179,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 
 	pkg, err := storage.Instance.HashGet(uid, msg.AppId)
 	if err != nil {
-		response.ErrNo  = 1005
+		response.ErrNo  = 1004
 		response.ErrMsg = "user auth failed"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))

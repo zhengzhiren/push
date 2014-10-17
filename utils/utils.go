@@ -1137,13 +1137,31 @@ func CopyFile(src, dst string) (int64, error) {
 	return io.Copy(df, sf)
 }
 
-func GetLocalIP(ifname string) string {
+func GetLocalIP() string {
 	ip := "0.0.0.0"
-	ifs, err := net.InterfaceByName(ifname)
+	ifname := "eth1"
+	ifs, err := net.Interfaces()
 	if err != nil {
 		return ip
 	}
-	addrs, err := ifs.Addrs()
+	ifnum := 0
+	for _, i := range ifs {
+		if (i.Flags & net.FlagUp == 1) && (i.Name == "eth0" || i.Name == "eth1") {
+			ifnum += 1
+		}
+	}
+	if ifnum == 1 {
+		ifname = "eth0"
+	}
+
+	intf, err := net.InterfaceByName(ifname)
+	if err != nil {
+		return ip
+	}
+	addrs, err := intf.Addrs()
+	if err != nil {
+		return ip
+	}
 	for _, addr := range addrs {
 		if i, ok := addr.(*net.IPNet); ok {
 			if i.IP.To4() != nil {
