@@ -227,20 +227,20 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	}
 
 	var (
-		readHeader  = true
+		readflag    = 0
 		nRead int   = 0
+		n int       = 0
 		headBuf		[]byte = make([]byte, HEADER_SIZE)
 		dataBuf     []byte
 		header      Header
 		startTime   time.Time
-		foo bool    = false
 	)
 
 	for {
 		select {
 			case <-this.exitCh:
 				log.Debugf("ask me quit\n")
-				goto out
+				break
 			default:
 		}
 
@@ -252,59 +252,73 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
 		conn.SetReadDeadline(now.Add(10 * time.Second))
-
-		if readHeader {
-			if foo {
-				n := myread(conn, headBuf[0:1])
-				if n <= 0 {
-					break
-				}
-				/*if headBuf[0] ==  {
-					continue
-				}*/
-				if n = myread(conn, headBuf[1:]); n <= 0 {
-					break
-				}
-			} else {
-				if n := myread(conn, headBuf); n <= 0 {
-					break
-				}
+		if readflag == 0 {
+		// read first byte
+			n := myread(conn, headBuf[0:1])
+			//log.Debugf("read first byte: %d", n)
+			if n < 0 {
+				break
+			} else if n == 0 {
+				continue
+			}
+			if uint8(headBuf[0]) == uint8(0) {
+				handleHeartbeat(conn, client, nil, nil)
+				continue
+			}
+			nRead += n
+			readflag = 1
+		}
+		if readflag == 1 {
+		// read header
+			n = myread(conn, headBuf[nRead:])
+			//log.Debugf("read header: %d", n)
+			if n < 0 {
+				break
+			} else if n == 0 {
+				continue
+			}
+			nRead += n
+			if uint32(nRead) < HEADER_SIZE {
+				continue
 			}
 			if err := header.Deserialize(headBuf[0:HEADER_SIZE]); err != nil {
+				log.Warnf("header deserialize failed")
 				break
 			}
 
+			log.Infof("type %d, len %d", header.Type, header.Len)
 			if header.Len > MAX_BODY_LEN {
 				log.Warnf("%p: header len too big %d", conn, header.Len)
 				break
 			}
 			if header.Len > 0 {
 				dataBuf = make([]byte, header.Len)
-				readHeader = false
+				readflag = 2
 				nRead = 0
 				startTime = time.Now()
+			} else {
+				readflag = 0
+				nRead = 0
 				continue
 			}
-		} else {
-			n, err := conn.Read(dataBuf[nRead:])
-			if err != nil {
-				if e, ok := err.(*net.OpError); ok && e.Timeout() {
-					if now.After(startTime.Add(60 * time.Second)) {
-						log.Debugf("%p: read packet data timeout", conn)
-						goto out
-					}
-				} else {
-					log.Debugf("%p: read from client failed: (%v)", conn, err)
-					goto out
-				}
+		}
+		if readflag == 2 {
+		// read body
+			n = myread(conn, dataBuf[nRead:])
+			log.Debugf("read body: %d", n)
+			if n < 0 {
+				break
+			} else if n == 0 {
+				continue
 			}
-			if n > 0 {
-				nRead += n
-			}
+			nRead += n
 			if uint32(nRead) < header.Len {
+				if now.After(startTime.Add(60 * time.Second)) {
+					log.Infof("%p: read body timeout", conn)
+					break
+				}
 				continue
 			}
-			readHeader = true
 			log.Debugf("%p: body (%s)", conn, dataBuf)
 		}
 
@@ -312,10 +326,13 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			if ret := handler(conn, client, &header, dataBuf); ret < 0 {
 				break
 			}
+		} else {
+			log.Warnf("%p: unknown message type %d", conn, header.Type)
 		}
+		readflag = 0
+		nRead = 0
 	}
 
-out:
 	// don't use defer to improve performance
 	log.Debugf("%p: close connection", conn)
 	for regid, _ := range client.regApps {

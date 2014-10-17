@@ -3,11 +3,12 @@ import requests
 import json
 import sys
 
-appid = sys.argv[1]
-content = sys.argv[2]
+svr = sys.argv[1]
+appid = sys.argv[2]
+content = sys.argv[3]
 
 d = {
-	"token": "1023ac8290wpdgtEm30m29u1oBFuWkm12N6NdMnINCcBxbMqO0iIdsn7heM4lCm1selm1RFq4i0",
+	"token": "10294048a2KW5Hm1RDXlm1s0eZ1H99wbOwKfdNyn9AE9zafzle81wgFw0Of9L4BAn01m3m3aLM",
 	"appid": appid,
 	"msg_type": 1,
 	"push_type": 3,
@@ -19,7 +20,7 @@ d = {
 	"options": {"ttl": 864000},
 }
 
-r = requests.post("http://127.0.0.1:8080/v1/push/message", data=json.dumps(d))
+r = requests.post("%s/v1/push/message"%svr, data=json.dumps(d))
 print r.status_code, r.text
 
 

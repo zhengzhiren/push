@@ -93,6 +93,7 @@ type UnregisterReplyMessage struct {
 type PushMessage struct {
 	MsgId   int64  `json:"msgid"`
 	AppId   string `json:"appid"`
+	Pkg		string `json:"pkg"`
 	Type    int    `json:"type"` //1: notification  2:app message
 	Content string `json:"content"`
 }

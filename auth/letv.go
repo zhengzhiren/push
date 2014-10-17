@@ -36,7 +36,7 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 	var tr tokenResult
 	err = json.Unmarshal(body, &tr)
 	if err != nil {
-		log.Warnf("json unmarshal failed: %s", err)
+		log.Warnf("json unmarshal failed: %s (%s)", err, body)
 		return false, ""
 	}
 	if tr.Status != "1" || tr.ErrCode != "0" {
