@@ -459,6 +459,14 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		return -1
 	}
 
+	var rawapp storage.RawApp
+	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
+	if err != nil {
+		log.Warnf("%p: unknow appid (%s)", conn, msg.AppId)
+		return -1
+	}
+	json.Unmarshal(b, &rawapp)
+
 	var uid string = ""
 	var ok bool
 	if msg.Token != "" {
@@ -468,14 +476,16 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 			return -1
 		}
 	}
+
 	regid := RegId(client.devId, msg.AppId, uid)
 	log.Debugf("%p: uid (%s), regid (%s)", conn, uid, regid)
 	if _, ok := client.regApps[regid]; ok {
 		// 已经在内存中，直接返回
 		reply := RegisterReplyMessage{
-			AppId:  msg.AppId,
-			RegId:  regid,
 			Result: 0,
+			AppId:  msg.AppId,
+			Pkg:    rawapp.Pkg,
+			RegId:  regid,
 		}
 		b, _ := json.Marshal(reply)
 		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
@@ -498,11 +508,12 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	// 记录到client管理的hash table中
 	client.regApps[regid] = app
 	reply := RegisterReplyMessage{
-		AppId:  msg.AppId,
-		RegId:  regid,
 		Result: 0,
+		AppId:  msg.AppId,
+		Pkg:    rawapp.Pkg,
+		RegId:  regid,
 	}
-	b, _ := json.Marshal(reply)
+	b, _ = json.Marshal(reply)
 	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
 
 	// 处理离线消息
