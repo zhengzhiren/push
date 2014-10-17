@@ -71,8 +71,13 @@ func getPappID() int64 {
 	}
 }
 
-func setPackage(uid string, pkg string, appid string) error {
-	if _, err := storage.Instance.HashSet(uid, appid, []byte(pkg)); err != nil {
+func setPackage(uid string, appid string, pkg string) error {
+	rawapp := storage.RawApp{
+		Pkg : pkg,
+		UserId : uid,
+	}
+	b, _ := json.Marshal(rawapp)
+	if _, err := storage.Instance.HashSet("db_apps", appid, b); err != nil {
 		log.Infof("failed to set Package: %s", err)
 		return err
 	}
@@ -121,24 +126,36 @@ func postGenAppId(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	token, tk_ok := data["token"]
-	pkg, pkg_ok := data["package"]
-	if !tk_ok || !pkg_ok {
+	pkg, pkg_ok := data["pkg"]
+	//uid, uid_ok := data["userid"]
+	if !pkg_ok {
 		response.ErrNo  = ERR_INVALID_PARAMS
-		response.ErrMsg = "invaild params"
+		response.ErrMsg = "missing 'pkg'"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
 		return
 	}
-	ok, uid := auth.Instance.Auth(token)
-	if !ok {
-		response.ErrNo  = ERR_AUTHENTICATE
-		response.ErrMsg = "authenticate failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 401)
-		return
+	var uid string
+	var ok bool
+	uid, uid_ok := data["userid"]
+	if !uid_ok {
+		token, tk_ok := data["token"]
+		if !tk_ok {
+			response.ErrNo  = ERR_INVALID_PARAMS
+			response.ErrMsg = "missing 'uid' or 'token'"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 400)
+			return
+		}
+		ok, uid = auth.Instance.Auth(token)
+		if !ok {
+			response.ErrNo  = ERR_AUTHENTICATE
+			response.ErrMsg = "authenticate failed"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 401)
+			return
+		}
 	}
-
 	tprefix := getPappID()
 	if tprefix == 0 {
 		response.ErrNo = ERR_NO_APPID
@@ -191,17 +208,31 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	ok, uid := auth.Instance.Auth(msg.Token)
-	if !ok {
-		response.ErrNo  = ERR_AUTHENTICATE
-		response.ErrMsg = "authenticate failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 401)
-		return
+	var ok bool
+	uid := msg.UserId
+	if uid == "" {
+		ok, uid = auth.Instance.Auth(msg.Token)
+		if !ok {
+			response.ErrNo  = ERR_AUTHENTICATE
+			response.ErrMsg = "authenticate failed"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 401)
+			return
+		}
 	}
 	log.Infof("uid: (%s)", uid)
-	pkg, err := storage.Instance.HashGet(uid, msg.AppId)
+	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
+	//pkg, err := storage.Instance.HashGet(msg.UserId, msg.AppId)
 	if err != nil {
+		response.ErrNo  = ERR_AUTHORIZE
+		response.ErrMsg = "authorize failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	var rawapp storage.RawApp
+	json.Unmarshal(b, &rawapp)
+	if rawapp.UserId != uid {
 		response.ErrNo  = ERR_AUTHORIZE
 		response.ErrMsg = "authorize failed"
 		b, _ := json.Marshal(response)
@@ -213,9 +244,9 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	//response.ErrMsg = ""
 	//response.Data = map[string]string{"result": "ok"}
 	msg.CTime = time.Now().Unix()
-	msg.Pkg = string(pkg)
+	//msg.Pkg = string(pkg)
 	msgBox <- msg
-	b, _ := json.Marshal(response)
+	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
 

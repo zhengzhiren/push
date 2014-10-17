@@ -5,6 +5,7 @@ import (
 
 type RawMessage struct {
 	Token		string		`json:"token"`
+	UserId		string		`json:"userid"`
 	MsgId		int64		`json:"msgid"`
 	AppId		string		`json:"appid"`
 	Pkg			string		`json:"pkg"`
@@ -34,6 +35,12 @@ type RawMessage struct {
 	Options		interface{}	`json:"options"` //可选 title, ttl(消息生命周期), push_params(单播devid 组播tag list,alias list), timing(定时发送时间), custom_content等等
 }
 */
+
+type RawApp struct
+{
+	Pkg		string	`json:"pkg"`
+	UserId	string	`json:"userid"`
+}
 
 type Storage interface {
 	GetOfflineMsgs(appId string, ctime int64) []*RawMessage

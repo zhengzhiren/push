@@ -4,14 +4,16 @@ import json
 import sys
 
 svr = sys.argv[1]
-appid = sys.argv[2]
-content = sys.argv[3]
+userid = sys.argv[2]
+appid = sys.argv[3]
+content = sys.argv[4]
 
 d = {
-	"token": "10294048a2KW5Hm1RDXlm1s0eZ1H99wbOwKfdNyn9AE9zafzle81wgFw0Of9L4BAn01m3m3aLM",
+	"token": "102304f687BrX9DhNzo2LnEm1qjEpRrhhIqm1DqGyWbXQaEPUNMInqXcO7s2bChpFIeYz1Xq",
+	"userid" : userid,
 	"appid": appid,
 	"msg_type": 1,
-	"push_type": 3,
+	"push_type": 1,
 	"push_params" : {
 		"userid" : ["letv_56855159"]
 	},

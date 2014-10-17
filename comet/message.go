@@ -74,9 +74,10 @@ type RegisterMessage struct {
 	Token  string `json:"token"`
 }
 type RegisterReplyMessage struct {
-	AppId  string `json:"appid"`
-	RegId  string `json:"regid"`
 	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	Pkg    string `json:"pkg"`
+	RegId  string `json:"regid"`
 }
 type UnregisterMessage struct {
 	AppId  string `json:"appid"`
@@ -87,13 +88,12 @@ type UnregisterMessage struct {
 type UnregisterReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	RegId  string `json:"regid"`
 	Pkg    string `json:"pkg"`
+	RegId  string `json:"regid"`
 }
 type PushMessage struct {
 	MsgId   int64  `json:"msgid"`
 	AppId   string `json:"appid"`
-	Pkg		string `json:"pkg"`
 	Type    int    `json:"type"` //1: notification  2:app message
 	Content string `json:"content"`
 }

@@ -78,13 +78,8 @@ func main() {
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {
 		timer := time.NewTicker(60*time.Second)
-		hb := comet.Header{
-			Type: comet.MSG_HEARTBEAT,
-			Ver: 0,
-			Seq: 0,
-			Len: 0,
-		}
-		heartbeat, _ := hb.Serialize()
+		heartbeat := make([]byte, 1)
+		heartbeat[0] = 0
 		for {
 			select {
 			//case <- done:

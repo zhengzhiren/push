@@ -23,6 +23,7 @@ type tokenResult struct {
 
 func (this *LetvAuth)Auth(token string) (bool, string) {
 	url := fmt.Sprintf("%s/%s", this.url, token)
+	log.Infof("letv auth: url(%s)", url)
 	res, err := http.Get(url)
 	if err != nil {
 		log.Warnf("http get failed: %s", err)
@@ -33,6 +34,7 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 		log.Warnf("ioutil readall failed: %s", err)
 		return false, ""
 	}
+	log.Infof("sso response (%s)", body)
 	var tr tokenResult
 	err = json.Unmarshal(body, &tr)
 	if err != nil {
