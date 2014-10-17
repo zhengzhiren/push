@@ -17,9 +17,7 @@
 	"zookeeper" : {
 		"addr"			: "10.154.156.121:2181",
 		"timeout"		: 30,
-		"path"			: "/push",
-		"node"			: "node1",
-		"node_info"		: "10.135.28.70:20000"
+		"path"			: "/push"
 	},
 
 	"auth" : {

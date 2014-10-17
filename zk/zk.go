@@ -5,7 +5,7 @@ import (
 	"errors"
 	"github.com/gooo000/go-zookeeper/zk"
 	"github.com/chenyf/push/conf"
-	"path"
+	"github.com/chenyf/push/utils"
 	"strings"
 	"encoding/json"
 	"time"
@@ -50,7 +50,7 @@ func GetNodes(conn *zk.Conn, path string) ([]string, error) {
 }
 
 func Register(conn *zk.Conn, fpath string, data []byte) error {
-	_, err := conn.Create(fpath, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	_, err := conn.Create(fpath + "/", data, zk.FlagEphemeral | zk.FlagSequence, zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		return err
 	}
@@ -83,9 +83,8 @@ func InitZk() error {
 	if err != nil && err != zk.ErrNodeExists {
 		return err
 	}
-	fpath := path.Join(conf.Config.ZooKeeper.Path, conf.Config.ZooKeeper.Node)
-	data, _ := json.Marshal(conf.Config.ZooKeeper.NodeInfo)
-	err = Register(conn, fpath, data)
+	data, _ := json.Marshal(utils.GetLocalIP())
+	err = Register(conn, conf.Config.ZooKeeper.Path, data)
 	if err != nil {
 		return err
 	}

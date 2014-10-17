@@ -27,9 +27,10 @@ const (
 	MaxMsgCount = 9223372036854775807
 )
 
-type PResponse struct {
+type Response struct {
 	ErrNo	int			`json:"errno"`
 	ErrMsg	string			`json:"errmsg"`
+	Data	interface{}		`json:"data,omitempty"`
 }
 
 var msgBox = make(chan storage.RawMessage, 10)
@@ -43,16 +44,25 @@ func checkMessage(m *storage.RawMessage) bool {
 }
 
 func getPushServer(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	response.ErrNo = 0
+	response.ErrMsg = ""
+
 	if r.Method != "GET" {
 		http.Error(w, "Method Not Allowed", 405)
 		return
 	}
 	node := zk.GetComet()
 	if node == nil {
-		http.Error(w, "No active server", 404)
+		response.ErrNo = 1031
+		response.ErrMsg = "no active servers"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
 		return
 	}
-	fmt.Fprintf(w, node.TcpAddr)
+	response.Data = map[string][]string{"servers": node}
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
 }
 
 func setPappID() error {
@@ -81,7 +91,9 @@ func setPackage(uid string, pkg string, appid string) error {
 }
 
 func postGenId(w http.ResponseWriter, r *http.Request) {
-	var response PResponse
+	var response Response
+	response.ErrNo = 0
+	response.ErrMsg = ""
 	if r.Method != "POST" {
 		http.Error(w, "Method Not Allowed", 405)
 		return
@@ -91,14 +103,24 @@ func postGenId(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	ok, uid := auth.Instance.Auth(data["sso_tk"])
+	sso_tk, tk_ok := data["sso_tk"]
+	pkg, pkg_ok := data["package"]
+	if !tk_ok || !pkg_ok {
+		response.ErrNo = 1061
+		response.ErrMsg = "invalid args"
+		b, _ := json.Marshal(response)
+		fmt.Fprintf(w, string(b))
+		return
+	}
+
+	ok, uid := auth.Instance.Auth(sso_tk)
 	if !ok {
 		http.Error(w, "Unauthorized", 401)
 		return
 	}
 	tprefix := getPappID()
 	if tprefix == 0 {
-		response.ErrNo = 2001
+		response.ErrNo = 1062
 		response.ErrMsg = "no availed appid"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
@@ -109,31 +131,30 @@ func postGenId(w http.ResponseWriter, r *http.Request) {
 	//log.Infof("appid [%s], prefix [%s]", tappid, prefix)
 	appid := tappid[0:(len(tappid)-len(prefix))] + prefix
 	//log.Infof("appid [%s]", appid)
-	if err := setPackage(uid, appid, data["package"]); err != nil {
-		response.ErrNo = 2002
+	if err := setPackage(uid, appid, pkg); err != nil {
+		response.ErrNo = 1063
 		response.ErrMsg = "failed to store package"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
 		return
 	}
-	b, _ := json.Marshal(map[string]string{"appid": appid})
+	response.Data = map[string]string{"appid": appid}
+	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
 
 func postSendMsg(w http.ResponseWriter, r *http.Request) {
-	var response PResponse
+	var response Response
 	msg := storage.RawMessage{}
 	response.ErrNo = 0
+	response.ErrMsg = ""
 	if r.Method != "POST" {
-		response.ErrNo  = 1001
-		response.ErrMsg = "must using 'POST' method\n"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
+		http.Error(w, "Method Not Allowed", 405)
 		return
 	}
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-		response.ErrNo  = 1002
-		response.ErrMsg = "invaild POST body"
+		response.ErrNo  = 1001
+		response.ErrMsg = "invalid POST body"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
 		return
@@ -141,7 +162,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	msg.CTime = time.Now().Unix()
 	ok, uid := auth.Instance.Auth(msg.Token)
 	if !ok {
-		response.ErrNo  = 1003
+		response.ErrNo  = 1002
 		response.ErrMsg = "auth failed"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
@@ -149,7 +170,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Infof("uid: (%s)", uid)
 	if !checkMessage(&msg) {
-		response.ErrNo  = 1004
+		response.ErrNo  = 1003
 		response.ErrMsg = "invaild Message"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
@@ -158,14 +179,15 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 
 	pkg, err := storage.Instance.HashGet(uid, msg.AppId)
 	if err != nil {
-		response.ErrNo  = 1005
+		response.ErrNo  = 1004
 		response.ErrMsg = "user auth failed"
 		b, _ := json.Marshal(response)
 		fmt.Fprintf(w, string(b))
 		return
 	}
+
+	response.Data = map[string]string{"result": "ok"}
 	msg.Pkg = string(pkg)
-	response.ErrMsg = ""
 	msgBox <- msg
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
@@ -248,7 +270,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/v1/push/message", postSendMsg)
 		http.HandleFunc("/v1/push/server", getPushServer)
-		http.HandleFunc("/v1/push/appid/gen", postGenId)
+		http.HandleFunc("/v1/push/appid", postGenId)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)
