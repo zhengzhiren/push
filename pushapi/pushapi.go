@@ -270,7 +270,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/v1/push/message", postSendMsg)
 		http.HandleFunc("/v1/push/server", getPushServer)
-		http.HandleFunc("/v1/push/appid/gen", postGenId)
+		http.HandleFunc("/v1/push/appid", postGenId)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)
