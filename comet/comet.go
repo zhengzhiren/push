@@ -55,7 +55,7 @@ func SimplePushMessage(appId string, rawMsg *storage.RawMessage) error {
 	msg := PushMessage{
 		MsgId: rawMsg.MsgId,
 		AppId: appId,
-		Type: rawMsg.PushType,
+		Type: rawMsg.MsgType,
 		Content: rawMsg.Content, //FIXME
 	}
 	switch rawMsg.PushType {

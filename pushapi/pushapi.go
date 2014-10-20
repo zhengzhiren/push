@@ -28,14 +28,12 @@ const (
 )
 
 const (
+	ERR_INTERNAL				= 1000
 	ERR_METHOD_NOT_ALLOWED		= 1001
 	ERR_BAD_REQUEST             = 1002
 	ERR_INVALID_PARAMS          = 1003
 	ERR_AUTHENTICATE			= 1004
 	ERR_AUTHORIZE				= 1005
-	ERR_SAVE_STORAGE			= 2001
-	ERR_NO_APPID				= 2002
-	ERR_NO_SERVER				= 2003
 )
 
 type Response struct {
@@ -95,12 +93,14 @@ func getPushServer(w http.ResponseWriter, r *http.Request) {
 	}
 	node := zk.GetComet()
 	if node == nil {
+		node = []string{}
+		/*
 		response.ErrNo = ERR_NO_SERVER
 		response.ErrMsg = "no active servers"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
 		//fmt.Fprintf(w, string(b))
-		return
+		return */
 	}
 	response.ErrNo = 0
 	//response.ErrMsg = ""
@@ -109,7 +109,7 @@ func getPushServer(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 }
 
-func postGenAppId(w http.ResponseWriter, r *http.Request) {
+func postCreateApp(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	if r.Method != "POST" {
 		response.ErrNo = ERR_METHOD_NOT_ALLOWED
@@ -158,7 +158,7 @@ func postGenAppId(w http.ResponseWriter, r *http.Request) {
 	}
 	tprefix := getPappID()
 	if tprefix == 0 {
-		response.ErrNo = ERR_NO_APPID
+		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "no avaiabled appid"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
@@ -170,7 +170,7 @@ func postGenAppId(w http.ResponseWriter, r *http.Request) {
 	appid := tappid[0:(len(tappid)-len(prefix))] + prefix
 	//log.Infof("appid [%s]", appid)
 	if err := setPackage(uid, appid, pkg); err != nil {
-		response.ErrNo = ERR_SAVE_STORAGE
+		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "save to storage failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
@@ -224,10 +224,10 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	//pkg, err := storage.Instance.HashGet(msg.UserId, msg.AppId)
 	if err != nil {
-		response.ErrNo  = ERR_AUTHORIZE
-		response.ErrMsg = "authorize failed"
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "load from storage failed"
 		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+		http.Error(w, string(b), 500)
 		return
 	}
 	var rawapp storage.RawApp
@@ -327,7 +327,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/v1/push/message", postSendMsg)
 		http.HandleFunc("/v1/push/server",	getPushServer)
-		http.HandleFunc("/v1/push/appid",	postGenAppId)
+		http.HandleFunc("/v1/push/app",	    postCreateApp)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)

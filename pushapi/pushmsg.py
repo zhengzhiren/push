@@ -12,7 +12,7 @@ d = {
 	"token": "102304f687BrX9DhNzo2LnEm1qjEpRrhhIqm1DqGyWbXQaEPUNMInqXcO7s2bChpFIeYz1Xq",
 	"userid" : userid,
 	"appid": appid,
-	"msg_type": 1,
+	"msg_type": 2,
 	"push_type": 1,
 	"push_params" : {
 		"userid" : ["letv_56855159"]
