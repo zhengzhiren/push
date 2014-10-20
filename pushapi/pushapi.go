@@ -37,8 +37,8 @@ const (
 )
 
 type Response struct {
-	ErrNo	int			`json:"errno"`
-	ErrMsg	string			`json:"errmsg"`
+	ErrNo	int				`json:"errno"`
+	ErrMsg	string			`json:"errmsg,omitempty"`
 	Data	interface{}		`json:"data,omitempty"`
 }
 
