@@ -326,8 +326,8 @@ func main() {
 	waitGroup.Add(1)
 	go func() {
 		http.HandleFunc("/v1/push/message", postSendMsg)
-		http.HandleFunc("/v1/push/server",	getPushServer)
-		http.HandleFunc("/v1/push/app",	    postCreateApp)
+		http.HandleFunc("/v1/server",	getPushServer)
+		http.HandleFunc("/v1/app",	    postCreateApp)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)
