@@ -107,7 +107,7 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
-				log.Infof("%p: send msg: (%d) (%s)", conn, pack.msg.Header.Type, pack.msg.Data)
+				log.Infof("%s: send msg: (%d) (%s)", client.devId, pack.msg.Header.Type, pack.msg.Data)
 				pack.client.nextSeq += 1
 				time.Sleep(1 * time.Second)
 			case <-client.ctrl:
