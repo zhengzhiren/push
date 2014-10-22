@@ -454,24 +454,37 @@ func waitInit(conn *net.TCPConn) *Client {
 	return client
 }
 
+func sendReply(client *Client, msgType uint8, v interface{}) {
+	b, _ := json.Marshal(v)
+	client.SendMessage(msgType, b, nil)
+}
+
 // app注册后，才可以接收消息
 func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: REGISTER body(%s)", client.devId, body)
 	var msg RegisterMessage
+	var reply RegisterReplyMessage
+
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		return -1
+		reply.Result = 1
+		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		return 0
 	}
 	if msg.AppId == "" {
 		log.Warnf("%s: appid is empty", client.devId)
-		return -1
+		reply.Result = 2
+		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		return 0
 	}
 
 	var rawapp storage.RawApp
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	if err != nil {
 		log.Warnf("%s: unknow appid (%s)", client.devId, msg.AppId)
-		return -1
+		reply.Result = 3
+		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		return 0
 	}
 	json.Unmarshal(b, &rawapp)
 
@@ -481,7 +494,9 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			return -1
+			reply.Result = 4
+			sendReply(client, MSG_REGISTER_REPLY, &reply)
+			return 0
 		}
 	}
 
@@ -489,14 +504,11 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	log.Debugf("%s: uid (%s), regid (%s)", client.devId, uid, regid)
 	if _, ok := client.regApps[regid]; ok {
 		// 已经在内存中，直接返回
-		reply := RegisterReplyMessage{
-			Result: 0,
-			AppId:  msg.AppId,
-			Pkg:    rawapp.Pkg,
-			RegId:  regid,
-		}
-		b, _ := json.Marshal(reply)
-		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+		reply.Result = 0
+		reply.AppId = msg.AppId
+		reply.Pkg = rawapp.Pkg
+		reply.RegId = regid
+		sendReply(client, MSG_REGISTER_REPLY, &reply)
 		return 0
 	}
 
@@ -504,25 +516,17 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	app := AMInstance.RegisterApp(client.devId, regid, msg.AppId, uid)
 	if app == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
-		reply := RegisterReplyMessage{
-			AppId:  msg.AppId,
-			RegId:  msg.RegId,
-			Result: -1,
-		}
-		b, _ := json.Marshal(reply)
-		client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+		reply.Result = 5
+		sendReply(client, MSG_REGISTER_REPLY, &reply)
 		return 0
 	}
 	// 记录到client管理的hash table中
 	client.regApps[regid] = app
-	reply := RegisterReplyMessage{
-		Result: 0,
-		AppId:  msg.AppId,
-		Pkg:    rawapp.Pkg,
-		RegId:  regid,
-	}
-	b, _ = json.Marshal(reply)
-	client.SendMessage(MSG_REGISTER_REPLY, b, nil)
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.Pkg = rawapp.Pkg
+	reply.RegId = regid
+	sendReply(client, MSG_REGISTER_REPLY, &reply)
 
 	// 处理离线消息
 	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
@@ -543,14 +547,20 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: UNREGISTER body(%s)", client.devId, body)
 	var msg UnregisterMessage
+	var reply UnregisterReplyMessage
+
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		return -1
+		reply.Result = 1
+		sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+		return 0
 	}
 
 	if msg.AppId == "" || msg.RegId == "" {
 		log.Warnf("%s: appid or regis is empty", client.devId)
-		return -1
+		reply.Result = 2
+		sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+		return 0
 	}
 
 	var uid string = ""
@@ -559,19 +569,17 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			return -1
+			reply.Result = 3
+			sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+			return 0
 		}
 	}
 	log.Debugf("%s: uid is (%s)", client.devId, uid)
 	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, uid)
-	result := 0
-	reply := RegisterReplyMessage{
-		AppId:  msg.AppId,
-		RegId:  msg.RegId,
-		Result: result,
-	}
-	b, _ := json.Marshal(reply)
-	client.SendMessage(MSG_UNREGISTER_REPLY, b, nil)
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.RegId = msg.RegId
+	sendReply(client, MSG_UNREGISTER_REPLY, &reply)
 	return 0
 }
 
