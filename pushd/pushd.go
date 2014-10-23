@@ -6,13 +6,10 @@ import (
 	"time"
 	"sync"
 	"strings"
-	"strconv"
-	"io/ioutil"
 	"os/signal"
 	"syscall"
 	"net/http"
 	"fmt"
-	"encoding/json"
 	"crypto/hmac"
 	"crypto/sha1"
 	"github.com/chenyf/push/conf"
@@ -73,88 +70,7 @@ type InputMsg struct {
 	Payload		string	`json:"payload"`
 }
 
-func postRouterCommand(w http.ResponseWriter, r *http.Request) {
-	var response CommandResponse
-	response.Status = 1
-	if r.Method != "POST" {
-		response.Error = "must using 'POST' method\n"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-	r.ParseForm()
-	if r.Body == nil {
-		response.Error = "missing POST data"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-	body, err := ioutil.ReadAll(r.Body)
-	r.Body.Close()
-	if err != nil {
-		response.Error = "invalid POST body"
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-
-	var input InputMsg
-	if err := json.Unmarshal(body, &input); err != nil {
-		response.Error = fmt.Sprintf("json decode failed, %s", err)
-		b, _ := json.Marshal(response)
-		fmt.Fprintf(w, string(b))
-		return
-	}
-
-	msg := comet.PushMessage{
-		MsgId : input.MsgId,
-		AppId : input.AppId,
-		Type : input.MsgType,
-		Content : input.Payload,
-	}
-	b, _ := json.Marshal(msg)
-	regid := ""
-	if input.PushType == 1 {
-		regid = input.RegId
-	}
-	comet.PushOutMessage(input.AppId, input.PushType, regid, b)
-}
-
-func getCommand(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	appid := r.FormValue("appid")
-	if appid == "" {
-		fmt.Fprintf(w, "missing appid\n")
-		return
-	}
-	push_type := 0
-	ptype := r.FormValue("ptype")
-	if ptype != "" {
-		push_type, _ = strconv.Atoi(ptype)
-	}
-	msgid := r.FormValue("msgid")
-	if msgid == "" {
-		fmt.Fprintf(w, "missing msgid\n")
-		return
-	}
-	mid, err := strconv.Atoi(msgid)
-	if err != nil {
-		fmt.Fprintf(w, "invalid msgid\n")
-		return
-	}
-	cmd := r.FormValue("cmd")
-	msg := comet.PushMessage{
-		MsgId : int64(mid),
-		AppId : appid,
-		Type : 0,
-		Content : cmd,
-	}
-	b, _ := json.Marshal(msg)
-	comet.PushOutMessage(appid, push_type, "", b)
-}
-
 func main() {
-
 	var (
 		//flRoot               = flag.String("g", "/tmp/echoserver", "Path to use as the root of the docker runtime")
 		//flDebug		= flag.Bool("D", false, "Enable debug mode")
@@ -249,8 +165,6 @@ func main() {
 	}
 	waitGroup.Add(1)
 	go func() {
-		http.HandleFunc("/router/command", postRouterCommand)
-		http.HandleFunc("/command", getCommand)
 		http.HandleFunc("/status", getStatus)
 		err := http.ListenAndServe(conf.Config.Web, nil)
 		if err != nil {
