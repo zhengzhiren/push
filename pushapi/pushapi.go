@@ -277,7 +277,7 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
-	if _, err := storage.Instance.SetMove("db_pkg_names", pkg); err != nil {
+	if _, err := storage.Instance.SetDel("db_pkg_names", pkg); err != nil {
 		response.ErrNo  = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)

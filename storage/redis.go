@@ -212,10 +212,10 @@ func (r *RedisStorage)SetAdd(key string, val string) (int, error) {
 	return ret, err
 }
 
-func (r *RedisStorage)SetMove(key string, val string) (int, error) {
-	ret, err := redis.Int(r.pool.Get().Do("SMOVE", key, val))
+func (r *RedisStorage)SetDel(key string, val string) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("SREM", key, val))
 	if err != nil {
-		log.Warnf("redis: SMOVE failed, (%s)", err)
+		log.Warnf("redis: SREM failed, (%s)", err)
 	}
 	return ret, err
 }

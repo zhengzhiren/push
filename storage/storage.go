@@ -60,7 +60,7 @@ type Storage interface {
 	IncrBy(key string, val int64) (int64, error)
 
 	SetAdd(key string, val string) (int, error)
-	SetMove(key string, val string) (int, error)
+	SetDel(key string, val string) (int, error)
 	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
 }
