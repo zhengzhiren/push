@@ -470,12 +470,14 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
 		reply.Result = 1
+		reply.AppId = msg.AppId
 		sendReply(client, MSG_REGISTER_REPLY, &reply)
 		return 0
 	}
 	if msg.AppId == "" {
 		log.Warnf("%s: appid is empty", client.devId)
 		reply.Result = 2
+		reply.AppId = msg.AppId
 		sendReply(client, MSG_REGISTER_REPLY, &reply)
 		return 0
 	}
@@ -485,6 +487,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	if err != nil {
 		log.Warnf("%s: unknow appid (%s)", client.devId, msg.AppId)
 		reply.Result = 3
+		reply.AppId = msg.AppId
 		sendReply(client, MSG_REGISTER_REPLY, &reply)
 		return 0
 	}
@@ -497,6 +500,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
 			reply.Result = 4
+			reply.AppId = msg.AppId
 			sendReply(client, MSG_REGISTER_REPLY, &reply)
 			return 0
 		}
@@ -519,6 +523,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	if app == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
 		reply.Result = 5
+		reply.AppId = msg.AppId
 		sendReply(client, MSG_REGISTER_REPLY, &reply)
 		return 0
 	}
@@ -554,13 +559,15 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	if err := json.Unmarshal(body, &msg); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
 		reply.Result = 1
+		reply.AppId = msg.AppId
 		sendReply(client, MSG_UNREGISTER_REPLY, &reply)
 		return 0
 	}
 
 	if msg.AppId == "" || msg.RegId == "" {
-		log.Warnf("%s: appid or regis is empty", client.devId)
+		log.Warnf("%s: appid or regid is empty", client.devId)
 		reply.Result = 2
+		reply.AppId = msg.AppId
 		sendReply(client, MSG_UNREGISTER_REPLY, &reply)
 		return 0
 	}
@@ -572,6 +579,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
 			reply.Result = 3
+			reply.AppId = msg.AppId
 			sendReply(client, MSG_UNREGISTER_REPLY, &reply)
 			return 0
 		}
