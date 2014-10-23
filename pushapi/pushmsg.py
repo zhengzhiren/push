@@ -15,7 +15,7 @@ d = {
 	"userid" : userid,
 	"appid": appid,
 	"msg_type": 2,
-	"push_type": 2,
+	"push_type": 1,
 	"push_params" : {
 		"regid" : ["8585ac99a37d66f704e47783665fde8aa507cb06", "d264058351b78d48693142605e0dbb5e25c524ba"]
 	},

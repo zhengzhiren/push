@@ -34,6 +34,7 @@ const (
 	ERR_INVALID_PARAMS          = 1003
 	ERR_AUTHENTICATE			= 1004
 	ERR_AUTHORIZE				= 1005
+	ERR_PKG_EXIST				= 2001
 )
 
 type Response struct {
@@ -76,13 +77,17 @@ func setPackage(uid string, appid string, pkg string) error {
 	}
 	b, _ := json.Marshal(rawapp)
 	if _, err := storage.Instance.HashSet("db_apps", appid, b); err != nil {
-		log.Infof("failed to set Package: %s", err)
+		log.Infof("failed to set 'db_apps': %s", err)
+		return err
+	}
+	if _, err := storage.Instance.SetAdd("db_pkg_names", pkg); err != nil {
+		log.Infof("failed to set 'db_pkg_names': %s", err)
 		return err
 	}
 	return nil
 }
 
-func getPushServer(w http.ResponseWriter, r *http.Request) {
+func serverHandler(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	if r.Method != "GET" {
 		response.ErrNo = ERR_METHOD_NOT_ALLOWED
@@ -109,15 +114,26 @@ func getPushServer(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 }
 
-func postCreateApp(w http.ResponseWriter, r *http.Request) {
+func appHandler(w http.ResponseWriter, r *http.Request) {
 	var response Response
-	if r.Method != "POST" {
-		response.ErrNo = ERR_METHOD_NOT_ALLOWED
-		response.ErrMsg = "Method not allowed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 405)
-		return
+	switch r.Method {
+		case "POST":
+			addApp(w, r)
+			return
+		case "DELETE":
+			delApp(w, r)
+			return
+		default:
 	}
+	response.ErrNo = ERR_METHOD_NOT_ALLOWED
+	response.ErrMsg = "Method not allowed"
+	b, _ := json.Marshal(response)
+	http.Error(w, string(b), 405)
+	return
+}
+
+func addApp(w http.ResponseWriter, r *http.Request) {
+	var response Response
 	var data map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		response.ErrNo = ERR_BAD_REQUEST
@@ -127,7 +143,6 @@ func postCreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pkg, pkg_ok := data["pkg"]
-	//uid, uid_ok := data["userid"]
 	if !pkg_ok {
 		response.ErrNo  = ERR_INVALID_PARAMS
 		response.ErrMsg = "missing 'pkg'"
@@ -164,6 +179,22 @@ func postCreateApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
+	n, err := storage.Instance.SetIsMember("db_pkg_names", pkg)
+	if err != nil {
+		response.ErrNo = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	if n > 0 {
+		response.ErrNo = ERR_PKG_EXIST
+		response.ErrMsg = "package exist"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+
 	prefix := strconv.FormatInt(tprefix, 10)
 	tappid := strings.Replace(uuid.New(), "-", "", -1)
 	//log.Infof("appid [%s], prefix [%s]", tappid, prefix)
@@ -171,19 +202,94 @@ func postCreateApp(w http.ResponseWriter, r *http.Request) {
 	//log.Infof("appid [%s]", appid)
 	if err := setPackage(uid, appid, pkg); err != nil {
 		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "save to storage failed"
+		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
 		return
 	}
 	response.ErrNo = 0
-	//response.ErrMsg = ""
 	response.Data = map[string]string{"appid": appid}
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
 
-func postSendMsg(w http.ResponseWriter, r *http.Request) {
+func delApp(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	var data map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		response.ErrNo = ERR_BAD_REQUEST
+		response.ErrMsg = "Bad request"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	pkg, ok1 := data["pkg"]
+	appid, ok2 := data["appid"]
+	if !ok1 || !ok2 {
+		response.ErrNo  = ERR_INVALID_PARAMS
+		response.ErrMsg = "missing 'pkg' or 'appid'"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	var ok bool
+	var uid string
+	uid, ok = data["userid"]
+	if !ok {
+		token, ok := data["token"]
+		if !ok {
+			response.ErrNo  = ERR_INVALID_PARAMS
+			response.ErrMsg = "missing 'uid' or 'token'"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 400)
+			return
+		}
+		ok, uid = auth.Instance.Auth(token)
+		if !ok {
+			response.ErrNo  = ERR_AUTHENTICATE
+			response.ErrMsg = "authenticate failed"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 401)
+			return
+		}
+	}
+	b, err := storage.Instance.HashGet("db_apps", appid)
+	if err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	var rawapp storage.RawApp
+	json.Unmarshal(b, &rawapp)
+	if rawapp.UserId != uid {
+		response.ErrNo  = ERR_AUTHORIZE
+		response.ErrMsg = "authorize failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	if _, err := storage.Instance.HashDel("db_apps", appid); err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	if _, err := storage.Instance.SetMove("db_pkg_names", pkg); err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	response.ErrNo = 0
+	b, _ = json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
+func messageHandler(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	if r.Method != "POST" {
 		response.ErrNo = ERR_METHOD_NOT_ALLOWED
@@ -192,7 +298,6 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 405)
 		return
 	}
-
 	msg := storage.RawMessage{}
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		response.ErrNo = ERR_BAD_REQUEST
@@ -225,7 +330,7 @@ func postSendMsg(w http.ResponseWriter, r *http.Request) {
 	//pkg, err := storage.Instance.HashGet(msg.UserId, msg.AppId)
 	if err != nil {
 		response.ErrNo  = ERR_INTERNAL
-		response.ErrMsg = "load from storage failed"
+		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
 		return
@@ -325,9 +430,9 @@ func main() {
 
 	waitGroup.Add(1)
 	go func() {
-		http.HandleFunc("/v1/push/message", postSendMsg)
-		http.HandleFunc("/v1/server",	getPushServer)
-		http.HandleFunc("/v1/app",	    postCreateApp)
+		http.HandleFunc("/api/v1/message",		messageHandler)
+		http.HandleFunc("/api/v1/server",		serverHandler)
+		http.HandleFunc("/api/v1/app",			appHandler)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)

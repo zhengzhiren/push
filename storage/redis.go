@@ -220,6 +220,15 @@ func (r *RedisStorage)SetMove(key string, val string) (int, error) {
 	return ret, err
 }
 
+func (r *RedisStorage)SetIsMember(key string, val string) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("SISMEMBER", key, val))
+	if err != nil {
+		log.Warnf("redis: SISMEMBER failed, (%s)", err)
+	}
+	return ret, err
+
+}
+
 func (r *RedisStorage)SetMembers(key string) ([]string, error) {
 	ret, err := redis.Strings(r.pool.Get().Do("SMEMBERS", key))
 	if err != nil {

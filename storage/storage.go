@@ -61,6 +61,7 @@ type Storage interface {
 
 	SetAdd(key string, val string) (int, error)
 	SetMove(key string, val string) (int, error)
+	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
 }
 
