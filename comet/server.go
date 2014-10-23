@@ -159,10 +159,8 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 }
 
 func (this *Server) Run(listener *net.TCPListener) {
-	this.waitGroup.Add(1)
 	defer func() {
 		listener.Close()
-		this.waitGroup.Done()
 	}()
 
 	//go this.dealSpamConn()

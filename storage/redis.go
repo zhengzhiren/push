@@ -151,7 +151,11 @@ func (r *RedisStorage)HashGet(db string, key string) ([]byte, error) {
 		return nil, err
 	}
 	if r != nil {
-		return redis.Bytes(ret, nil)
+		ret, err :=redis.Bytes(ret, nil)
+		if err != nil {
+			log.Warnf("redis: convert to bytes failed (%s)", err)
+		}
+		return ret, err
 	}
 	return nil, nil
 }
