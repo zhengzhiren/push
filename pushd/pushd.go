@@ -131,7 +131,7 @@ func main() {
 	}
 
 	if conf.Config.ZooKeeper.Enable {
-		err = zk.InitZk(); if err != nil {
+		if err = zk.InitZk(); err != nil {
 			log.Critical(err)
 			os.Exit(1)
 		}
