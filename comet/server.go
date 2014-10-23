@@ -225,10 +225,12 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	// handle register first
 	if this.clientCount >= 10000 {
 		log.Warnf("too more client, refuse")
+		conn.Close()
 		return
 	}
 	client := waitInit(conn)
 	if client == nil {
+		conn.Close()
 		return
 	}
 	this.clientCount++
