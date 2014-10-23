@@ -137,11 +137,19 @@ func (r *RedisStorage)RemoveDevice(devId string) {
 }
 
 func (r *RedisStorage)HashGetAll(db string) ([]string, error) {
-	ret, err := redis.Strings(r.pool.Get().Do("HGETALL", db))
+	ret, err := r.pool.Get().Do("HGETALL", db)
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
+		return nil, err
 	}
-	return ret, err
+	if ret != nil {
+		ret, err := redis.Strings(ret, nil)
+		if err != nil {
+			log.Warnf("redis: convert to strings failed (%s)", err)
+		}
+		return ret, err
+	}
+	return nil, nil
 }
 
 func (r *RedisStorage)HashGet(db string, key string) ([]byte, error) {
@@ -150,7 +158,7 @@ func (r *RedisStorage)HashGet(db string, key string) ([]byte, error) {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil, err
 	}
-	if r != nil {
+	if ret != nil {
 		ret, err :=redis.Bytes(ret, nil)
 		if err != nil {
 			log.Warnf("redis: convert to bytes failed (%s)", err)
