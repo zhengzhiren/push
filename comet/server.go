@@ -62,11 +62,15 @@ func NewServer() *Server {
 	}
 }
 
-func (client *Client) SendMessage(msgType uint8, body []byte, reply chan *Message) {
+func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply chan *Message) {
+	if seq == 0 {
+		seq = client.nextSeq
+		client.nextSeq++
+	}
 	header := Header{
 		Type: msgType,
 		Ver:  0,
-		Seq:  0,
+		Seq:  seq,
 		Len:  uint32(len(body)),
 	}
 	msg := &Message{
@@ -90,7 +94,7 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
 		devId:      devid,
 		regApps:    make(map[string]*App),
-		nextSeq:    1,
+		nextSeq:    100,
 		lastActive: time.Now(),
 		outMsgs:    make(chan *Pack, 100),
 		ctrl:       make(chan bool),
@@ -109,7 +113,7 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 				conn.Write(pack.msg.Data)
 				log.Infof("%s: send msg: (%d) (%s)", client.devId, pack.msg.Header.Type, pack.msg.Data)
 				pack.client.nextSeq += 1
-				time.Sleep(1 * time.Second)
+				time.Sleep(10 * time.Millisecond)
 			case <-client.ctrl:
 				//log.Infof("%p: leave send routine", conn)
 				return
@@ -428,13 +432,13 @@ func waitInit(conn *net.TCPConn) *Client {
 			log.Debugf("%s: load app (%s) (%s)", devid, info.AppId, regid)
 			app := AMInstance.AddApp(client.devId, regid, info)
 			client.regApps[regid] = app
-			reply.Apps = append(reply.Apps, Base2{info.AppId, regid, ""})
+			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:""})
 		}
 	}
 
 	// 先发送响应消息
 	body, _ := json.Marshal(&reply)
-	client.SendMessage(MSG_INIT_REPLY, body, nil)
+	client.SendMessage(MSG_INIT_REPLY, header.Seq, body, nil)
 
 	// 处理离线消息
 	for _, app := range(client.regApps) {
@@ -448,15 +452,15 @@ func waitInit(conn *net.TCPConn) *Client {
 				Content: rmsg.Content,
 			}
 			b, _ := json.Marshal(msg)
-			client.SendMessage(MSG_PUSH, b, nil)
+			client.SendMessage(MSG_PUSH, 0, b, nil)
 		}
 	}
 	return client
 }
 
-func sendReply(client *Client, msgType uint8, v interface{}) {
+func sendReply(client *Client, msgType uint8, seq uint32, v interface{}) {
 	b, _ := json.Marshal(v)
-	client.SendMessage(msgType, b, nil)
+	client.SendMessage(msgType, seq, b, nil)
 }
 
 // app注册后，才可以接收消息
@@ -469,14 +473,14 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
 		reply.Result = 1
 		reply.AppId = msg.AppId
-		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 	if msg.AppId == "" {
 		log.Warnf("%s: appid is empty", client.devId)
 		reply.Result = 2
 		reply.AppId = msg.AppId
-		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 
@@ -484,9 +488,9 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	if err != nil {
 		log.Warnf("%s: unknow appid (%s)", client.devId, msg.AppId)
-		reply.Result = 3
+		reply.Result = 4
 		reply.AppId = msg.AppId
-		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 	json.Unmarshal(b, &rawapp)
@@ -497,9 +501,9 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			reply.Result = 4
+			reply.Result = 3
 			reply.AppId = msg.AppId
-			sendReply(client, MSG_REGISTER_REPLY, &reply)
+			sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 			return 0
 		}
 	}
@@ -512,7 +516,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		reply.AppId = msg.AppId
 		reply.Pkg = rawapp.Pkg
 		reply.RegId = regid
-		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 
@@ -522,7 +526,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		log.Warnf("%s: AMInstance register app failed", client.devId)
 		reply.Result = 5
 		reply.AppId = msg.AppId
-		sendReply(client, MSG_REGISTER_REPLY, &reply)
+		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 	// 记录到client管理的hash table中
@@ -531,7 +535,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	reply.AppId = msg.AppId
 	reply.Pkg = rawapp.Pkg
 	reply.RegId = regid
-	sendReply(client, MSG_REGISTER_REPLY, &reply)
+	sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 
 	// 处理离线消息
 	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
@@ -544,7 +548,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 			Content: rmsg.Content,
 		}
 		b, _ := json.Marshal(msg)
-		client.SendMessage(MSG_PUSH, b, nil)
+		client.SendMessage(MSG_PUSH, 0, b, nil)
 	}
 	return 0
 }
@@ -558,7 +562,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
 		reply.Result = 1
 		reply.AppId = msg.AppId
-		sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+		sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 
@@ -566,7 +570,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		log.Warnf("%s: appid or regid is empty", client.devId)
 		reply.Result = 2
 		reply.AppId = msg.AppId
-		sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+		sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
 		return 0
 	}
 
@@ -578,7 +582,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 			log.Warnf("%s: auth failed", client.devId)
 			reply.Result = 3
 			reply.AppId = msg.AppId
-			sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+			sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
 			return 0
 		}
 	}
@@ -587,7 +591,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	reply.Result = 0
 	reply.AppId = msg.AppId
 	reply.RegId = msg.RegId
-	sendReply(client, MSG_UNREGISTER_REPLY, &reply)
+	sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
 	return 0
 }
 

@@ -16,7 +16,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
 				log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
-				client.SendMessage(MSG_PUSH, msg, nil)
+				client.SendMessage(MSG_PUSH, 0, msg, nil)
 			}
 		}
 	case 2: //regid
@@ -25,7 +25,7 @@ func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
 			client := DevicesMap.Get(app.DevId).(*Client)
 			if client != nil {
 				log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, recvUsers)
-				client.SendMessage(MSG_PUSH, msg, nil)
+				client.SendMessage(MSG_PUSH, 0, msg, nil)
 			}
 		}
 	case 3:	//userid
@@ -47,7 +47,7 @@ func pushMessage(appId string, app *App, msg *PushMessage) bool {
 		log.Infof("failed to encode msg %v", msg)
 		return false
 	}
-	client.SendMessage(MSG_PUSH, b, nil)
+	client.SendMessage(MSG_PUSH, 0, b, nil)
 	return true
 }
 
