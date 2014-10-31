@@ -452,7 +452,6 @@ func waitInit(conn *net.TCPConn) *Client {
 			switch rawMsg.PushType {
 			case 1:
 				ok = true
-				break
 			case 2:
 				for _, regid := range(rawMsg.PushParams.RegId) {
 					if app.RegId == regid {
@@ -460,9 +459,17 @@ func waitInit(conn *net.TCPConn) *Client {
 						break
 					}
 				}
-				break
 			case 3:
-				break
+				/*
+				if regUid == "" {
+					continue
+				}
+				for _, uid := range(rawMsg.PushParams.UserId) {
+					if regUid == uid {
+						ok = true
+						break
+					}
+				}*/
 			default:
 				continue
 			}
@@ -519,10 +526,10 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 	json.Unmarshal(b, &rawapp)
 
-	var uid string = ""
+	var regUid string = ""
 	var ok bool
 	if msg.Token != "" {
-		ok, uid = auth.Instance.Auth(msg.Token)
+		ok, regUid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
 			reply.Result = 3
@@ -532,8 +539,8 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		}
 	}
 
-	regid := RegId(client.devId, msg.AppId, uid)
-	log.Debugf("%s: uid (%s), regid (%s)", client.devId, uid, regid)
+	regid := RegId(client.devId, msg.AppId, regUid)
+	log.Debugf("%s: uid (%s), regid (%s)", client.devId, regUid, regid)
 	if _, ok := client.regApps[regid]; ok {
 		// 已经在内存中，直接返回
 		reply.Result = 0
@@ -545,7 +552,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 
 	// 到app管理中心去注册
-	app := AMInstance.RegisterApp(client.devId, regid, msg.AppId, uid)
+	app := AMInstance.RegisterApp(client.devId, regid, msg.AppId, regUid)
 	if app == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
 		reply.Result = 5
@@ -569,7 +576,6 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		switch rawMsg.PushType {
 		case 1:
 			ok = true
-			break
 		case 2:
 			for _, regid := range(rawMsg.PushParams.RegId) {
 				if app.RegId == regid {
@@ -577,9 +583,16 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 					break
 				}
 			}
-			break
 		case 3:
-			break
+			if regUid == "" {
+				continue
+			}
+			for _, uid := range(rawMsg.PushParams.UserId) {
+				if regUid == uid {
+					ok = true
+					break
+				}
+			}
 		default:
 			continue
 		}
