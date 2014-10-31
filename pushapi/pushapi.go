@@ -316,6 +316,13 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	var ok bool
 	uid := msg.UserId
 	if uid == "" {
+		if msg.Token == "" {
+			response.ErrNo  = ERR_INVALID_PARAMS
+			response.ErrMsg = "missing 'token' or 'userid'"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 400)
+			return
+		}
 		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			response.ErrNo  = ERR_AUTHENTICATE

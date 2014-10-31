@@ -430,9 +430,15 @@ func waitInit(conn *net.TCPConn) *Client {
 		infos := AMInstance.LoadAppInfosByDevice(devid)
 		for regid, info := range infos {
 			log.Debugf("%s: load app (%s) (%s)", devid, info.AppId, regid)
+			b, err := storage.Instance.HashGet("db_apps", info.AppId)
+			if err != nil {
+				continue
+			}
+			var rawapp storage.RawApp
+			json.Unmarshal(b, &rawapp)
 			app := AMInstance.AddApp(client.devId, regid, info)
 			client.regApps[regid] = app
-			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:""})
+			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:rawapp.Pkg})
 		}
 	}
 
