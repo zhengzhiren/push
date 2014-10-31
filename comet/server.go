@@ -448,7 +448,7 @@ func waitInit(conn *net.TCPConn) *Client {
 
 	// 处理离线消息
 	for _, app := range(client.regApps) {
-		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.LastMsgId)
+		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.RegId, app.LastMsgId)
 		log.Debugf("%s: get %d offline messages: appid(%s) (>%d)", client.devId, len(msgs), app.AppId, app.LastMsgId)
 		for _, rmsg := range msgs {
 			msg := PushMessage{
@@ -544,7 +544,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 
 	// 处理离线消息
-	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, app.LastMsgId)
+	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, regid, app.LastMsgId)
 	log.Debugf("%s: get %d offline messages: (%s) (>%d)", client.devId, len(msgs), msg.AppId, app.LastMsgId)
 	for _, rmsg := range msgs {
 		msg := PushMessage{
