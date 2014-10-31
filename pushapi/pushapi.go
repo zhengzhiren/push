@@ -45,12 +45,20 @@ type Response struct {
 
 var msgBox = make(chan storage.RawMessage, 10)
 
-func checkMessage(m *storage.RawMessage) bool {
-	ret := true
-	if m.AppId == "" || m.Content == "" || m.MsgType == 0 || m.PushType == 0 {
-		ret = false
+func checkMessage(m *storage.RawMessage) (bool, string) {
+	if m.AppId == "" {
+		return false, "missing 'appid'"
 	}
-	return ret
+	if m.Content == "" {
+		return false, "missing 'content'"
+	}
+	if m.MsgType < 1 || m.MsgType > 2 {
+		return false, "invalid 'msg_type'"
+	}
+	if m.PushType < 1 || m.PushType > 5 {
+		return false, "invalid 'push_type'"
+	}
+	return true, ""
 }
 
 func setPappID() error {
@@ -306,14 +314,15 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	if !checkMessage(&msg) {
+	var ok bool
+	ok, desc := checkMessage(&msg)
+	if !ok {
 		response.ErrNo  = ERR_INVALID_PARAMS
-		response.ErrMsg = "invaild paras"
+		response.ErrMsg = desc
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
 		return
 	}
-	var ok bool
 	uid := msg.UserId
 	if uid == "" {
 		if msg.Token == "" {
