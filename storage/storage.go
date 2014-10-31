@@ -38,6 +38,7 @@ type Storage interface {
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
 	HashSet(db string, key string, val []byte) (int, error)
+	HashExists(db string, key string) (int, error)
 	HashSetNotExist(db string, key string, val []byte) (int, error)
 	HashDel(db string, key string) (int, error)
 	HashIncrBy(db string, key string, val int64) (int64, error)

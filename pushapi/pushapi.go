@@ -88,8 +88,8 @@ func setPackage(uid string, appid string, pkg string) error {
 		log.Infof("failed to set 'db_apps': %s", err)
 		return err
 	}
-	if _, err := storage.Instance.SetAdd("db_pkg_names", pkg); err != nil {
-		log.Infof("failed to set 'db_pkg_names': %s", err)
+	if _, err := storage.Instance.HashSet("db_packages", pkg, []byte(appid)); err != nil {
+		log.Infof("failed to set 'db_packages': %s", err)
 		return err
 	}
 	return nil
@@ -145,6 +145,8 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 		case "DELETE":
 			delApp(w, r)
 			return
+		case "GET":
+			getApp(w, r)
 		default:
 	}
 	response.ErrNo = ERR_METHOD_NOT_ALLOWED
@@ -152,6 +154,46 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 	b, _ := json.Marshal(response)
 	http.Error(w, string(b), 405)
 	return
+}
+
+func getApp(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	var data map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		response.ErrNo = ERR_BAD_REQUEST
+		response.ErrMsg = "Bad request"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	pkg, ok := data["pkg"]
+	if !ok {
+		response.ErrNo  = ERR_INVALID_PARAMS
+		response.ErrMsg = "missing 'pkg'"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	appid, err := storage.Instance.HashGet("db_packages", pkg)
+	if err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	info, err := storage.Instance.HashGet("db_apps", string(appid))
+	if err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	response.ErrNo = 0
+	response.Data = info
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
 }
 
 func addApp(w http.ResponseWriter, r *http.Request) {
@@ -201,7 +243,7 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
-	n, err := storage.Instance.SetIsMember("db_pkg_names", pkg)
+	n, err := storage.Instance.HashExists("db_packages", pkg)
 	if err != nil {
 		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"

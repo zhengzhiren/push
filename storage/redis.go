@@ -176,6 +176,14 @@ func (r *RedisStorage)HashSet(db string, key string, val []byte) (int, error) {
 	return ret, err
 }
 
+func (r *RedisStorage)HashExists(db string, key string) (int, error) {
+	ret, err := redis.Int(r.pool.Get().Do("HEXISTS", db, key))
+	if err != nil {
+		log.Warnf("redis: HEXISTS failed (%s)", err)
+	}
+	return ret, err
+}
+
 func (r *RedisStorage)HashSetNotExist(db string, key string, val []byte) (int, error) {
 	ret, err := redis.Int(r.pool.Get().Do("HSETNX", db, key, val))
 	if err != nil {
