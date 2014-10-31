@@ -7,35 +7,6 @@ import (
 	"github.com/chenyf/push/storage"
 )
 
-func PushOutMessage(appId string, pushType int, recvUsers string, msg []byte) {
-	// get current online apps
-	switch pushType {
-	case 1: //broadcast
-		apps := AMInstance.GetApps(appId)
-		for _, app := range(apps) {
-			client := DevicesMap.Get(app.DevId).(*Client)
-			if client != nil {
-				log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
-				client.SendMessage(MSG_PUSH, 0, msg, nil)
-			}
-		}
-	case 2: //regid
-		app := AMInstance.GetApp(appId, recvUsers)
-		if app != nil {
-			client := DevicesMap.Get(app.DevId).(*Client)
-			if client != nil {
-				log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, recvUsers)
-				client.SendMessage(MSG_PUSH, 0, msg, nil)
-			}
-		}
-	case 3:	//userid
-		//apps := AMInstance.GetAppsByUser(appId, recvUsers)
-	case 4: //alias
-	case 5: //tag list
-	default:
-	}
-}
-
 func pushMessage(appId string, app *App, msg *PushMessage) bool {
 	client := DevicesMap.Get(app.DevId).(*Client)
 	if client == nil {
@@ -51,7 +22,7 @@ func pushMessage(appId string, app *App, msg *PushMessage) bool {
 	return true
 }
 
-func SimplePushMessage(appId string, rawMsg *storage.RawMessage) error {
+func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 	msg := PushMessage{
 		MsgId: rawMsg.MsgId,
 		AppId: appId,

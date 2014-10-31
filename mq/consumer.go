@@ -126,7 +126,7 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			continue
 		}
 		rmsg := storage.Instance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))
-		comet.SimplePushMessage(m["appid"].(string), rmsg)
+		comet.PushMessages(m["appid"].(string), rmsg)
 	}
 	log.Infof("handle: deliveries channel closed")
 	done <- nil
