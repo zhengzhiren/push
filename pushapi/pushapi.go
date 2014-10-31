@@ -107,16 +107,8 @@ func serverHandler(w http.ResponseWriter, r *http.Request) {
 	node := zk.GetComet()
 	if node == nil {
 		node = []string{}
-		/*
-		response.ErrNo = ERR_NO_SERVER
-		response.ErrMsg = "no active servers"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
-		//fmt.Fprintf(w, string(b))
-		return */
 	}
 	response.ErrNo = 0
-	//response.ErrMsg = ""
 	response.Data = map[string][]string{"servers": node}
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
@@ -147,6 +139,7 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		case "GET":
 			getApp(w, r)
+			return
 		default:
 	}
 	response.ErrNo = ERR_METHOD_NOT_ALLOWED
@@ -158,16 +151,8 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 
 func getApp(w http.ResponseWriter, r *http.Request) {
 	var response Response
-	var data map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		response.ErrNo = ERR_BAD_REQUEST
-		response.ErrMsg = "Bad request"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	pkg, ok := data["pkg"]
-	if !ok {
+	pkg := r.FormValue("pkg")
+	if pkg == "" {
 		response.ErrNo  = ERR_INVALID_PARAMS
 		response.ErrMsg = "missing 'pkg'"
 		b, _ := json.Marshal(response)
@@ -182,16 +167,8 @@ func getApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
-	info, err := storage.Instance.HashGet("db_apps", string(appid))
-	if err != nil {
-		response.ErrNo  = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
-		return
-	}
 	response.ErrNo = 0
-	response.Data = info
+	response.Data = fmt.Sprintf("{\"appid\":%s}", appid)
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
@@ -261,9 +238,7 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 
 	prefix := strconv.FormatInt(tprefix, 10)
 	tappid := strings.Replace(uuid.New(), "-", "", -1)
-	//log.Infof("appid [%s], prefix [%s]", tappid, prefix)
 	appid := tappid[0:(len(tappid)-len(prefix))] + prefix
-	//log.Infof("appid [%s]", appid)
 	if err := setPackage(uid, appid, pkg); err != nil {
 		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
@@ -280,23 +255,24 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 func delApp(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	var data map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+	var b []byte
+	var err error
+	var ok bool
+	if err = json.NewDecoder(r.Body).Decode(&data); err != nil {
 		response.ErrNo = ERR_BAD_REQUEST
 		response.ErrMsg = "Bad request"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
 		return
 	}
-	pkg, ok1 := data["pkg"]
-	appid, ok2 := data["appid"]
-	if !ok1 || !ok2 {
+	pkg, ok := data["pkg"]
+	if ok {
 		response.ErrNo  = ERR_INVALID_PARAMS
-		response.ErrMsg = "missing 'pkg' or 'appid'"
+		response.ErrMsg = "missing 'pkg'"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
 		return
 	}
-	var ok bool
 	var uid string
 	uid, ok = data["userid"]
 	if !ok {
@@ -317,7 +293,7 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	b, err := storage.Instance.HashGet("db_apps", appid)
+	b, err = storage.Instance.HashGet("db_packages", pkg)
 	if err != nil {
 		response.ErrNo  = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
@@ -325,6 +301,16 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
+	appid := string(b)
+	b, err = storage.Instance.HashGet("db_apps", appid)
+	if err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
 	if rawapp.UserId != uid {
@@ -334,14 +320,15 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	if _, err := storage.Instance.HashDel("db_apps", appid); err != nil {
+
+	if _, err = storage.Instance.HashDel("db_apps", appid); err != nil {
 		response.ErrNo  = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
 		return
 	}
-	if _, err := storage.Instance.SetDel("db_pkg_names", pkg); err != nil {
+	if _, err = storage.Instance.HashDel("db_packages", pkg); err != nil {
 		response.ErrNo  = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
@@ -353,15 +340,8 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 }
 
-func messageHandler(w http.ResponseWriter, r *http.Request) {
+func addMessage(w http.ResponseWriter, r *http.Request) {
 	var response Response
-	if r.Method != "POST" {
-		response.ErrNo = ERR_METHOD_NOT_ALLOWED
-		response.ErrMsg = "Method not allowed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 405)
-		return
-	}
 	msg := storage.RawMessage{}
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		response.ErrNo = ERR_BAD_REQUEST
@@ -397,9 +377,7 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	log.Infof("uid: (%s)", uid)
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
-	//pkg, err := storage.Instance.HashGet(msg.UserId, msg.AppId)
 	if err != nil {
 		response.ErrNo  = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
@@ -416,16 +394,58 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-
+	msgid := getMsgID()
+	msg.MsgId = msgid
 	response.ErrNo = 0
-	//response.ErrMsg = ""
-	//response.Data = map[string]string{"result": "ok"}
+	response.Data = fmt.Sprintf("{\"msgid\":%d}", msgid)
 	msg.CTime = time.Now().Unix()
-	//msg.Pkg = string(pkg)
 	msgBox <- msg
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
+
+func getMessage(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	msgid := r.FormValue("msgid")
+	if msgid == "" {
+		response.ErrNo  = ERR_INVALID_PARAMS
+		response.ErrMsg = "missing 'msgid'"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	b, err := storage.Instance.HashGet("db_msg_stat", msgid)
+	if err != nil {
+		response.ErrNo  = ERR_INTERNAL
+		response.ErrMsg = "storage I/O failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
+	response.ErrNo = 0
+	response.Data = fmt.Sprintf("{\"send\":%s}", b)
+	b, _ = json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
+func messageHandler(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	switch r.Method {
+		case "POST":
+			addMessage(w, r)
+			return
+		case "GET":
+			getMessage(w, r)
+			return
+		default:
+	}
+	response.ErrNo = ERR_METHOD_NOT_ALLOWED
+	response.ErrMsg = "Method not allowed"
+	b, _ := json.Marshal(response)
+	http.Error(w, string(b), 405)
+	return
+}
+
 
 func setMsgID() error {
 	if _, err := storage.Instance.SetNotExist(MsgID, []byte("0")); err != nil {
@@ -519,22 +539,13 @@ func main() {
 					os.Exit(0)
 				}
 
-				mid := getMsgID()
-				if mid == 0 {
-					log.Infof("invaild MsgID")
-					continue
-				}
-
-				m.MsgId = mid
-				log.Infof("msg [%v] %v", mid, m)
-
 				v, err := json.Marshal(m)
 				if err != nil {
 					log.Infof("failed to encode with Msg:", err)
 					continue
 				}
 
-				if _, err := storage.Instance.HashSet(m.AppId, strconv.FormatInt(mid, 10), v); err != nil {
+				if _, err := storage.Instance.HashSet(m.AppId, strconv.FormatInt(m.MsgId, 10), v); err != nil {
 					log.Infof("failed to put Msg into redis:", err)
 					continue
 				}
@@ -542,7 +553,7 @@ func main() {
 				if m.Options.TTL > 0 {
 					ttl = m.Options.TTL
 				}
-				_, err = storage.Instance.HashSet(m.AppId+"_offline", fmt.Sprintf("%v_%v", mid, ttl+m.CTime), v)
+				_, err = storage.Instance.HashSet(m.AppId+"_offline", fmt.Sprintf("%v_%v", m.MsgId, ttl+m.CTime), v)
 				if err != nil {
 					log.Infof("failed to put offline Msg into redis:", err)
 					continue
@@ -550,7 +561,7 @@ func main() {
 
 				d := map[string]interface{}{
 					"appid": m.AppId,
-					"msgid": mid,
+					"msgid": m.MsgId,
 				}
 				data, err := json.Marshal(d)
 				if err != nil {
