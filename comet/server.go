@@ -447,15 +447,36 @@ func waitInit(conn *net.TCPConn) *Client {
 	for _, app := range(client.regApps) {
 		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.RegId, app.LastMsgId)
 		log.Debugf("%s: get %d offline messages: appid(%s) (>%d)", client.devId, len(msgs), app.AppId, app.LastMsgId)
-		for _, rmsg := range msgs {
-			msg := PushMessage{
-				MsgId:   rmsg.MsgId,
-				AppId:   rmsg.AppId,
-				Type:    rmsg.MsgType,
-				Content: rmsg.Content,
+		for _, rawMsg := range msgs {
+			ok := false
+			switch rawMsg.PushType {
+			case 1:
+				ok = true
+				break
+			case 2:
+				for _, regid := range(rawMsg.PushParams.RegId) {
+					if app.RegId == regid {
+						ok = true
+						break
+					}
+				}
+				break
+			case 3:
+				break
+			default:
+				continue
 			}
-			b, _ := json.Marshal(msg)
-			client.SendMessage(MSG_PUSH, 0, b, nil)
+
+			if ok {
+				msg := PushMessage{
+					MsgId:   rawMsg.MsgId,
+					AppId:   rawMsg.AppId,
+					Type:    rawMsg.MsgType,
+					Content: rawMsg.Content,
+				}
+				b, _ := json.Marshal(msg)
+				client.SendMessage(MSG_PUSH, 0, b, nil)
+			}
 		}
 	}
 	return client
@@ -543,15 +564,36 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	// 处理离线消息
 	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, regid, app.LastMsgId)
 	log.Debugf("%s: get %d offline messages: (%s) (>%d)", client.devId, len(msgs), msg.AppId, app.LastMsgId)
-	for _, rmsg := range msgs {
-		msg := PushMessage{
-			MsgId:   rmsg.MsgId,
-			AppId:   rmsg.AppId,
-			Type:    rmsg.MsgType,
-			Content: rmsg.Content,
+	for _, rawMsg := range msgs {
+		ok := false
+		switch rawMsg.PushType {
+		case 1:
+			ok = true
+			break
+		case 2:
+			for _, regid := range(rawMsg.PushParams.RegId) {
+				if app.RegId == regid {
+					ok = true
+					break
+				}
+			}
+			break
+		case 3:
+			break
+		default:
+			continue
 		}
-		b, _ := json.Marshal(msg)
-		client.SendMessage(MSG_PUSH, 0, b, nil)
+
+		if ok {
+			msg := PushMessage{
+				MsgId:   rawMsg.MsgId,
+				AppId:   rawMsg.AppId,
+				Type:    rawMsg.MsgType,
+				Content: rawMsg.Content,
+			}
+			b, _ := json.Marshal(msg)
+			client.SendMessage(MSG_PUSH, 0, b, nil)
+		}
 	}
 	return 0
 }

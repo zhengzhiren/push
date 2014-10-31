@@ -116,7 +116,7 @@ func serverHandler(w http.ResponseWriter, r *http.Request) {
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	var response Response
-	if r.Method != "GET" {
+	if r.Method != "POST" {
 		response.ErrNo = ERR_METHOD_NOT_ALLOWED
 		response.ErrMsg = "Method not allowed"
 		b, _ := json.Marshal(response)
