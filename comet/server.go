@@ -65,7 +65,7 @@ func NewServer() *Server {
 func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply chan *Message) {
 	if seq == 0 {
 		seq = client.nextSeq
-		client.nextSeq++
+		client.nextSeq += 1
 	}
 	header := Header{
 		Type: msgType,
@@ -106,13 +106,10 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 		for {
 			select {
 			case pack := <-client.outMsgs:
-				seqid := pack.client.nextSeq
-				pack.msg.Header.Seq = seqid
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
 				log.Infof("%s: send msg: (%d) (%s)", client.devId, pack.msg.Header.Type, pack.msg.Data)
-				pack.client.nextSeq += 1
 				time.Sleep(10 * time.Millisecond)
 			case <-client.ctrl:
 				//log.Infof("%p: leave send routine", conn)
@@ -387,7 +384,7 @@ func waitInit(conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	log.Debugf("%p: INIT body(%s)", conn, data)
+	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 	var msg InitMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Warnf("%p: decode INIT body failed: (%v)", conn, err)

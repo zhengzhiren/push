@@ -168,7 +168,7 @@ func getApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.ErrNo = 0
-	response.Data = fmt.Sprintf("{\"appid\":%s}", appid)
+	response.Data = map[string]string{"appid": string(appid)}
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
@@ -397,7 +397,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	msgid := getMsgID()
 	msg.MsgId = msgid
 	response.ErrNo = 0
-	response.Data = fmt.Sprintf("{\"msgid\":%d}", msgid)
+	response.Data = map[string]int64{"msgid": msgid}
 	msg.CTime = time.Now().Unix()
 	msgBox <- msg
 	b, _ = json.Marshal(response)
@@ -423,8 +423,11 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.ErrNo = 0
-	response.Data = fmt.Sprintf("{\"send\":%s}", b)
-	b, _ = json.Marshal(response)
+	response.Data = map[string]string{"send": string(b)}
+	b, err = json.Marshal(response)
+	if err != nil {
+		log.Warnf("error (%s)", err)
+	}
 	fmt.Fprintf(w, string(b))
 }
 
