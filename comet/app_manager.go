@@ -159,6 +159,9 @@ func (this *AppManager)GetApp(appId string, regId string) *App {
 	this.lock.RLock()
 	app, ok := this.appMap[regId]; if ok {
 		this.lock.RUnlock()
+		if app.AppId != appId {
+			return nil
+		}
 		return app
 	}
 	this.lock.RUnlock()
