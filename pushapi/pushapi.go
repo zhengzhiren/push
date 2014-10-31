@@ -122,6 +122,20 @@ func serverHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 }
 
+func testHandler(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	if r.Method != "GET" {
+		response.ErrNo = ERR_METHOD_NOT_ALLOWED
+		response.ErrMsg = "Method not allowed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 405)
+		return
+	}
+	response.ErrNo = 0
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
 func appHandler(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	switch r.Method {
@@ -449,6 +463,7 @@ func main() {
 		http.HandleFunc("/api/v1/message",		messageHandler)
 		http.HandleFunc("/api/v1/server",		serverHandler)
 		http.HandleFunc("/api/v1/app",			appHandler)
+		http.HandleFunc("/test/message/confirm",			testHandler)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)
