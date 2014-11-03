@@ -15,6 +15,8 @@ type ConfigStruct struct {
 	ReadTimeout uint32		`json:"read_timeout"`
 	WriteTimeout uint32		`json:"write_timeout"`
 	HeartbeatTimeout uint32	`json:"heartbeat_timeout"`
+	MaxBodyLen uint32		`json:"max_bodylen"`
+	MaxClients uint32		`json:"max_clients"`
 
 	Rabbit struct {
 		Enable bool				`json:"enable"`

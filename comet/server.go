@@ -13,10 +13,6 @@ import (
 	log "github.com/cihub/seelog"
 )
 
-const (
-	MAX_BODY_LEN = 1024
-)
-
 type MsgHandler func(*net.TCPConn, *Client, *Header, []byte) int
 
 type Pack struct {
@@ -42,20 +38,22 @@ type Server struct {
 	readTimeout   time.Duration
 	writeTimeout  time.Duration
 	hbTimeout     time.Duration
-	maxMsgLen     uint32
-	clientCount     uint32
+	maxBodyLen    uint32
+	maxClients    uint32
+	clientCount   uint32
 }
 
-func NewServer() *Server {
+func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32) *Server {
 	return &Server{
 		exitCh:        make(chan bool),
 		wg:            &sync.WaitGroup{},
 		funcMap:       make(map[uint8]MsgHandler),
-		acceptTimeout: 60,
-		readTimeout:   60,
-		writeTimeout:  60,
-		hbTimeout:     90,
-		maxMsgLen:     2048,
+		acceptTimeout: time.Duration(ato),
+		readTimeout:   time.Duration(rto),
+		writeTimeout:  time.Duration(wto),
+		hbTimeout:     time.Duration(hto),
+		maxBodyLen:    maxBodyLen,
+		maxClients:    maxClients,
 		clientCount:   0,
 	}
 }
@@ -121,26 +119,6 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 func CloseClient(client *Client) {
 	client.ctrl <- true
 	DevicesMap.Delete(client.devId)
-}
-
-func (this *Server) SetReadTimeout(to time.Duration) {
-	this.readTimeout = to
-}
-
-func (this *Server) SetWriteTimeout(to time.Duration) {
-	this.writeTimeout = to
-}
-
-func (this *Server) SetAcceptTimeout(to time.Duration) {
-	this.acceptTimeout = to
-}
-
-func (this *Server) SetHeartbeatTimeout(to time.Duration) {
-	this.hbTimeout = to
-}
-
-func (this *Server) SetMaxPktLen(maxMsgLen uint32) {
-	this.maxMsgLen = maxMsgLen
 }
 
 func (this *Server) Init(addr string) (*net.TCPListener, error) {
@@ -222,7 +200,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		conn.Close()
 		return
 	}
-	client := waitInit(conn)
+	client := waitInit(this, conn)
 	if client == nil {
 		conn.Close()
 		return
@@ -287,7 +265,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				break
 			}
 
-			if header.Len > MAX_BODY_LEN {
+			if header.Len > this.maxBodyLen {
 				log.Warnf("%p: header len too big %d", conn, header.Len)
 				break
 			}
@@ -384,7 +362,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	}
 }
 
-func waitInit(conn *net.TCPConn) *Client {
+func waitInit(server *Server, conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
 	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 	buf := make([]byte, HEADER_SIZE)
@@ -400,7 +378,7 @@ func waitInit(conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	if header.Len > MAX_BODY_LEN {
+	if header.Len > server.maxBodyLen {
 		log.Warnf("%p: header len too big: %d", conn, header.Len)
 		conn.Close()
 		return nil

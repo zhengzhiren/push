@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"os"
-	"time"
+	//"time"
 	"sync"
 	"strings"
 	"os/signal"
@@ -80,20 +80,31 @@ func main() {
 	storage.NewInstance(&conf.Config)
 	auth.NewInstance(&conf.Config)
 
-	cometServer := comet.NewServer()
+	var ato uint32 = 60
 	if conf.Config.AcceptTimeout > 0 {
-		cometServer.SetAcceptTimeout(time.Duration(conf.Config.AcceptTimeout))
+		ato = conf.Config.AcceptTimeout
 	}
+	var rto uint32 = 60
 	if conf.Config.ReadTimeout > 0 {
-		cometServer.SetReadTimeout(time.Duration(conf.Config.ReadTimeout))
+		rto = conf.Config.ReadTimeout
 	}
+	var wto uint32 = 60
 	if conf.Config.WriteTimeout > 0 {
-		cometServer.SetWriteTimeout(time.Duration(conf.Config.WriteTimeout))
+		wto = conf.Config.WriteTimeout
 	}
+	var hto uint32 = 90
 	if conf.Config.HeartbeatTimeout > 0 {
-		cometServer.SetHeartbeatTimeout(time.Duration(conf.Config.HeartbeatTimeout))
+		hto = conf.Config.HeartbeatTimeout
 	}
-
+	var mbl uint32 = 2048
+	if conf.Config.MaxBodyLen > 0 {
+		mbl = conf.Config.MaxBodyLen
+	}
+	var mc uint32 = 10000
+	if conf.Config.MaxClients > 0 {
+		mc = conf.Config.MaxClients
+	}
+	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc)
 	listener, err := cometServer.Init(conf.Config.Comet)
 	if err != nil {
 		log.Critical(err)
