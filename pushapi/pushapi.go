@@ -35,6 +35,7 @@ const (
 	ERR_AUTHENTICATE			= 1004
 	ERR_AUTHORIZE				= 1005
 	ERR_PKG_EXIST				= 2001
+	ERR_PKG_NOT_EXIST			= 2002
 )
 
 type Response struct {
@@ -165,6 +166,13 @@ func getApp(w http.ResponseWriter, r *http.Request) {
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
+		return
+	}
+	if appid == nil {
+		response.ErrNo  = ERR_PKG_NOT_EXIST
+		response.ErrMsg = "no such package"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
 		return
 	}
 	response.ErrNo = 0
@@ -299,6 +307,13 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
+		return
+	}
+	if b == nil {
+		response.ErrNo  = ERR_PKG_NOT_EXIST
+		response.ErrMsg = "no such package"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
 		return
 	}
 	appid := string(b)

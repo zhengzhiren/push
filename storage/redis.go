@@ -14,6 +14,32 @@ type RedisStorage struct {
 	pool *redis.Pool
 }
 
+func newRedisStorage2(server string, pass string) *RedisStorage {
+	return &RedisStorage {
+		pool: &redis.Pool{
+			MaxIdle: 1,
+			IdleTimeout: 300 * time.Second,
+			Dial: func() (redis.Conn, error) {
+				c, err := redis.Dial("tcp", server)
+				if err != nil {
+					log.Infof("failed to connect Redis:", err)
+					return nil, err
+				}
+				if _, err := c.Do("AUTH", pass); err != nil {
+					log.Infof("failed to auth Redis:", err)
+					return nil, err
+
+				}
+				return c, err
+			},
+			TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				_, err := c.Do("PING")
+				return err
+			},
+		},
+	}
+}
+
 func newRedisStorage(config *conf.ConfigStruct) *RedisStorage {
 	return &RedisStorage {
 		pool: &redis.Pool{

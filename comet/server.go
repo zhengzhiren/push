@@ -1,7 +1,6 @@
 package comet
 
 import (
-	//"fmt"
 	"io"
 	"net"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils/safemap"
 	log "github.com/cihub/seelog"
-	//"github.com/bitly/go-simplejson"
 )
 
 const (
@@ -38,7 +36,7 @@ type Client struct {
 
 type Server struct {
 	exitCh        chan bool
-	waitGroup     *sync.WaitGroup
+	wg            *sync.WaitGroup
 	funcMap       map[uint8]MsgHandler
 	acceptTimeout time.Duration
 	readTimeout   time.Duration
@@ -51,7 +49,7 @@ type Server struct {
 func NewServer() *Server {
 	return &Server{
 		exitCh:        make(chan bool),
-		waitGroup:     &sync.WaitGroup{},
+		wg:            &sync.WaitGroup{},
 		funcMap:       make(map[uint8]MsgHandler),
 		acceptTimeout: 60,
 		readTimeout:   60,
@@ -176,12 +174,9 @@ func (this *Server) Run(listener *net.TCPListener) {
 
 		listener.SetDeadline(time.Now().Add(2 * time.Second))
 		//listener.SetDeadline(time.Now().Add(this.acceptTimeout))
-		//log.Debugf("before accept, %d", this.acceptTimeout)
 		conn, err := listener.AcceptTCP()
-		//log.Debugf("after accept")
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok && e.Timeout() {
-				//log.Debugf("accept timeout")
 				continue
 			}
 			log.Debugf("accept failed: %v\n", err)
@@ -202,7 +197,7 @@ func (this *Server) Stop() {
 	// close后，所有的exitCh都返回false
 	log.Debugf("stopping comet server")
 	close(this.exitCh)
-	this.waitGroup.Wait()
+	this.wg.Wait()
 	log.Debugf("comet server stopped")
 }
 
@@ -263,7 +258,6 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		if readflag == 0 {
 		// read first byte
 			n := myread(conn, headBuf[0:1])
-			//log.Debugf("read first byte: %d", n)
 			if n < 0 {
 				break
 			} else if n == 0 {
@@ -279,7 +273,6 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		if readflag == 1 {
 		// read header
 			n = myread(conn, headBuf[nRead:])
-			//log.Debugf("read header: %d", n)
 			if n < 0 {
 				break
 			} else if n == 0 {
@@ -294,7 +287,6 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				break
 			}
 
-			//log.Infof("type %d, len %d", header.Type, header.Len)
 			if header.Len > MAX_BODY_LEN {
 				log.Warnf("%p: header len too big %d", conn, header.Len)
 				break
@@ -313,7 +305,6 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		if readflag == 2 {
 		// read body
 			n = myread(conn, dataBuf[nRead:])
-			//log.Debugf("read body: %d", n)
 			if n < 0 {
 				break
 			} else if n == 0 {
@@ -428,11 +419,13 @@ func waitInit(conn *net.TCPConn) *Client {
 		for regid, info := range infos {
 			log.Debugf("%s: load app (%s) (%s)", devid, info.AppId, regid)
 			b, err := storage.Instance.HashGet("db_apps", info.AppId)
-			if err != nil {
+			if err != nil || b == nil {
 				continue
 			}
 			var rawapp storage.RawApp
-			json.Unmarshal(b, &rawapp)
+			if err := json.Unmarshal(b, &rawapp); err != nil {
+				continue
+			}
 			app := AMInstance.AddApp(client.devId, regid, info)
 			client.regApps[regid] = app
 			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:rawapp.Pkg})
@@ -520,11 +513,21 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	var rawapp storage.RawApp
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	if err != nil {
-		log.Warnf("%s: unknow appid (%s)", client.devId, msg.AppId)
+		log.Warnf("%s: storage I/O failed. appid (%s)", client.devId, msg.AppId)
 		errReply(4, msg.AppId)
 		return 0
 	}
-	json.Unmarshal(b, &rawapp)
+	if b == nil {
+		log.Warnf("%s: unknow appid (%s)", client.devId, msg.AppId)
+		errReply(5, msg.AppId)
+		return 0
+	}
+
+	if err := json.Unmarshal(b, &rawapp); err != nil {
+		log.Warnf("%s: invalid data from storage. appid (%s)", client.devId, msg.AppId)
+		errReply(6, msg.AppId)
+		return 0
+	}
 
 	var regUid string = ""
 	var ok bool
