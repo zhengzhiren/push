@@ -7,7 +7,7 @@ import (
 	"github.com/chenyf/push/storage"
 )
 
-func pushMessage(appId string, app *App, msg *PushMessage) bool {
+func pushMessage(appId string, app *RegApp, msg *PushMessage) bool {
 	client := DevicesMap.Get(app.DevId).(*Client)
 	if client == nil {
 		return false

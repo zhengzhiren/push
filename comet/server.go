@@ -27,7 +27,7 @@ type Pack struct {
 
 type Client struct {
 	devId      string
-	regApps    map[string]*App
+	regApps    map[string]*RegApp
 	outMsgs    chan *Pack
 	nextSeq    uint32
 	lastActive time.Time
@@ -91,7 +91,7 @@ var (
 func InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
 		devId:      devid,
-		regApps:    make(map[string]*App),
+		regApps:    make(map[string]*RegApp),
 		nextSeq:    100,
 		lastActive: time.Now(),
 		outMsgs:    make(chan *Pack, 100),
@@ -342,6 +342,48 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	this.clientCount--
 }
 
+func handleOfflineMsgs(client *Client, regapp *RegApp) {
+	msgs := storage.Instance.GetOfflineMsgs(regapp.AppId, regapp.RegId, regapp.LastMsgId)
+	log.Debugf("%s: get %d offline messages: (%s) (>%d)", regapp.DevId, len(msgs), regapp.AppId, regapp.LastMsgId)
+	for _, rawMsg := range msgs {
+		ok := false
+		switch rawMsg.PushType {
+		case 1:
+			ok = true
+		case 2:
+			for _, regid := range(rawMsg.PushParams.RegId) {
+				if regapp.RegId == regid {
+					ok = true
+					break
+				}
+			}
+		case 3:
+			if regapp.UserId == "" {
+				continue
+			}
+			for _, uid := range(rawMsg.PushParams.UserId) {
+				if regapp.UserId == uid {
+					ok = true
+					break
+				}
+			}
+		default:
+			continue
+		}
+
+		if ok {
+			msg := PushMessage{
+				MsgId:   rawMsg.MsgId,
+				AppId:   rawMsg.AppId,
+				Type:    rawMsg.MsgType,
+				Content: rawMsg.Content,
+			}
+			b, _ := json.Marshal(msg)
+			client.SendMessage(MSG_PUSH, 0, b, nil)
+		}
+	}
+}
+
 func waitInit(conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
 	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
@@ -407,9 +449,9 @@ func waitInit(conn *net.TCPConn) *Client {
 				log.Warnf("appid or regid is empty")
 				continue
 			}
-			app := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
-			if app != nil {
-				client.regApps[info.RegId] = app
+			regapp := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
+			if regapp != nil {
+				client.regApps[info.RegId] = regapp
 			}
 		}
 	} else {
@@ -426,8 +468,8 @@ func waitInit(conn *net.TCPConn) *Client {
 			if err := json.Unmarshal(b, &rawapp); err != nil {
 				continue
 			}
-			app := AMInstance.AddApp(client.devId, regid, info)
-			client.regApps[regid] = app
+			regapp := AMInstance.AddApp(client.devId, regid, info)
+			client.regApps[regid] = regapp
 			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:rawapp.Pkg})
 		}
 	}
@@ -437,47 +479,8 @@ func waitInit(conn *net.TCPConn) *Client {
 	client.SendMessage(MSG_INIT_REPLY, header.Seq, body, nil)
 
 	// 处理离线消息
-	for _, app := range(client.regApps) {
-		msgs := storage.Instance.GetOfflineMsgs(app.AppId, app.RegId, app.LastMsgId)
-		log.Debugf("%s: get %d offline messages: appid(%s) (>%d)", client.devId, len(msgs), app.AppId, app.LastMsgId)
-		for _, rawMsg := range msgs {
-			ok := false
-			switch rawMsg.PushType {
-			case 1:
-				ok = true
-			case 2:
-				for _, regid := range(rawMsg.PushParams.RegId) {
-					if app.RegId == regid {
-						ok = true
-						break
-					}
-				}
-			case 3:
-				/*
-				if regUid == "" {
-					continue
-				}
-				for _, uid := range(rawMsg.PushParams.UserId) {
-					if regUid == uid {
-						ok = true
-						break
-					}
-				}*/
-			default:
-				continue
-			}
-
-			if ok {
-				msg := PushMessage{
-					MsgId:   rawMsg.MsgId,
-					AppId:   rawMsg.AppId,
-					Type:    rawMsg.MsgType,
-					Content: rawMsg.Content,
-				}
-				b, _ := json.Marshal(msg)
-				client.SendMessage(MSG_PUSH, 0, b, nil)
-			}
-		}
+	for _, regapp := range(client.regApps) {
+		handleOfflineMsgs(client, regapp)
 	}
 	return client
 }
@@ -513,7 +516,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	var rawapp storage.RawApp
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	if err != nil {
-		log.Warnf("%s: storage I/O failed. appid (%s)", client.devId, msg.AppId)
+		log.Warnf("%s: hashget 'db_apps' failed, (%s). appid (%s)", client.devId, msg.AppId)
 		errReply(4, msg.AppId)
 		return 0
 	}
@@ -541,7 +544,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 
 	regid := RegId(client.devId, msg.AppId, regUid)
-	log.Debugf("%s: uid (%s), regid (%s)", client.devId, regUid, regid)
+	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, regUid, regid)
 	if _, ok := client.regApps[regid]; ok {
 		// 已经在内存中，直接返回
 		reply.Result = 0
@@ -553,14 +556,14 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	}
 
 	// 到app管理中心去注册
-	app := AMInstance.RegisterApp(client.devId, regid, msg.AppId, regUid)
-	if app == nil {
+	regapp := AMInstance.RegisterApp(client.devId, regid, msg.AppId, regUid)
+	if regapp == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
 		errReply(5, msg.AppId)
 		return 0
 	}
 	// 记录到client管理的hash table中
-	client.regApps[regid] = app
+	client.regApps[regid] = regapp
 	reply.Result = 0
 	reply.AppId = msg.AppId
 	reply.Pkg = rawapp.Pkg
@@ -568,45 +571,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 
 	// 处理离线消息
-	msgs := storage.Instance.GetOfflineMsgs(msg.AppId, regid, app.LastMsgId)
-	log.Debugf("%s: get %d offline messages: (%s) (>%d)", client.devId, len(msgs), msg.AppId, app.LastMsgId)
-	for _, rawMsg := range msgs {
-		ok := false
-		switch rawMsg.PushType {
-		case 1:
-			ok = true
-		case 2:
-			for _, regid := range(rawMsg.PushParams.RegId) {
-				if app.RegId == regid {
-					ok = true
-					break
-				}
-			}
-		case 3:
-			if regUid == "" {
-				continue
-			}
-			for _, uid := range(rawMsg.PushParams.UserId) {
-				if regUid == uid {
-					ok = true
-					break
-				}
-			}
-		default:
-			continue
-		}
-
-		if ok {
-			msg := PushMessage{
-				MsgId:   rawMsg.MsgId,
-				AppId:   rawMsg.AppId,
-				Type:    rawMsg.MsgType,
-				Content: rawMsg.Content,
-			}
-			b, _ := json.Marshal(msg)
-			client.SendMessage(MSG_PUSH, 0, b, nil)
-		}
-	}
+	handleOfflineMsgs(client, regapp)
 	return 0
 }
 
@@ -633,27 +598,32 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		return 0
 	}
 
-	var uid string = ""
+	// unknown regid
 	var ok bool
+	_, ok = client.regApps[msg.RegId]
+	if !ok {
+		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		errReply(3, msg.AppId)
+		return 0
+	}
+
+	var regUid string = ""
 	if msg.Token != "" {
-		ok, uid = auth.Instance.Auth(msg.Token)
+		ok, regUid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			errReply(3, msg.AppId)
+			errReply(4, msg.AppId)
 			return 0
 		}
 	}
-	log.Debugf("%s: uid is (%s)", client.devId, uid)
-	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, uid)
+	//log.Debugf("%s: uid is (%s)", client.devId, uid)
+	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, regUid)
+	delete(client.regApps, msg.RegId)
+
 	reply.Result = 0
 	reply.AppId = msg.AppId
 	reply.RegId = msg.RegId
 	sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
-	return 0
-}
-
-func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	client.lastActive = time.Now()
 	return 0
 }
 
@@ -670,19 +640,24 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		return -1
 	}
 	// unknown regid
-	app, ok := client.regApps[msg.RegId]
+	regapp, ok := client.regApps[msg.RegId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
 		return 0
 	}
 
-	if msg.MsgId <= app.LastMsgId {
-		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, msg.MsgId, app.LastMsgId)
+	if msg.MsgId <= regapp.LastMsgId {
+		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, msg.MsgId, regapp.LastMsgId)
 		return 0
 	}
-	if err := AMInstance.UpdateApp(msg.AppId, msg.RegId, msg.MsgId, app); err != nil {
+	if err := AMInstance.UpdateApp(regapp, msg.MsgId); err != nil {
 		log.Warnf("%s: update app failed, (%s)", client.devId, err)
 	}
+	return 0
+}
+
+func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	client.lastActive = time.Now()
 	return 0
 }
 

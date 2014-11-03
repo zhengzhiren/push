@@ -9,28 +9,31 @@ import (
 	"github.com/chenyf/push/storage"
 )
 
-type App struct {
+// register app in memory
+type RegApp struct {
 	RegId		string
 	DevId		string
 	AppId		string
+	UserId		string
 	LastMsgId	int64
 }
 
-// struct will save into storage
+// register app in storage
 type AppInfo struct {
 	AppId		string	`json:"app_id"`
+	UserId		string	`json:"uid,omitempty`
 	LastMsgId	int64	`json:"last_msgid"`
 }
 
 type AppManager struct {
 	lock *sync.RWMutex
-	appMap map[string]*App
+	appMap map[string]*RegApp
 }
 
 var (
 	AMInstance *AppManager = &AppManager{
 		lock: new(sync.RWMutex),
-		appMap: make(map[string]*App),
+		appMap: make(map[string]*RegApp),
 	}
 )
 
@@ -45,7 +48,7 @@ func (this *AppManager)RemoveApp(regId string)  {
 	this.lock.Unlock()
 }
 
-func (this *AppManager)AddApp(devId string, regId string, info *AppInfo) (*App) {
+func (this *AppManager)AddApp(devId string, regId string, info *AppInfo) (*RegApp) {
 	this.lock.RLock()
 	if app, ok := this.appMap[regId]; ok {
 		log.Warnf("in memory already")
@@ -53,10 +56,11 @@ func (this *AppManager)AddApp(devId string, regId string, info *AppInfo) (*App) 
 		return app
 	}
 	this.lock.RUnlock()
-	app := &App{
+	app := &RegApp{
 		RegId : regId,
 		DevId : devId,
 		AppId : info.AppId,
+		UserId : info.UserId,
 		LastMsgId : info.LastMsgId,
 	}
 	this.lock.Lock()
@@ -75,7 +79,7 @@ func (this *AppManager)DelApp(devId string, regId string) {
 }
 
 // APP注册
-func (this *AppManager)RegisterApp(devId string, regId string, appId string, userId string) (*App) {
+func (this *AppManager)RegisterApp(devId string, regId string, appId string, userId string) (*RegApp) {
 	this.lock.RLock()
 	if _, ok := this.appMap[regId]; ok {
 		log.Warnf("in memory already")
@@ -95,16 +99,17 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 		log.Infof("got last msgid %d", info.LastMsgId)
 	} else {
 		info.AppId = appId
+		info.UserId = userId
 		info.LastMsgId = -1
 	}
-	app := this.AddApp(devId, regId, &info)
+	regapp := this.AddApp(devId, regId, &info)
 	// 记录这个设备上有哪些app
 	storage.Instance.HashSet(fmt.Sprintf("db_device_%s", devId), info.AppId, []byte(regId))
 	// 记录这个用户有哪些app
 	if userId != "" {
 		storage.Instance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
 	}
-	return app
+	return regapp
 }
 
 func (this *AppManager)UnregisterApp(devId string, regId string, appId string, userId string) {
@@ -119,26 +124,27 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 	this.DelApp(devId, regId)
 }
 
-func (this *AppManager)UpdateApp(appId string, regId string, msgId int64, app *App) error {
+func (this *AppManager)UpdateApp(regapp *RegApp, msgId int64) error {
 	info := AppInfo {
-		AppId		: appId,
+		AppId		: regapp.AppId,
+		UserId      : regapp.UserId,
 		LastMsgId	: msgId,
 	}
 	b, _ := json.Marshal(info)
-	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", regapp.AppId), regapp.RegId, b); err != nil {
 		return err
 	}
 	storage.Instance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
-	app.LastMsgId = msgId
+	regapp.LastMsgId = msgId
 	return nil
 }
 
-func (this *AppManager)GetAppsByUser(appId string, userId string) []*App {
+func (this *AppManager)GetAppsByUser(appId string, userId string) []*RegApp {
 	vals, err := storage.Instance.HashGetAll(fmt.Sprintf("db_user_%s", userId))
 	if err != nil {
 		return nil
 	}
-	apps := make([]*App, 0, len(this.appMap))
+	regapps := make([]*RegApp, 0, len(this.appMap))
 	this.lock.RLock()
 	for index := 0; index < len(vals); index+=2 {
 		regid := vals[index]
@@ -146,39 +152,39 @@ func (this *AppManager)GetAppsByUser(appId string, userId string) []*App {
 		if appid != appId {
 			continue
 		}
-		app, ok := this.appMap[regid]; if ok {
-			apps = append(apps, app)
+		regapp, ok := this.appMap[regid]; if ok {
+			regapps = append(regapps, regapp)
 		}
 	}
 	this.lock.RUnlock()
-	log.Infof("get %d apps", len(apps))
-	return apps
+	log.Infof("get %d apps", len(regapps))
+	return regapps
 }
 
-func (this *AppManager)GetApp(appId string, regId string) *App {
+func (this *AppManager)GetApp(appId string, regId string) *RegApp {
 	this.lock.RLock()
-	app, ok := this.appMap[regId]; if ok {
+	regapp, ok := this.appMap[regId]; if ok {
 		this.lock.RUnlock()
-		if app.AppId != appId {
+		if regapp.AppId != appId {
 			return nil
 		}
-		return app
+		return regapp
 	}
 	this.lock.RUnlock()
 	return nil
 }
 
-func (this *AppManager)GetApps(appId string) ([]*App) {
-	apps := make([]*App, 0, len(this.appMap))
+func (this *AppManager)GetApps(appId string) ([]*RegApp) {
+	regapps := make([]*RegApp, 0, len(this.appMap))
 	this.lock.RLock()
-	for _, app := range(this.appMap) {
-		if app.AppId == appId {
-			apps = append(apps, app)
+	for _, regapp := range(this.appMap) {
+		if regapp.AppId == appId {
+			regapps = append(regapps, regapp)
 		}
 	}
 	this.lock.RUnlock()
-	log.Infof("get %d apps", len(apps))
-	return apps
+	log.Infof("get %d apps", len(regapps))
+	return regapps
 }
 
 func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
