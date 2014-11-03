@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"encoding/json"
-	"github.com/garyburd/redigo/redis"
 	"github.com/chenyf/push/conf"
+	"github.com/garyburd/redigo/redis"
 	log "github.com/cihub/seelog"
 )
 
@@ -14,19 +14,18 @@ type RedisStorage struct {
 	pool *redis.Pool
 }
 
-func newRedisStorage() *RedisStorage {
+func newRedisStorage(config *conf.ConfigStruct) *RedisStorage {
 	return &RedisStorage {
 		pool: &redis.Pool{
 			MaxIdle: 1,
 			IdleTimeout: 300 * time.Second,
 			Dial: func() (redis.Conn, error) {
-				c, err := redis.Dial("tcp", conf.Config.Redis.Server)
-				//c, err := redis.Dial("tcp", RedisServer)
+				c, err := redis.Dial("tcp", config.Redis.Server)
 				if err != nil {
 					log.Infof("failed to connect Redis:", err)
 					return nil, err
 				}
-				if _, err := c.Do("AUTH", conf.Config.Redis.Pass); err != nil {
+				if _, err := c.Do("AUTH", config.Redis.Pass); err != nil {
 					log.Infof("failed to auth Redis:", err)
 					return nil, err
 

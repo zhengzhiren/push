@@ -490,6 +490,9 @@ func main() {
 	}
 
 	log.ReplaceLogger(logger)
+	storage.NewInstance(&conf.Config)
+	auth.NewInstance(&conf.Config)
+
 	setMsgID()
 	setPappID()
 	mqProducer, err := mq.NewProducer(
@@ -510,9 +513,7 @@ func main() {
 			log.Warnf("init zk watcher failed: %s", err)
 		os.Exit(1)
 	}
-
-	auth.NewInstance(conf.Config.Auth.Provider)
-	waitGroup := &sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
@@ -520,15 +521,15 @@ func main() {
 		log.Infof("Received signal '%v', exiting\n", sig)
 		close(msgBox)
 		mqProducer.Shutdown()
-		waitGroup.Done()
+		wg.Done()
 	}()
 
-	waitGroup.Add(1)
+	wg.Add(1)
 	go func() {
-		http.HandleFunc("/api/v1/message",		messageHandler)
-		http.HandleFunc("/api/v1/server",		serverHandler)
-		http.HandleFunc("/api/v1/app",			appHandler)
-		http.HandleFunc("/test/message/confirm",			testHandler)
+		http.HandleFunc("/api/v1/message",			messageHandler)
+		http.HandleFunc("/api/v1/server",			serverHandler)
+		http.HandleFunc("/api/v1/app",				appHandler)
+		http.HandleFunc("/test/message/confirm",	testHandler)
 		err := http.ListenAndServe(conf.Config.PushAPI, nil)
 		if err != nil {
 			log.Infof("failed to http listen: (%s)", err)
@@ -578,6 +579,6 @@ func main() {
 				}
 		}
 	}
-	waitGroup.Wait()
+	wg.Wait()
 }
 

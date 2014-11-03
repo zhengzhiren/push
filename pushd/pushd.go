@@ -13,22 +13,13 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"github.com/chenyf/push/conf"
+	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/zk"
 )
-
-type CommandRequest struct {
-	Uid		string	`json:"uid"`
-	Cmd		string	`json:"cmd"`
-}
-
-type CommandResponse struct {
-	Status	int		`json:"status"`
-	Error	string	`json:"error"`
-}
 
 func getStatus(w http.ResponseWriter, r *http.Request) {
 	size := comet.DevicesMap.Size()
@@ -60,16 +51,6 @@ func sign(path string, query map[string]string) []byte{
 	return mac.Sum(nil)
 }
 
-type InputMsg struct {
-	AppId		string	`json:"app_id"`
-	PushType	int		`json:"push_type"`
-	RegId		string	`json:"reg_id"`
-	MsgType		int		`json:"msg_type"`
-	TTL			uint64	`json:"ttl"`
-	MsgId		int64	`json:"msg_id"`
-	Payload		string	`json:"payload"`
-}
-
 func main() {
 	var (
 		//flRoot               = flag.String("g", "/tmp/echoserver", "Path to use as the root of the docker runtime")
@@ -96,9 +77,9 @@ func main() {
 	}
 
 	log.ReplaceLogger(logger)
+	storage.NewInstance(&conf.Config)
+	auth.NewInstance(&conf.Config)
 
-	waitGroup := &sync.WaitGroup{}
-	var mqConsumer *mq.Consumer = nil
 	cometServer := comet.NewServer()
 	if conf.Config.AcceptTimeout > 0 {
 		cometServer.SetAcceptTimeout(time.Duration(conf.Config.AcceptTimeout))
@@ -113,6 +94,13 @@ func main() {
 		cometServer.SetHeartbeatTimeout(time.Duration(conf.Config.HeartbeatTimeout))
 	}
 
+	listener, err := cometServer.Init(conf.Config.Comet)
+	if err != nil {
+		log.Critical(err)
+		os.Exit(1)
+	}
+
+	var mqConsumer *mq.Consumer = nil
 	if conf.Config.Rabbit.Enable {
 		mqConsumer, err = mq.NewConsumer(
 			conf.Config.Rabbit.Uri,
@@ -124,20 +112,14 @@ func main() {
 		}
 	}
 
-	listener, err := cometServer.Init(conf.Config.Comet)
-	if err != nil {
-		log.Critical(err)
-		os.Exit(1)
-	}
-
 	if conf.Config.ZooKeeper.Enable {
-		if err = zk.InitZk(); err != nil {
+		if err = zk.InitZk(&conf.Config); err != nil {
 			log.Critical(err)
 			os.Exit(1)
 		}
 	}
-	auth.NewInstance(conf.Config.Auth.Provider)
 
+	wg := &sync.WaitGroup{}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
@@ -149,7 +131,7 @@ func main() {
 		if conf.Config.Rabbit.Enable {
 			mqConsumer.Shutdown()
 		}
-		waitGroup.Done()
+		wg.Done()
 		log.Infof("leave 2")
 	}()
 
@@ -163,7 +145,7 @@ func main() {
 			mqConsumer.Consume()
 		}()
 	}
-	waitGroup.Add(1)
+	wg.Add(1)
 	go func() {
 		http.HandleFunc("/status", getStatus)
 		err := http.ListenAndServe(conf.Config.Web, nil)
@@ -172,6 +154,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	waitGroup.Wait()
+	wg.Wait()
 }
 

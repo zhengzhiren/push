@@ -74,17 +74,17 @@ func Register(conn *zk.Conn, fpath string, data []byte) error {
 	return nil
 }
 
-func InitZk() error {
-	conn, err := Connect(conf.Config.ZooKeeper.Addr, conf.Config.ZooKeeper.Timeout*time.Second)
+func InitZk(config *conf.ConfigStruct) error {
+	conn, err := Connect(config.ZooKeeper.Addr, config.ZooKeeper.Timeout*time.Second)
 	if err != nil {
 		return err
 	}
-	_, err = conn.Create(conf.Config.ZooKeeper.Path, []byte(""), 0,  zk.WorldACL(zk.PermAll))
+	_, err = conn.Create(config.ZooKeeper.Path, []byte(""), 0,  zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		return err
 	}
 	data, _ := json.Marshal(utils.GetLocalIP())
-	err = Register(conn, conf.Config.ZooKeeper.Path, data)
+	err = Register(conn, config.ZooKeeper.Path, data)
 	if err != nil {
 		return err
 	}

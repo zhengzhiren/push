@@ -48,9 +48,9 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 	return true, "letv_" + tr.Bean.Result
 }
 
-func newLetvAuth() *LetvAuth {
+func newLetvAuth(config *conf.ConfigStruct) *LetvAuth {
 	return &LetvAuth{
-		url : conf.Config.Auth.LetvUrl,
+		url : config.Auth.LetvUrl,
 	}
 }
 

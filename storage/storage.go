@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"github.com/chenyf/push/conf"
 )
 
 type RawMessage struct {
@@ -53,6 +54,11 @@ type Storage interface {
 }
 
 var (
-	Instance Storage = newRedisStorage()
+	Instance Storage = nil
 )
+
+func NewInstance(config *conf.ConfigStruct) bool {
+	Instance = newRedisStorage(config)
+	return true
+}
 
