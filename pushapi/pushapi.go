@@ -564,18 +564,27 @@ func main() {
 					continue
 				}
 
-				if _, err := storage.Instance.HashSet(m.AppId, strconv.FormatInt(m.MsgId, 10), v); err != nil {
+				if m.Options.TTL <= 0 {
+					m.Options.TTL = 0
+				} else if m.Options.TTL > 3*86400 {
+					m.Options.TTL = 86400
+				}
+
+				if _, err := storage.Instance.HashSet(
+						"db_msg_"+m.AppId,
+						strconv.FormatInt(m.MsgId, 10), v); err != nil {
 					log.Infof("failed to put Msg into redis:", err)
 					continue
 				}
-				var ttl int64 = 86400
+
 				if m.Options.TTL > 0 {
-					ttl = m.Options.TTL
-				}
-				_, err = storage.Instance.HashSet(m.AppId+"_offline", fmt.Sprintf("%v_%v", m.MsgId, ttl+m.CTime), v)
-				if err != nil {
-					log.Infof("failed to put offline Msg into redis:", err)
-					continue
+					_, err = storage.Instance.HashSet(
+						"db_offline_msg_"+m.AppId,
+						fmt.Sprintf("%v_%v", m.MsgId, m.Options.TTL+m.CTime), v)
+					if err != nil {
+						log.Infof("failed to put offline Msg into redis:", err)
+						continue
+					}
 				}
 
 				d := map[string]interface{}{

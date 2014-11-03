@@ -68,7 +68,7 @@ func newRedisStorage(config *conf.ConfigStruct) *RedisStorage {
 
 // 从存储后端获取 > 指定时间的所有消息
 func (r *RedisStorage)GetOfflineMsgs(appId string, regId string, msgId int64) []*RawMessage {
-	key := appId + "_offline"
+	key := "db_offline_msg_" + appId
 	ret, err := redis.Strings(r.pool.Get().Do("HKEYS", key))
 	if err != nil {
 		log.Infof("failed to get fields of offline msg:", err)
@@ -129,7 +129,8 @@ func (r *RedisStorage)GetOfflineMsgs(appId string, regId string, msgId int64) []
 
 // 从存储后端获取指定消息
 func (r *RedisStorage)GetRawMsg(appId string, msgId int64) *RawMessage {
-	ret, err := redis.Bytes(r.pool.Get().Do("HGET", appId, msgId))
+	key := "db_msg_" + appId
+	ret, err := redis.Bytes(r.pool.Get().Do("HGET", key, msgId))
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
