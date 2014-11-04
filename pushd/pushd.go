@@ -21,9 +21,27 @@ import (
 	"github.com/chenyf/push/zk"
 )
 
-func getStatus(w http.ResponseWriter, r *http.Request) {
+func deviceHandler(w http.ResponseWriter, r *http.Request) {
+	devid := r.FormValue("devid")
+	client := comet.DevicesMap.Get(devid).(*comet.Client)
+	if client == nil {
+		http.Error(w, "offline", 404)
+		return
+	}
+	fmt.Fprintf(w, "devid: %s\n", devid)
+	for _, regapp := range(client.RegApps) {
+		fmt.Fprintf(w,
+		"regid: %s\nappid: %s\nuserid: %s\nlast_msgid: %d\n",
+		regapp.RegId,
+		regapp.AppId,
+		regapp.UserId,
+		regapp.LastMsgId)
+	}
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request) {
 	size := comet.DevicesMap.Size()
-	fmt.Fprintf(w, "total register device: %d\n", size)
+	fmt.Fprintf(w, "total online device: %d\n", size)
 }
 
 func checkAuthz(uid string, devid string) bool {
@@ -158,7 +176,8 @@ func main() {
 	}
 	wg.Add(1)
 	go func() {
-		http.HandleFunc("/status", getStatus)
+		http.HandleFunc("/status", statusHandler)
+		http.HandleFunc("/device", deviceHandler)
 		err := http.ListenAndServe(conf.Config.Web, nil)
 		if err != nil {
 			log.Critical("http listen: ", err)

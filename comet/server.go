@@ -23,7 +23,7 @@ type Pack struct {
 
 type Client struct {
 	devId      string
-	regApps    map[string]*RegApp
+	RegApps    map[string]*RegApp
 	outMsgs    chan *Pack
 	nextSeq    uint32
 	lastActive time.Time
@@ -89,7 +89,7 @@ var (
 func InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
 		devId:      devid,
-		regApps:    make(map[string]*RegApp),
+		RegApps:    make(map[string]*RegApp),
 		nextSeq:    100,
 		lastActive: time.Now(),
 		outMsgs:    make(chan *Pack, 100),
@@ -312,7 +312,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 	// don't use defer to improve performance
 	log.Debugf("%s: close connection", client.devId)
-	for regid, _ := range client.regApps {
+	for regid, _ := range client.RegApps {
 		AMInstance.RemoveApp(regid)
 	}
 	CloseClient(client)
@@ -429,7 +429,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 			}
 			regapp := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
 			if regapp != nil {
-				client.regApps[info.RegId] = regapp
+				client.RegApps[info.RegId] = regapp
 			}
 		}
 	} else {
@@ -447,7 +447,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 				continue
 			}
 			regapp := AMInstance.AddApp(client.devId, regid, info)
-			client.regApps[regid] = regapp
+			client.RegApps[regid] = regapp
 			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:rawapp.Pkg})
 		}
 	}
@@ -457,7 +457,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	client.SendMessage(MSG_INIT_REPLY, header.Seq, body, nil)
 
 	// 处理离线消息
-	for _, regapp := range(client.regApps) {
+	for _, regapp := range(client.RegApps) {
 		handleOfflineMsgs(client, regapp)
 	}
 	return client
@@ -523,7 +523,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 	regid := RegId(client.devId, msg.AppId, regUid)
 	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, regUid, regid)
-	if _, ok := client.regApps[regid]; ok {
+	if _, ok := client.RegApps[regid]; ok {
 		// 已经在内存中，直接返回
 		reply.Result = 0
 		reply.AppId = msg.AppId
@@ -541,7 +541,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		return 0
 	}
 	// 记录到client管理的hash table中
-	client.regApps[regid] = regapp
+	client.RegApps[regid] = regapp
 	reply.Result = 0
 	reply.AppId = msg.AppId
 	reply.Pkg = rawapp.Pkg
@@ -578,7 +578,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 
 	// unknown regid
 	var ok bool
-	_, ok = client.regApps[msg.RegId]
+	_, ok = client.RegApps[msg.RegId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
 		errReply(3, msg.AppId)
@@ -596,7 +596,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	}
 	//log.Debugf("%s: uid is (%s)", client.devId, uid)
 	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, regUid)
-	delete(client.regApps, msg.RegId)
+	delete(client.RegApps, msg.RegId)
 
 	reply.Result = 0
 	reply.AppId = msg.AppId
@@ -618,7 +618,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		return -1
 	}
 	// unknown regid
-	regapp, ok := client.regApps[msg.RegId]
+	regapp, ok := client.RegApps[msg.RegId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
 		return 0
