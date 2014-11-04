@@ -34,8 +34,8 @@ const (
 	ERR_INVALID_PARAMS          = 1003
 	ERR_AUTHENTICATE			= 1004
 	ERR_AUTHORIZE				= 1005
-	ERR_PKG_EXIST				= 2001
-	ERR_PKG_NOT_EXIST			= 2002
+	ERR_EXIST				    = 2001
+	ERR_NOT_EXIST			    = 2002
 )
 
 type Response struct {
@@ -181,8 +181,8 @@ func getApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if appid == nil {
-		response.ErrNo  = ERR_PKG_NOT_EXIST
-		response.ErrMsg = "no such package"
+		response.ErrNo  = ERR_NOT_EXIST
+		response.ErrMsg = "package not exist"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
 		return
@@ -249,7 +249,7 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n > 0 {
-		response.ErrNo = ERR_PKG_EXIST
+		response.ErrNo = ERR_EXIST
 		response.ErrMsg = "package exist"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
@@ -322,8 +322,8 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if b == nil {
-		response.ErrNo  = ERR_PKG_NOT_EXIST
-		response.ErrMsg = "no such package"
+		response.ErrNo  = ERR_NOT_EXIST
+		response.ErrMsg = "package not exist"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 400)
 		return
@@ -403,6 +403,13 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
 		http.Error(w, string(b), 500)
+		return
+	}
+	if b == nil {
+		response.ErrNo  = ERR_NOT_EXIST
+		response.ErrMsg = "app not exist"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
 		return
 	}
 	var rawapp storage.RawApp
