@@ -96,7 +96,7 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 			log.Warnf("invalid app info from storage")
 			return nil
 		}
-		log.Infof("got last msgid %d", info.LastMsgId)
+		//log.Infof("got last msgid %d", info.LastMsgId)
 	} else {
 		info.AppId = appId
 		info.UserId = userId
