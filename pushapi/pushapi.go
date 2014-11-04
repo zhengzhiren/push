@@ -65,7 +65,7 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	if m.PushType == 1 && (m.PushParams.RegId == nil || len(m.PushParams.RegId) == 0) {
 		return false, "empty 'regid' when 'push_type'==1"
 	}
-	if m.Pushtype == 2 && (m.PushParams.UserId == nil || len(m.PushParams.UserId) == 0) {
+	if m.PushType == 2 && (m.PushParams.UserId == nil || len(m.PushParams.UserId) == 0) {
 		return false, "empty 'userid' when 'push_type'==2"
 	}
 	if m.Options.TTL > 3*86400 {
