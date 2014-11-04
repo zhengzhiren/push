@@ -635,6 +635,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 }
 
 func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	//log.Debugf("%s: HEARTBEAT", client.devId)
 	client.lastActive = time.Now()
 	return 0
 }

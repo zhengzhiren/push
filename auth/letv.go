@@ -14,9 +14,7 @@ type LetvAuth struct {
 }
 
 type tokenResult struct {
-	Bean	struct {
-		Result	string		`json:"result"`
-	}		`json:"bean"`
+	Bean    interface{}		`json:"bean"`
 	Status  string			`json:"status"`
 	ErrCode	string			`json:"errorCode"`
 }
@@ -34,7 +32,7 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 		log.Warnf("ioutil readall failed: %s", err)
 		return false, ""
 	}
-	log.Infof("sso response (%s)", body)
+	//log.Infof("sso response (%s)", body)
 	var tr tokenResult
 	err = json.Unmarshal(body, &tr)
 	if err != nil {
@@ -45,7 +43,13 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 		log.Infof("sso result failed: (%s) (%s)", tr.Status, tr.ErrCode)
 		return false, ""
 	}
-	return true, "letv_" + tr.Bean.Result
+	m := tr.Bean.(map[string]string)
+	uid, ok := m["result"]
+	if !ok {
+		log.Warnf("missing 'result' in 'bean'")
+		return false, ""
+	}
+	return true, "letv_" + uid
 }
 
 func newLetvAuth(config *conf.ConfigStruct) *LetvAuth {
