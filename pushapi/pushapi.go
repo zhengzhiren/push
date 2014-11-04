@@ -47,6 +47,9 @@ type Response struct {
 var msgBox = make(chan storage.RawMessage, 10)
 
 func checkMessage(m *storage.RawMessage) (bool, string) {
+	if m.Token == "" && m.UserId == "" {
+		return false, "must specify 'token' or 'userid'"
+	}
 	if m.AppId == "" {
 		return false, "missing 'appid'"
 	}
@@ -58,6 +61,15 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	}
 	if m.PushType < 1 || m.PushType > 5 {
 		return false, "invalid 'push_type'"
+	}
+	if m.PushType == 1 && (m.PushParams.RegId == nil || len(m.PushParams.RegId) == 0) {
+		return false, "empty 'regid' when 'push_type'==1"
+	}
+	if m.Pushtype == 2 && (m.PushParams.UserId == nil || len(m.PushParams.UserId) == 0) {
+		return false, "empty 'userid' when 'push_type'==2"
+	}
+	if m.Options.TTL > 3*86400 {
+		return false, "invalid 'options.ttl'"
 	}
 	return true, ""
 }
@@ -376,13 +388,6 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := msg.UserId
 	if uid == "" {
-		if msg.Token == "" {
-			response.ErrNo  = ERR_INVALID_PARAMS
-			response.ErrMsg = "missing 'token' or 'userid'"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 400)
-			return
-		}
 		ok, uid = auth.Instance.Auth(msg.Token)
 		if !ok {
 			response.ErrNo  = ERR_AUTHENTICATE
@@ -564,10 +569,10 @@ func main() {
 					continue
 				}
 
-				if m.Options.TTL <= 0 {
+				if m.Options.TTL < 0 { // send immediatly
 					m.Options.TTL = 0
-				} else if m.Options.TTL > 3*86400 {
-					m.Options.TTL = 86400
+				} else if m.Options.TTL == 0 {
+					m.Options.TTL = 86400 // default
 				}
 
 				if _, err := storage.Instance.HashSet(
