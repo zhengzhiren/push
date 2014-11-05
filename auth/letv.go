@@ -53,11 +53,12 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 		log.Infof("sso result failed: (%s) (%s)", tr.Status, tr.ErrCode)
 		return false, ""
 	}
-	m := tr.Bean.(map[string]string)
-	uid, ok := m["result"]
+	m := tr.Bean.(map[string]interface{})
+	result, ok := m["result"]
 	if !ok {
 		return false, ""
 	}
+	uid := result.(string)
 	return true, "letv_" + uid
 	//return true, "letv_" + tr.Bean.Result
 }
