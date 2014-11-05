@@ -56,11 +56,11 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 	m := tr.Bean.(map[string]interface{})
 	result, ok := m["result"]
 	if !ok {
+		log.Infof("missing 'bean.result'")
 		return false, ""
 	}
 	uid := result.(string)
 	return true, "letv_" + uid
-	//return true, "letv_" + tr.Bean.Result
 }
 
 func newLetvAuth(config *conf.ConfigStruct) *LetvAuth {
