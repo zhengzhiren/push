@@ -13,10 +13,18 @@ type LetvAuth struct {
 	url	string
 }
 
+/*
 type tokenResult struct {
 	Bean    struct {
 		Result string		`json:"result"`
 	}	`json:"bean"`
+	Status  string			`json:"status"`
+	ErrCode	string			`json:"errorCode"`
+}
+*/
+
+type tokenResult struct {
+	Bean    interface{}		`json:"bean"`
 	Status  string			`json:"status"`
 	ErrCode	string			`json:"errorCode"`
 }
@@ -45,7 +53,13 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 		log.Infof("sso result failed: (%s) (%s)", tr.Status, tr.ErrCode)
 		return false, ""
 	}
-	return true, "letv_" + tr.Bean.Result
+	m := tr.Bean.(map[string]string)
+	uid, ok := m["result"]
+	if !ok {
+		return false, ""
+	}
+	return true, "letv_" + uid
+	//return true, "letv_" + tr.Bean.Result
 }
 
 func newLetvAuth(config *conf.ConfigStruct) *LetvAuth {
