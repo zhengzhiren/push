@@ -76,7 +76,7 @@ func main() {
 		//flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
 		flConfig	= flag.String("c", "./conf/conf.json", "Config file")
 	)
-
+	log.Infof("pushd started...")
 	flag.Parse()
 	config_file := "./conf/conf.json"
 	if flConfig != nil {
@@ -184,6 +184,7 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+	log.Infof("pushd running")
 	wg.Wait()
 }
 

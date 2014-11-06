@@ -48,14 +48,15 @@ func newRedisStorage(config *conf.ConfigStruct) *RedisStorage {
 			Dial: func() (redis.Conn, error) {
 				c, err := redis.Dial("tcp", config.Redis.Server)
 				if err != nil {
-					log.Infof("failed to connect Redis:", err)
+					log.Infof("failed to connect Redis (%s), (%s)", config.Redis.Server, err)
 					return nil, err
 				}
 				if _, err := c.Do("AUTH", config.Redis.Pass); err != nil {
-					log.Infof("failed to auth Redis:", err)
+					log.Infof("failed to auth Redis (%s), (%s)", config.Redis.Server, err)
 					return nil, err
 
 				}
+				log.Infof("connected with Redis (%s)", config.Redis.Server)
 				return c, err
 			},
 			TestOnBorrow: func(c redis.Conn, t time.Time) error {
