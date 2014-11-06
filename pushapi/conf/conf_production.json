@@ -1,0 +1,27 @@
+{
+	"comet" 			: "0.0.0.0:20000",
+	"web"				: "0.0.0.0:19999",
+	"pushapi"			: "0.0.0.0:8080",
+	"rabbit" : {
+		"uri" 			: "amqp://guest:guest@10.135.28.70:5672/",
+		"exchange" 		: "test-exchange",
+		"exchange_type" : "fanout",
+		"qos" 			: 1
+	},
+
+	"redis" : {
+		"server"		: "10.135.28.70:6379",
+		"pass"			: "rpasswd"
+	},
+
+	"zookeeper" : {
+		"addr"			: "10.154.156.121:2181",
+		"timeout"		: 30,
+		"path"			: "/push"
+	},
+
+	"auth" : {
+		"provider"		: "letv",
+		"letv_url"		: "http://api.sso.letv.com/api/checkTicket/tk"
+	}
+}

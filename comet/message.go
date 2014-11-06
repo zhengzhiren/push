@@ -48,12 +48,24 @@ func (header *Header) Deserialize(b []byte) error {
 	return nil
 }
 
+type Base1 struct {
+	AppId	string		`json:"appid"`
+	RegId	string		`json:"regid"`
+}
 type InitMessage struct {
-	DeviceId string            `json:"devid"`
-	Apps     []RegisterMessage `json:"apps"`
+	DeviceId string		`json:"devid"`
+	Sync     int		`json:"sync,omitempty"`
+	Apps     []Base1	`json:"apps,omitempty"`
+}
+
+type Base2 struct {
+	AppId	string		`json:"appid"`
+	RegId	string		`json:"regid"`
+	Pkg		string		`json:"pkg"`
 }
 type InitReplyMessage struct {
-	Result int `json:"result"`
+	Result int			`json:"result"`
+	Apps   []Base2		`json:"apps,omitempty"`
 }
 type RegisterMessage struct {
 	AppId  string `json:"appid"`
@@ -62,9 +74,10 @@ type RegisterMessage struct {
 	Token  string `json:"token"`
 }
 type RegisterReplyMessage struct {
-	AppId  string `json:"appid"`
-	RegId  string `json:"regid"`
 	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	Pkg    string `json:"pkg,omitempty"`
+	RegId  string `json:"regid,omitempty"`
 }
 type UnregisterMessage struct {
 	AppId  string `json:"appid"`
@@ -73,9 +86,10 @@ type UnregisterMessage struct {
 	Token  string `json:"token"`
 }
 type UnregisterReplyMessage struct {
-	AppId  string `json:"appid"`
-	RegId  string `json:"regid"`
 	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	Pkg    string `json:"pkg,omitempty"`
+	RegId  string `json:"regid,omitempty"`
 }
 type PushMessage struct {
 	MsgId   int64  `json:"msgid"`

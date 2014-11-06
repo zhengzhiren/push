@@ -2,21 +2,17 @@ package zk
 
 import (
 	log "github.com/cihub/seelog"
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/gooo000/go-zookeeper/zk"
 	"time"
 	"path"
 	"encoding/json"
-	"math/rand"
+	_ "math/rand"
 )
 
 const (
-        // node event
-        eventNodeAdd    = 1
-        eventNodeDel    = 2
-
-        // wait node
-        waitNodeDelay       = 3
-        waitNodeDelaySecond = waitNodeDelay * time.Second
+    // node event
+    eventNodeAdd    = 1
+    eventNodeDel    = 2
 )
 
 var (
@@ -42,39 +38,34 @@ type CometNodeEvent struct {
 // watchCometRoot watch the gopush root node for detecting the node add/del.
 func watchCometRoot(conn *zk.Conn, fpath string, ch chan *CometNodeEvent) error {
 	for {
-		nodes, watch, err := GetNodesW(conn, fpath)
-		if err == ErrNodeNotExist {
-			log.Warn("zk don't have node \"%s\"", fpath)
-			time.Sleep(waitNodeDelaySecond)
-			continue
-		} else if err == ErrNoChild {
-			log.Warn("zk don't have any children in \"%s\"", fpath)
-			for node, _ := range cometNodeInfoMap {
-				ch <- &CometNodeEvent{Event: eventNodeDel, Key: node}
-			}
-			time.Sleep(waitNodeDelaySecond)
-			continue
-		} else if err != nil {
-			log.Error("getNodes error(%v)", err)
-			time.Sleep(waitNodeDelaySecond)
-			continue
+		_, _, watch, err := conn.ChildrenW(fpath)
+		if err != nil {
+			log.Infof("watch children with err [%v]", err)
 		}
-		nodesMap := map[string]bool{}
-		// handle new add nodes
-		for _, node := range nodes {
-			if _, ok := cometNodeInfoMap[node]; !ok {
-				ch <- &CometNodeEvent{Event: eventNodeAdd, Key: node}
-			}
-			nodesMap[node] = true
+		select {
+			case event := <-watch:
+				log.Infof("zk path: \"%s\" receive a event %v", fpath, event)
+				if event.Type == zk.EventNodeChildrenChanged {
+					nodes, _, err := conn.Children(fpath)
+					if err != nil {
+						log.Infof("get children with err [%v]", err)
+					}
+					nodesMap := map[string]bool{}
+					// handle new add nodes
+					for _, node := range nodes {
+						if _, ok := cometNodeInfoMap[node]; !ok {
+							ch <- &CometNodeEvent{Event: eventNodeAdd, Key: node}
+						}
+						nodesMap[node] = true
+					}
+					// handle delete nodes
+					for node, _ := range cometNodeInfoMap {
+						if _, ok := nodesMap[node]; !ok {
+							ch <- &CometNodeEvent{Event: eventNodeDel, Key: node}
+						}
+					}
+				}
 		}
-		// handle delete nodes
-		for node, _ := range cometNodeInfoMap {
-			if _, ok := nodesMap[node]; !ok {
-				ch <- &CometNodeEvent{Event: eventNodeDel, Key: node}
-			}
-		}
-		event := <-watch
-		log.Info("zk path: \"%s\" receive a event %v", fpath, event)
 	}
 }
 
@@ -86,11 +77,11 @@ func handleCometNodeEvent(conn *zk.Conn, fpath string, ch chan *CometNodeEvent) 
 			tmpMap[k] = v
 		}
 		if ev.Event == eventNodeAdd {
-			log.Info("add node: \"%s\"", ev.Key)
+			log.Infof("add node: \"%s\"", ev.Key)
 			npath := path.Join(fpath, ev.Key)
 			data, _, err := conn.Get(npath)
 			if err != nil {
-				log.Error("failed to get zk node \"%s\"", npath)
+				log.Errorf("failed to get zk node \"%s\"", npath)
 			}
 			var addr string
 			json.Unmarshal(data, &addr)
@@ -99,10 +90,10 @@ func handleCometNodeEvent(conn *zk.Conn, fpath string, ch chan *CometNodeEvent) 
 				Weight: 1,
 			}
 		} else if ev.Event == eventNodeDel {
-			log.Info("del node: \"%s\"", ev.Key)
+			log.Infof("del node: \"%s\"", ev.Key)
 			delete(tmpMap, ev.Key)
 		} else {
-			log.Error("unknown node event: %d", ev.Event)
+			log.Errorf("unknown node event: %d", ev.Event)
 			panic("unknown node event")
 		}
 		cometNodeInfoMap = tmpMap
@@ -111,26 +102,52 @@ func handleCometNodeEvent(conn *zk.Conn, fpath string, ch chan *CometNodeEvent) 
 			tmpList = append(tmpList, k)
 		}
 		cometNodeList = tmpList
-		log.Info("cometNodeInfoMap len: %d", len(cometNodeInfoMap))
+		log.Infof("cometNodeInfofMap len: %d", len(cometNodeInfoMap))
 	}
 }
 
-func GetComet() *CometNodeInfo {
+func initCometNodeInfo(conn *zk.Conn, fpath string, ch chan *CometNodeEvent) error{
+	nodes, _, err := conn.Children(fpath)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		if _, ok := cometNodeInfoMap[node]; !ok {
+			ch <- &CometNodeEvent{Event: eventNodeAdd, Key: node}
+		}
+	}
+	return nil
+}
+
+func GetComet() []string {
 	if len(cometNodeInfoMap) == 0 {
 		return nil
 	}
+	/*
 	i := rand.Intn(len(cometNodeList))
 	node := cometNodeList[i]
-	return cometNodeInfoMap[node]
+	*/
+	var comets []string
+	for _, c := range cometNodeInfoMap {
+		comets = append(comets, c.TcpAddr)
+	}
+	return comets
 }
 
-func InitZK(addrs string, timeout time.Duration, fpath string) error {
+func InitWatcher(addrs string, timeout time.Duration, fpath string) error {
 	conn, err := Connect(addrs, timeout)
 	if err != nil {
-		log.Warn("failed to connect zk")
 		return err
 	}
+	_, err = conn.Create(fpath, []byte(""), 0, zk.WorldACL(zk.PermAll))
+	if err != nil && err != zk.ErrNodeExists {
+		return err
+	}
+
 	ch := make(chan *CometNodeEvent, 1024)
+	if err := initCometNodeInfo(conn, fpath, ch); err != nil {
+		log.Infof("failed to init cometNodeInfo with err [%v]", err)
+	}
 	go handleCometNodeEvent(conn, fpath, ch)
 	go watchCometRoot(conn, fpath, ch)
 	return nil

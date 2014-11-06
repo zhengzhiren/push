@@ -8,9 +8,18 @@ import (
 
 type ConfigStruct struct {
 	Comet string		`json:"comet"`
-	Web string		`json:"web"`
+	Web string			`json:"web"`
+	PushAPI string		`json:"pushapi"`
+
+	AcceptTimeout uint32	`json:"accept_timeout"`
+	ReadTimeout uint32		`json:"read_timeout"`
+	WriteTimeout uint32		`json:"write_timeout"`
+	HeartbeatTimeout uint32	`json:"heartbeat_timeout"`
+	MaxBodyLen uint32		`json:"max_bodylen"`
+	MaxClients uint32		`json:"max_clients"`
 
 	Rabbit struct {
+		Enable bool				`json:"enable"`
 		Uri string				`json:"uri"`
 		Exchange string			`json:"exchange"`
 		ExchangeType string		`json:"exchange_type"`
@@ -25,12 +34,16 @@ type ConfigStruct struct {
 	}				`json:"redis"`
 
 	ZooKeeper struct {
-		Addr string		`json:"addr"`
+		Enable bool				`json:"enable"`
+		Addr string				`json:"addr"`
 		Timeout time.Duration	`json:"timeout"`
-		Path string		`json:"path"`
-		Node string		`json:"node"`
-		NodeInfo string		`json:"node_info"`
+		Path string				`json:"path"`
 	}				`json:"zookeeper"`
+
+	Auth struct {
+		Provider string			`json:"provider"`
+		LetvUrl string			`json:"letv_url"`
+	}				`json:"auth"`
 }
 
 var (

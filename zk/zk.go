@@ -3,9 +3,9 @@ package zk
 import (
 	log "github.com/cihub/seelog"
 	"errors"
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/gooo000/go-zookeeper/zk"
 	"github.com/chenyf/push/conf"
-	"path"
+	"github.com/chenyf/push/utils"
 	"strings"
 	"encoding/json"
 	"time"
@@ -31,24 +31,6 @@ func Connect(addrs string, timeout time.Duration) (*zk.Conn, error) {
 	return conn, nil
 }
 
-func GetNodesW(conn *zk.Conn, path string) ([]string, <-chan zk.Event, error) {
-	nodes, stat, watch, err := conn.ChildrenW(path)
-	if err != nil {
-		if err == zk.ErrNoNode {
-			return nil, nil, ErrNodeNotExist
-		}
-		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", path, err)
-		return nil, nil, err
-	}
-	if stat == nil {
-		return nil, nil, ErrNodeNotExist
-	}
-	if len(nodes) == 0 {
-		return nil, nil, ErrNoChild
-	}
-	return nodes, watch, nil
-}
-
 func GetNodes(conn *zk.Conn, path string) ([]string, error) {
 	nodes, stat, err := conn.Children(path)
 	if err != nil {
@@ -68,10 +50,10 @@ func GetNodes(conn *zk.Conn, path string) ([]string, error) {
 }
 
 func Register(conn *zk.Conn, fpath string, data []byte) error {
-	conn.Create(fpath, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-	/*if err != nil {
+	_, err := conn.Create(fpath + "/", data, zk.FlagEphemeral | zk.FlagSequence, zk.WorldACL(zk.PermAll))
+	if err != nil && err != zk.ErrNodeExists {
 		return err
-	}*/
+	}
 	log.Infof("create zk node:%s", fpath)
 	// watch self
 	go func() {
@@ -92,15 +74,17 @@ func Register(conn *zk.Conn, fpath string, data []byte) error {
 	return nil
 }
 
-func InitZk() error {
-	conn, err := Connect(conf.Config.ZooKeeper.Addr, conf.Config.ZooKeeper.Timeout*time.Second)
+func InitZk(config *conf.ConfigStruct) error {
+	conn, err := Connect(config.ZooKeeper.Addr, config.ZooKeeper.Timeout*time.Second)
 	if err != nil {
 		return err
 	}
-	conn.Create(conf.Config.ZooKeeper.Path, []byte(""), 0,  zk.WorldACL(zk.PermAll))
-	fpath := path.Join(conf.Config.ZooKeeper.Path, conf.Config.ZooKeeper.Node)
-	data, _ := json.Marshal(conf.Config.ZooKeeper.NodeInfo)
-	err = Register(conn, fpath, data)
+	_, err = conn.Create(config.ZooKeeper.Path, []byte(""), 0,  zk.WorldACL(zk.PermAll))
+	if err != nil && err != zk.ErrNodeExists {
+		return err
+	}
+	data, _ := json.Marshal(utils.GetLocalIP())
+	err = Register(conn, config.ZooKeeper.Path, data)
 	if err != nil {
 		return err
 	}

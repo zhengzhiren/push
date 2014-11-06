@@ -5,7 +5,7 @@ import (
 	"log"
 	"io"
 	"os"
-	"fmt"
+	//"fmt"
 	"time"
 	"encoding/json"
 	//"strings"
@@ -78,13 +78,8 @@ func main() {
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {
 		timer := time.NewTicker(60*time.Second)
-		hb := comet.Header{
-			Type: comet.MSG_HEARTBEAT,
-			Ver: 0,
-			Seq: 0,
-			Len: 0,
-		}
-		heartbeat, _ := hb.Serialize()
+		heartbeat := make([]byte, 1)
+		heartbeat[0] = 0
 		for {
 			select {
 			//case <- done:
@@ -120,7 +115,15 @@ func main() {
 		}
 
 		log.Printf("recv: (%d) (%d) (%s)", header.Type, header.Len, string(data))
-		if header.Type == comet.MSG_PUSH {
+		if header.Type == comet.MSG_REGISTER_REPLY {
+			var reply comet.RegisterReplyMessage
+			if err := json.Unmarshal(data, &reply); err != nil {
+				log.Printf("invalid request, not JSON\n")
+				return
+			}
+			regid = reply.RegId
+			log.Printf("got regid (%s)", regid)
+		} else if header.Type == comet.MSG_PUSH {
 			var request comet.PushMessage
 			if err := json.Unmarshal(data, &request); err != nil {
 				log.Printf("invalid request, not JSON\n")
@@ -129,7 +132,7 @@ func main() {
 			response := comet.PushReplyMessage{
 				MsgId : request.MsgId,
 				AppId : appid,
-				RegId : fmt.Sprintf("%s_%s", devid, appid),
+				RegId : regid,
 			}
 
 			b, _ := json.Marshal(response)
