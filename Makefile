@@ -14,6 +14,9 @@ pushapi: init
 pushtest: init
 	cd pushtest && go build -o ../output/pushtest/pushtest
 
+gibbonapi: init
+	cd gibbonapi && go build
+
 tarball: init pushd pushapi pushtest
 	cp misc/* output/
 	cp -aR pushd/conf output/pushd/
