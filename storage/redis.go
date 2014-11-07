@@ -15,23 +15,32 @@ type RedisStorage struct {
 	retry int
 }
 
-func newRedisStorage2(server string, pass string) *RedisStorage {
+func NewRedisStorage(config *conf.ConfigStruct) *RedisStorage {
+	return newRedisStorage(
+		config.Redis.Server,
+		config.Redis.Pass,
+		config.Redis.PoolSize,
+		config.Redis.Retry)
+}
+
+func newRedisStorage(server string, pass string, poolsize int, retry int) *RedisStorage {
 	return &RedisStorage {
 		pool: &redis.Pool{
-			MaxIdle: 1,
-			MaxActive: 1,
+			MaxActive: poolsize,
+			MaxIdle: poolsize,
 			IdleTimeout: 300 * time.Second,
 			Dial: func() (redis.Conn, error) {
 				c, err := redis.Dial("tcp", server)
 				if err != nil {
-					log.Infof("failed to connect Redis:", err)
+					log.Infof("failed to connect Redis (%s), (%s)", server, err)
 					return nil, err
 				}
 				if _, err := c.Do("AUTH", pass); err != nil {
-					log.Infof("failed to auth Redis:", err)
+					log.Infof("failed to auth Redis (%s), (%s)", server, err)
 					return nil, err
 
 				}
+				log.Infof("connected with Redis (%s)", server)
 				return c, err
 			},
 			TestOnBorrow: func(c redis.Conn, t time.Time) error {
@@ -39,36 +48,7 @@ func newRedisStorage2(server string, pass string) *RedisStorage {
 				return err
 			},
 		},
-		retry: 5,
-	}
-}
-
-func newRedisStorage(config *conf.ConfigStruct) *RedisStorage {
-	return &RedisStorage {
-		pool: &redis.Pool{
-			MaxActive: config.Redis.PoolSize,
-			MaxIdle: config.Redis.PoolSize,
-			IdleTimeout: 300 * time.Second,
-			Dial: func() (redis.Conn, error) {
-				c, err := redis.Dial("tcp", config.Redis.Server)
-				if err != nil {
-					log.Infof("failed to connect Redis (%s), (%s)", config.Redis.Server, err)
-					return nil, err
-				}
-				if _, err := c.Do("AUTH", config.Redis.Pass); err != nil {
-					log.Infof("failed to auth Redis (%s), (%s)", config.Redis.Server, err)
-					return nil, err
-
-				}
-				log.Infof("connected with Redis (%s)", config.Redis.Server)
-				return c, err
-			},
-			TestOnBorrow: func(c redis.Conn, t time.Time) error {
-				_, err := c.Do("PING")
-				return err
-			},
-		},
-		retry: config.Redis.Retry,
+		retry: retry,
 	}
 }
 

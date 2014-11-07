@@ -5,7 +5,7 @@ import (
 )
 
 func TestHashGet(t *testing.T) {
-	ins := newRedisStorage2("10.135.28.70:6379", "rpasswd")
+	ins := newRedisStorage("10.135.28.70:6379", "rpasswd", 10, 3)
 	b, err := ins.HashGet("db_app_8c02385507b349679307e355e7491636", "b814c6675d902816666ab4954b3ff40b3da7aa27")
 	if err != nil {
 		t.Log("failed, %s", err)

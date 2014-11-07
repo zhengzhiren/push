@@ -58,7 +58,7 @@ var (
 )
 
 func NewInstance(config *conf.ConfigStruct) bool {
-	Instance = newRedisStorage(config)
+	Instance = NewRedisStorage(config)
 	return true
 }
 
