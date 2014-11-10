@@ -180,6 +180,12 @@ func (this *AppManager)GetApp(appId string, regId string) *RegApp {
 	return nil
 }
 
+func (this *AppManager)GetAppByDevice(appId string, devId string) *RegApp {
+	this.lock.RLock()
+	this.lock.RUnlock()
+	return nil
+}
+
 func (this *AppManager)GetApps(appId string) ([]*RegApp) {
 	regapps := make([]*RegApp, 0, len(this.appMap))
 	this.lock.RLock()

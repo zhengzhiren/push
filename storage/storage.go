@@ -7,6 +7,7 @@ import (
 type RawMessage struct {
 	Token		string		`json:"token"`
 	UserId		string		`json:"userid"`
+	AppSec      string		`json:"appsec,omitempty"`
 	MsgId		int64		`json:"msgid"`
 	AppId		string		`json:"appid"`
 	Pkg			string		`json:"pkg"`
@@ -17,6 +18,7 @@ type RawMessage struct {
 	PushParams	struct {
 		RegId	[]string	`json:"regid,omitempty"`
 		UserId	[]string	`json:"userid,omitempty"`
+		DevId	[]string	`json:"devid,omitempty"`
 	}			`json:"push_params"`
 	Content		string		`json:"content"`
 	Options		struct {
@@ -27,6 +29,8 @@ type RawMessage struct {
 type RawApp struct {
 	Pkg		string	`json:"pkg"`
 	UserId	string	`json:"userid"`
+	AppKey  string	`json:"appkey,omitempty"`
+	AppSec  string	`json:"appsec,omitempty"`
 }
 
 type Storage interface {

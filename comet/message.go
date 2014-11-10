@@ -28,6 +28,8 @@ const (
 	MSG_UNREGISTER_REPLY = uint8(6)
 	MSG_PUSH             = uint8(10)
 	MSG_PUSH_REPLY       = uint8(11)
+	MSG_CMD              = uint8(20)
+	MSG_CMD_REPLY        = uint8(21)
 )
 
 // msg to byte
@@ -102,3 +104,10 @@ type PushReplyMessage struct {
 	AppId string `json:"appid"`
 	RegId string `json:"regid"`
 }
+
+type CommandMessage struct {
+}
+
+type CommandReplyMessage struct {
+}
+

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	uuid "github.com/codeskyblue/go-uuid"
+	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/storage"
@@ -91,17 +92,19 @@ func getPappID() int64 {
 	}
 }
 
-func setPackage(uid string, appid string, pkg string) error {
+func setPackage(uid string, appId string, appKey string, appSec string, pkg string) error {
 	rawapp := storage.RawApp{
-		Pkg : pkg,
+		Pkg    : pkg,
 		UserId : uid,
+		AppKey : appKey,
+		AppSec : appSec,
 	}
 	b, _ := json.Marshal(rawapp)
-	if _, err := storage.Instance.HashSet("db_apps", appid, b); err != nil {
+	if _, err := storage.Instance.HashSet("db_apps", appId, b); err != nil {
 		log.Infof("failed to set 'db_apps': %s", err)
 		return err
 	}
-	if _, err := storage.Instance.HashSet("db_packages", pkg, []byte(appid)); err != nil {
+	if _, err := storage.Instance.HashSet("db_packages", pkg, []byte(appId)); err != nil {
 		log.Infof("failed to set 'db_packages': %s", err)
 		return err
 	}
@@ -258,8 +261,10 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 
 	prefix := strconv.FormatInt(tprefix, 10)
 	tappid := strings.Replace(uuid.New(), "-", "", -1)
-	appid := tappid[0:(len(tappid)-len(prefix))] + prefix
-	if err := setPackage(uid, appid, pkg); err != nil {
+	appId  := "appid_"  + tappid[0:(len(tappid)-len(prefix))] + prefix
+	appKey := "appkey_" + utils.RandomString(20)
+	appSec := "appsec_" + utils.RandomString(20)
+	if err := setPackage(uid, appId, appKey, appSec, pkg); err != nil {
 		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
 		b, _ := json.Marshal(response)
@@ -267,7 +272,11 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.ErrNo = 0
-	response.Data = map[string]string{"appid": appid}
+	response.Data = map[string]string{
+		"appId" : appId,
+		"appKey": appKey,
+		"appSec": appSec,
+	}
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
@@ -386,15 +395,18 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
+	appSec := msg.AppSec
 	uid := msg.UserId
-	if uid == "" {
-		ok, uid = auth.Instance.Auth(msg.Token)
-		if !ok {
-			response.ErrNo  = ERR_AUTHENTICATE
-			response.ErrMsg = "authenticate failed"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 401)
-			return
+	if appSec == "" { //use 'uid'
+		if uid == "" {
+			ok, uid = auth.Instance.Auth(msg.Token)
+			if !ok {
+				response.ErrNo  = ERR_AUTHENTICATE
+				response.ErrMsg = "authenticate failed"
+				b, _ := json.Marshal(response)
+				http.Error(w, string(b), 401)
+				return
+			}
 		}
 	}
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
@@ -414,7 +426,13 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
-	if rawapp.UserId != uid {
+	authz_ok := true
+	if appSec != "" && appSec != rawapp.AppSec {
+		authz_ok = false
+	} else if uid != rawapp.UserId {
+		authz_ok = false
+	}
+	if !authz_ok {
 		response.ErrNo  = ERR_AUTHORIZE
 		response.ErrMsg = "authorize failed"
 		b, _ := json.Marshal(response)
