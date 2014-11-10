@@ -1,11 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	log "github.com/cihub/seelog"
 	"net/http"
-	"time"
 
 	"github.com/ant0ine/go-json-rest/rest"
 	"github.com/chenyf/gibbon/cloud"
@@ -120,11 +118,10 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	}
 
 	devId := r.PathParam("devid")
-	if !comet.DevMap.Check(devId) {
-		rest.NotFound(w, r)
-		return
-	}
-	client := comet.DevMap.Get(devId).(*comet.Client)
+	//	if !comet.DevMap.Check(devId) {
+	//		rest.NotFound(w, r)
+	//		return
+	//	}
 	param := ControlParam{}
 	err := r.DecodeJsonPayload(&param)
 	if err != nil {
@@ -140,10 +137,10 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	}
 
 	resp := cloud.ApiResponse{}
-	result, err := control(param.Service, param.Cmd)
+	result, err := control(devId, param.Service, param.Cmd)
 	if err != nil {
 		resp.ErrNo = cloud.ERR_CMD_TIMEOUT
-		resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", client.DevId)
+		resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
 	} else {
 		resp.ErrNo = cloud.ERR_NOERROR
 		resp.Data = result

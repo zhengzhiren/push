@@ -1,0 +1,19 @@
+{
+	"comet" 			: "0.0.0.0:10000",
+	"accept_timeout"	: 2,
+	"read_timeout"		: 60,
+	"heartbeat_interval"	: 110,
+	"heartbeat_timeout"	: 180,
+
+	"web"				: "0.0.0.0:9090",
+	"command_timeout"	: 20,
+	"devcenter"			: "10.154.156.90",
+
+	"zookeeper" : {
+		"enable"		: false,
+		"addr"			: "10.154.156.121:2181",
+		"timeout"		: 30,
+		"root"			: "/gibbon",
+		"comet_addr"	: "111.206.210.49:10000"
+	}
+}

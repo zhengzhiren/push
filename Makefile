@@ -1,4 +1,4 @@
-all: clean init pushd pushapi pushtest tarball
+all: clean init pushd pushapi pushtest gibbonapi tarball
 
 init:
 	mkdir -p output

@@ -15,21 +15,27 @@ import (
 	//"github.com/chenyf/gibbon/zk"
 )
 
+var (
+	amqpURI  string = "amqp://guest:guest@10.154.156.121:5672/"
+	exchange string = "gibbon_rpc_exchange"
+)
+
 func main() {
 
 	var (
-		flConfig = flag.String("c", "./etc/conf.json", "Config file")
+		logConfigFile = flag.String("l", "./etc/log.xml", "Log config file")
+		configFile    = flag.String("c", "./etc/conf.json", "Config file")
 	)
 
 	flag.Parse()
 
-	err := conf.LoadConfig(*flConfig)
+	err := conf.LoadConfig(*configFile)
 	if err != nil {
-		fmt.Printf("LoadConfig (%s) failed: (%s)\n", *flConfig, err)
+		fmt.Printf("LoadConfig (%s) failed: (%s)\n", *configFile, err)
 		os.Exit(1)
 	}
 
-	logger, err := log.LoggerFromConfigAsFile("./etc/log.xml")
+	logger, err := log.LoggerFromConfigAsFile(*logConfigFile)
 	if err != nil {
 		fmt.Printf("Load log config failed: (%s)\n", err)
 		os.Exit(1)
@@ -65,6 +71,8 @@ func main() {
 	//		os.Exit(1)
 	//	}
 	//}
+
+	init_rpc(amqpURI, exchange)
 
 	go startHttp(conf.Config.Web, conf.Config.CommandTimeout)
 

@@ -1,0 +1,13 @@
+<seelog minlevel="trace">
+	<outputs formatid="common">
+		<console />
+		<rollingfile type="size" filename="/letv/log/gibbon/gibbon.log" maxsize="102400000" maxrolls="5"/>
+		<!--
+		<rollingfile type="size" filename="./gibbon.log" maxsize="102400000" maxrolls="1"/>
+		-->
+	</outputs>
+	<formats>
+		<format id="common" format="%Date/%Time [%LEV] %Msg%n" />
+	</formats>
+</seelog>
+
