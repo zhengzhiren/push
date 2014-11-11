@@ -5,7 +5,42 @@ import (
 	"encoding/json"
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/storage"
+	"time"
 )
+
+func SendbackReply(reply *Message) bool {
+	return false
+}
+
+func SendCommand(devId string, cmd *CommandMessage, wait int) bool {
+	client := DevicesMap.Get(devId).(*Client)
+	if client == nil {
+		return false
+	}
+	var replyChannel chan *Message = nil
+	if wait > 0 {
+		replyChannel = make(chan *Message)
+		if wait > 10 {
+			wait = 10
+		}
+	}
+	bCmd, _ := json.Marshal(cmd)
+	seq, ok := client.SendMessage(MSG_CMD, 0, bCmd, replyChannel)
+	if !ok {
+		return false
+	}
+	if wait <= 0 {
+		return true
+	}
+	select {
+	case reply := <-replyChannel:
+		return SendbackReply(reply)
+	case <-time.After(time.Duration(wait) * time.Second):
+		client.MsgTimeout(seq)
+		return false
+	}
+	return false
+}
 
 func pushMessage(appId string, app *RegApp, msg *PushMessage) bool {
 	client := DevicesMap.Get(app.DevId).(*Client)
@@ -46,6 +81,13 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 			for _, uid := range(rawMsg.PushParams.UserId) {
 				apps := AMInstance.GetAppsByUser(appId, uid)
 				for _, app := range(apps) {
+					pushMessage(appId, app, &msg)
+				}
+			}
+		case 4: // devid list
+			for _, devid := range(rawMsg.PushParams.DevId) {
+				app := AMInstance.GetAppByDevice(appId, devid)
+				if app != nil {
 					pushMessage(appId, app, &msg)
 				}
 			}

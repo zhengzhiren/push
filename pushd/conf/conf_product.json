@@ -1,6 +1,6 @@
 {
-	max_bodylen         : 2048,
-	max_clients         : 5000,
+	"max_bodylen"       : 2048,
+	"max_clients"       : 5000,
 
 	"comet" 			: "0.0.0.0:20000",
 	"web"				: "0.0.0.0:19999",
@@ -13,7 +13,9 @@
 
 	"redis" : {
 		"server"		: "10.135.28.70:6379",
-		"pass"			: "rpasswd"
+		"pass"			: "rpasswd",
+		"poolsize"		: 500,
+		"retry"			: 5
 	},
 
 	"zookeeper" : {

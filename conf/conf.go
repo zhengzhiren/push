@@ -31,6 +31,8 @@ type ConfigStruct struct {
 	Redis struct {
 		Server string		`json:"server"`
 		Pass string		`json:"pass"`
+		PoolSize int		`json:"poolsize"`
+		Retry int		`json:"retry"`
 	}				`json:"redis"`
 
 	ZooKeeper struct {

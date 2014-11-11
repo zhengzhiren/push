@@ -21,7 +21,7 @@ type RegApp struct {
 // register app in storage
 type AppInfo struct {
 	AppId		string	`json:"app_id"`
-	UserId		string	`json:"uid,omitempty`
+	UserId		string	`json:"uid,omitempty"`
 	LastMsgId	int64	`json:"last_msgid"`
 }
 
@@ -89,8 +89,9 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 	this.lock.RUnlock()
 
 	// 如果已经在后端存储中存在，则获取 last_msgid
+	key := fmt.Sprintf("db_app_%s", appId)
 	var info AppInfo
-	val, err := storage.Instance.HashGet(fmt.Sprintf("db_app_%s", appId), regId)
+	val, err := storage.Instance.HashGet(key, regId)
 	if err == nil && val != nil {
 		if err := json.Unmarshal(val, &info); err != nil {
 			log.Warnf("invalid app info from storage")
@@ -98,6 +99,11 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 		}
 		//log.Infof("got last msgid %d", info.LastMsgId)
 	} else {
+		/*
+		if err != nil {
+			log.Infof("failed get from (%s) with regid (%s), (%s)", key, regId, err)
+		}
+		*/
 		info.AppId = appId
 		info.UserId = userId
 		info.LastMsgId = -1
@@ -170,6 +176,12 @@ func (this *AppManager)GetApp(appId string, regId string) *RegApp {
 		}
 		return regapp
 	}
+	this.lock.RUnlock()
+	return nil
+}
+
+func (this *AppManager)GetAppByDevice(appId string, devId string) *RegApp {
+	this.lock.RLock()
 	this.lock.RUnlock()
 	return nil
 }

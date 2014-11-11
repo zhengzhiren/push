@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"sync/atomic"
 	//"strings"
 	"encoding/json"
 	"github.com/chenyf/push/auth"
@@ -27,6 +28,7 @@ type Client struct {
 	outMsgs    chan *Pack
 	nextSeq    uint32
 	lastActive time.Time
+	WaitingChannels map[uint32]chan *Message
 	ctrl       chan bool
 }
 
@@ -58,10 +60,12 @@ func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32
 	}
 }
 
-func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply chan *Message) {
+func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply chan *Message) (uint32, bool) {
+	if reply != nil && len(client.WaitingChannels) == 10 {
+		return 0, false
+	}
 	if seq == 0 {
-		seq = client.nextSeq
-		client.nextSeq += 1
+		seq = client.NextSeq()
 	}
 	header := Header{
 		Type: msgType,
@@ -80,11 +84,19 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply 
 		reply:  reply,
 	}
 	client.outMsgs <- pack
+	return seq, true
 }
 
 var (
 	DevicesMap *safemap.SafeMap = safemap.NewSafeMap()
 )
+
+func (this *Client) MsgTimeout(seq uint32) {
+}
+
+func (this *Client) NextSeq() uint32 {
+	return atomic.AddUint32(&this.nextSeq, 1)
+}
 
 func InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
@@ -93,6 +105,7 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 		nextSeq:    100,
 		lastActive: time.Now(),
 		outMsgs:    make(chan *Pack, 100),
+		WaitingChannels: make(map[uint32]chan *Message, 10),
 		ctrl:       make(chan bool),
 	}
 	DevicesMap.Set(devid, client)
@@ -107,6 +120,8 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 				conn.Write(pack.msg.Data)
 				log.Infof("%s: send msg: (%d) (%s)", client.devId, pack.msg.Header.Type, pack.msg.Data)
 				time.Sleep(10 * time.Millisecond)
+			//case seq := <-client.seqCh:
+			//	delete(WaitingChannels, seq)
 			case <-client.ctrl:
 				//log.Infof("%p: leave send routine", conn)
 				return
@@ -341,6 +356,13 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 			}
 			for _, uid := range rawMsg.PushParams.UserId {
 				if regapp.UserId == uid {
+					ok = true
+					break
+				}
+			}
+		case 4:
+			for _, devid := range(rawMsg.PushParams.DevId) {
+			if client.devId == devid {
 					ok = true
 					break
 				}
