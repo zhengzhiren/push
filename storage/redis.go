@@ -255,7 +255,7 @@ func (r *RedisStorage)IncrBy(key string, val int64) (int64, error) {
 	if err != nil {
 		log.Warnf("redis: INCRBY failed, (%s)", err)
 	}
-	return ret, nil
+	return ret, err
 }
 
 func (r *RedisStorage)SetAdd(key string, val string) (int, error) {
