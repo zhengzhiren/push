@@ -185,7 +185,11 @@ func main() {
 		}
 	}()
 
-	StartRpcServer()
+	rpcServer, err = NewRpcServer("amqp://guest:guest@10.154.156.121:5672/", "gibbon_rpc_exchange")
+	if err != nil {
+		log.Critical("failed to start RPC server: ", err)
+		os.Exit(1)
+	}
 
 	log.Infof("pushd running")
 	wg.Wait()

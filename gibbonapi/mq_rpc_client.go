@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 	//	"sync"
@@ -14,6 +15,12 @@ var (
 	exchangeType string = "fanout"
 	routingKey   string = ""
 )
+
+type MQ_CRTL_MSG struct {
+	DeviceId string `json:"dev_id"`
+	Service  string `json:"svc"`
+	Cmd      string `json:"cmd"`
+}
 
 type RpcClient struct {
 	conn          *amqp.Connection
@@ -131,6 +138,14 @@ func handleResponse(client *RpcClient) {
 
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
 	requestId := this.nextReqeustId()
+	msg := MQ_CRTL_MSG{
+		DeviceId: deviceId,
+		Service:  service,
+		Cmd:      cmd,
+	}
+
+	msgData, _ := json.Marshal(&msg)
+
 	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
@@ -145,7 +160,7 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 			Priority:        0,              // 0-9
 			ReplyTo:         this.callbackQueue,
 			CorrelationId:   strconv.Itoa(int(requestId)),
-			Body:            []byte(cmd),
+			Body:            msgData,
 		},
 	); err != nil {
 		log.Errorf("Exchange Publish: %s", err)
