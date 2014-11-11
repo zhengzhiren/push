@@ -17,7 +17,7 @@ func StartRpcServer() error {
 		log.Errorf("Dial: %s", err)
 		return err
 	}
-	defer conn.Close()
+	//	defer conn.Close()
 
 	log.Infof("got Connection, getting Channel")
 	channel, err := conn.Channel()
@@ -87,18 +87,19 @@ func StartRpcServer() error {
 func handleRPC(deliveries <-chan amqp.Delivery, channel *amqp.Channel, done chan error) {
 	for d := range deliveries {
 		log.Debugf(
-			"got %dB delivery: [%v] %q",
+			"got %dB RPC request [%s]: [%v] %q",
 			len(d.Body),
+			d.CorrelationId,
 			d.DeliveryTag,
 			d.Body,
 		)
 		d.Ack(false)
 
 		if err := channel.Publish(
-			exchange, // publish to an exchange
-			"",       // routingKey
-			false,    // mandatory
-			false,    // immediate
+			"",        // publish to an exchange
+			d.ReplyTo, // routingKey
+			false,     // mandatory
+			false,     // immediate
 			amqp.Publishing{
 				Headers:         amqp.Table{},
 				ContentType:     "text/plain",
@@ -106,7 +107,7 @@ func handleRPC(deliveries <-chan amqp.Delivery, channel *amqp.Channel, done chan
 				DeliveryMode:    amqp.Transient, // 1=non-persistent, 2=persistent
 				Priority:        0,              // 0-9
 				ReplyTo:         "",
-				CorrelationId:   "", //TODO
+				CorrelationId:   d.CorrelationId, //TODO
 				Body:            []byte("RPC response!"),
 			},
 		); err != nil {

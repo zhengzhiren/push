@@ -1,6 +1,11 @@
 package main
 
 import (
+	"strconv"
+	"time"
+	//	"sync"
+	"sync/atomic"
+
 	log "github.com/cihub/seelog"
 	"github.com/streadway/amqp"
 )
@@ -15,38 +20,44 @@ type RpcClient struct {
 	channel       *amqp.Channel
 	exchange      string
 	callbackQueue string
+	requestId     uint32
+	requestTable  map[uint32]chan string
+	rpcTimeout    int
 }
 
 func (this *RpcClient) Close() {
 	this.conn.Close()
 }
 
-var (
-	rpcClient *RpcClient = nil
-)
+func (this *RpcClient) nextReqeustId() uint32 {
+	return atomic.AddUint32(&this.requestId, 1)
+}
 
-func init_rpc(amqpURI, exchange string) error {
-	rpcClient = &RpcClient{
-		exchange: exchange,
+func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
+	client := &RpcClient{
+		exchange:     exchange,
+		requestId:    0,
+		rpcTimeout:   10,
+		requestTable: make(map[uint32]chan string),
 	}
 
 	var err error
-	rpcClient.conn, err = amqp.Dial(amqpURI)
+	client.conn, err = amqp.Dial(amqpURI)
 	if err != nil {
 		log.Errorf("Dial: %s", err)
-		return err
+		return nil, err
 	}
 
 	log.Infof("got Connection, getting Channel")
-	rpcClient.channel, err = rpcClient.conn.Channel()
+	client.channel, err = client.conn.Channel()
 	if err != nil {
 		log.Errorf("Channel: %s", err)
-		return err
+		return nil, err
 	}
 
 	log.Infof("got Channel, declaring %q Exchange (%q)", exchangeType, exchange)
 
-	if err := rpcClient.channel.ExchangeDeclare(
+	if err := client.channel.ExchangeDeclare(
 		exchange,     // name
 		exchangeType, // type
 		true,         // durable
@@ -56,10 +67,10 @@ func init_rpc(amqpURI, exchange string) error {
 		nil,          // arguments
 	); err != nil {
 		log.Errorf("Exchange Declare: %s", err)
-		return err
+		return nil, err
 	}
 
-	callbackQueue, err := rpcClient.channel.QueueDeclare(
+	callbackQueue, err := client.channel.QueueDeclare(
 		"",    // name
 		false, // durable
 		true,  // autoDelete
@@ -69,26 +80,26 @@ func init_rpc(amqpURI, exchange string) error {
 	)
 	if err != nil {
 		log.Errorf("callbackQueue Declare error: %s", err)
-		return err
+		return nil, err
 	}
-	rpcClient.callbackQueue = callbackQueue.Name
-	log.Infof("declared callback queue [%s]", rpcClient.callbackQueue)
+	client.callbackQueue = callbackQueue.Name
+	log.Infof("declared callback queue [%s]", client.callbackQueue)
 	log.Infof("MQ RPC succesfully inited")
 
-	go handleResponse()
+	go handleResponse(client)
 
-	return nil
+	return client, nil
 }
 
-func handleResponse() {
-	deliveries, err := rpcClient.channel.Consume(
-		rpcClient.callbackQueue, // name
-		"",    // consumerTag,
-		false, // noAck
-		false, // exclusive
-		false, // noLocal
-		false, // noWait
-		nil,   // arguments
+func handleResponse(client *RpcClient) {
+	deliveries, err := client.channel.Consume(
+		client.callbackQueue, // name
+		"",                   // consumerTag,
+		false,                // noAck
+		false,                // exclusive
+		false,                // noLocal
+		false,                // noWait
+		nil,                  // arguments
 	)
 	if err != nil {
 		log.Errorf("consume error: %s", err)
@@ -104,24 +115,36 @@ func handleResponse() {
 			d.Body,
 		)
 		d.Ack(false)
+		requestId, err := strconv.Atoi(d.CorrelationId)
+		if err != nil {
+			log.Errorf("Invalid RPC response Id: %s", d.CorrelationId)
+			continue
+		}
+		reply, ok := client.requestTable[uint32(requestId)]
+		if ok {
+			reply <- string(d.Body)
+		} else {
+			log.Warnf("Unknown RPC response Id: %d", requestId)
+		}
 	}
 }
 
-func control(deviceId string, service string, cmd string) (string, error) {
+func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
+	requestId := this.nextReqeustId()
 	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
-	if err := rpcClient.channel.Publish(
-		rpcClient.exchange, // publish to an exchange
-		routingKey,         // routing to 0 or more queues
-		false,              // mandatory
-		false,              // immediate
+	if err := this.channel.Publish(
+		this.exchange, // publish to an exchange
+		routingKey,    // routing to 0 or more queues
+		false,         // mandatory
+		false,         // immediate
 		amqp.Publishing{
 			Headers:         amqp.Table{},
 			ContentType:     "text/plain",
 			ContentEncoding: "",
 			DeliveryMode:    amqp.Transient, // 1=non-persistent, 2=persistent
 			Priority:        0,              // 0-9
-			ReplyTo:         rpcClient.callbackQueue,
-			CorrelationId:   "XXX", //TODO
+			ReplyTo:         this.callbackQueue,
+			CorrelationId:   strconv.Itoa(int(requestId)),
 			Body:            []byte(cmd),
 		},
 	); err != nil {
@@ -129,5 +152,19 @@ func control(deviceId string, service string, cmd string) (string, error) {
 		return "", err
 	}
 
-	return "", nil
+	//TODO: lock
+	reply := make(chan string)
+	this.requestTable[requestId] = reply
+	defer delete(this.requestTable, requestId)
+	defer close(reply)
+
+	select {
+	case result := <-reply:
+		log.Infof("RPC response [%d]: %s", requestId, result)
+		return result, nil
+	case <-time.After(time.Duration(this.rpcTimeout) * time.Second):
+		//TODO
+		log.Warnf("RPC request [%d] timeout", requestId)
+		return "", nil
+	}
 }

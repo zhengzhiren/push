@@ -14,6 +14,7 @@ import (
 
 var (
 	commandTimeout int
+	rpcClient      *RpcClient = nil
 )
 
 type devInfo struct {
@@ -137,7 +138,7 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	}
 
 	resp := cloud.ApiResponse{}
-	result, err := control(devId, param.Service, param.Cmd)
+	result, err := rpcClient.Control(devId, param.Service, param.Cmd)
 	if err != nil {
 		resp.ErrNo = cloud.ERR_CMD_TIMEOUT
 		resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)

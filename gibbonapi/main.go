@@ -45,13 +45,21 @@ func main() {
 
 	waitGroup := &sync.WaitGroup{}
 
+	waitGroup.Add(1)
+	rpcClient, err = NewRpcClient(amqpURI, exchange)
+	if err != nil {
+		log.Criticalf("Create RPC client failed: %s", err)
+		os.Exit(1)
+	}
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
-	waitGroup.Add(1)
+
 	go func() {
 		sig := <-c
 		log.Infof("Received signal '%v', exiting\n", sig)
 		log.Infof("leave 1")
+		rpcClient.Close()
 		waitGroup.Done()
 		log.Infof("leave 2")
 	}()
@@ -71,8 +79,6 @@ func main() {
 	//		os.Exit(1)
 	//	}
 	//}
-
-	init_rpc(amqpURI, exchange)
 
 	go startHttp(conf.Config.Web, conf.Config.CommandTimeout)
 
