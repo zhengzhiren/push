@@ -3,7 +3,7 @@ all: clean init pushd pushapi pushtest gibbonapi tarball
 init:
 	mkdir -p output
 	rm -rf output/*
-	mkdir -p output/{pushd,pushapi,pushtest}
+	mkdir -p output/{pushd,pushapi,gibbonapi,pushtest}
 
 pushd: init
 	cd pushd && go build -o ../output/pushd/pushd 
@@ -15,7 +15,7 @@ pushtest: init
 	cd pushtest && go build -o ../output/pushtest/pushtest
 
 gibbonapi: init
-	cd gibbonapi && go build
+	cd gibbonapi && go build -o ../output/gibbonapi/gibbonapi
 
 tarball: init pushd pushapi pushtest
 	cp misc/* output/
@@ -23,6 +23,8 @@ tarball: init pushd pushapi pushtest
 	cp -aR pushd/control.sh output/pushd/
 	cp -aR pushapi/conf output/pushapi/
 	cp -aR pushapi/control.sh output/pushapi/
+	cp -aR gibbonapi/etc output/gibbonapi/
+	cp -aR gibbonapi/control.sh output/gibbonapi/
 	tar -czf push.tgz output
 
 clean:

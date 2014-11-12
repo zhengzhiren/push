@@ -142,6 +142,7 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 		go func() {
 			c := comet.DevicesMap.Get(msg.DeviceId)
 			if c == nil {
+				return
 			}
 			client := c.(*comet.Client)
 			var replyChannel chan *comet.Message = nil
@@ -150,6 +151,7 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 			bCmd, _ := json.Marshal(cmdMsg)
 			seq, ok := client.SendMessage(comet.MSG_CMD, 0, bCmd, replyChannel)
 			if !ok {
+				return
 			}
 			select {
 			case reply := <-replyChannel:
@@ -159,10 +161,11 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 					log.Errorf("Bad command reply message: %s", err)
 				}
 				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, resp.Result)
+				return
 			case <-time.After(time.Duration(wait) * time.Second):
 				client.MsgTimeout(seq)
+				return
 			}
-
 		}()
 		//go comet.SendCommand(msg.DeviceId, &cmdMsg, 0)
 	}
