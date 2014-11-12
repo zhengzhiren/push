@@ -12,7 +12,7 @@
 	},
 
 	"redis" : {
-		"server"		: "10.154.156.121:6380",
+		"server"		: "10.154.156.121:6379",
 		"pass"			: "rpasswd",
 		"poolsize"		: 2,
 		"retry"			: 5
@@ -20,7 +20,7 @@
 
 	"zookeeper" : {
 		"enable"		: true,
-		"addr"			: "10.154.156.121:2181",
+		"addr"			: "10.154.156.122:2181",
 		"timeout"		: 30,
 		"path"			: "/push"
 	},

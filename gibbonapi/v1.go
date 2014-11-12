@@ -10,11 +10,12 @@ import (
 	"github.com/chenyf/gibbon/comet"
 	"github.com/chenyf/gibbon/devcenter"
 	"github.com/chenyf/gibbon/zk"
+	"github.com/chenyf/push/mq_rpc"
 )
 
 var (
 	commandTimeout int
-	rpcClient      *RpcClient = nil
+	rpcClient      *mq_rpc.RpcClient = nil
 )
 
 type devInfo struct {

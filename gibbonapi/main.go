@@ -12,6 +12,7 @@ import (
 
 	"github.com/ant0ine/go-json-rest/rest"
 	"github.com/chenyf/gibbon/conf"
+	"github.com/chenyf/push/mq_rpc"
 	//"github.com/chenyf/gibbon/zk"
 )
 
@@ -46,7 +47,7 @@ func main() {
 	waitGroup := &sync.WaitGroup{}
 
 	waitGroup.Add(1)
-	rpcClient, err = NewRpcClient(amqpURI, exchange)
+	rpcClient, err = mq_rpc.NewRpcClient(amqpURI, exchange)
 	if err != nil {
 		log.Criticalf("Create RPC client failed: %s", err)
 		os.Exit(1)

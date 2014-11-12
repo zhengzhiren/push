@@ -1,4 +1,4 @@
-package main
+package mq_rpc
 
 import (
 	"encoding/json"

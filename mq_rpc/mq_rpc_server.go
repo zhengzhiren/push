@@ -1,23 +1,13 @@
-package main
+package mq_rpc
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
 	"github.com/streadway/amqp"
 )
-
-var (
-	exchangeType string = "fanout"
-	rpcServer    *RpcServer
-)
-
-type MQ_CRTL_MSG struct {
-	DeviceId string `json:"dev_id"`
-	Service  string `json:"svc"`
-	Cmd      string `json:"cmd"`
-}
 
 type RpcServer struct {
 	conn     *amqp.Connection
@@ -98,8 +88,7 @@ func NewRpcServer(amqpURI, exchange string) (*RpcServer, error) {
 		return nil, err
 	}
 
-	done := make(chan error)
-	go handleRpcRequest(deliveries, server.channel, done)
+	go server.handleRpcRequest(deliveries)
 
 	return server, nil
 }
@@ -108,12 +97,12 @@ func (this *RpcServer) Stop() {
 	this.conn.Close()
 }
 
-func (this *RpcServer) SendRpcResponse() {
+func (this *RpcServer) SendRpcResponse(callbackQueue, correlationId, result string) {
 	if err := this.channel.Publish(
-		"",    // publish to an exchange
-		"",    //TODO:d.ReplyTo, // routingKey
-		false, // mandatory
-		false, // immediate
+		"",            // publish to an exchange
+		callbackQueue, // routingKey
+		false,         // mandatory
+		false,         // immediate
 		amqp.Publishing{
 			Headers:         amqp.Table{},
 			ContentType:     "text/plain",
@@ -121,15 +110,15 @@ func (this *RpcServer) SendRpcResponse() {
 			DeliveryMode:    amqp.Transient, // 1=non-persistent, 2=persistent
 			Priority:        0,              // 0-9
 			ReplyTo:         "",
-			//CorrelationId:   d.CorrelationId, //TODO
-			Body: []byte("RPC response!"),
+			CorrelationId:   correlationId,
+			Body:            []byte("RPC response: " + result),
 		},
 	); err != nil {
 		log.Errorf("Exchange Publish: %s", err)
 	}
 }
 
-func handleRpcRequest(deliveries <-chan amqp.Delivery, channel *amqp.Channel, done chan error) {
+func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 	for d := range deliveries {
 		log.Debugf(
 			"got %dB RPC request [%s]: [%v] %q",
@@ -150,9 +139,34 @@ func handleRpcRequest(deliveries <-chan amqp.Delivery, channel *amqp.Channel, do
 			Service: msg.Service,
 			Cmd:     msg.Cmd,
 		}
-		comet.SendCommand(msg.DeviceId, &cmdMsg, 0)
+		go func() {
+			c := comet.DevicesMap.Get(msg.DeviceId)
+			if c == nil {
+			}
+			client := c.(*comet.Client)
+			var replyChannel chan *comet.Message = nil
+			wait := 10
+			replyChannel = make(chan *comet.Message)
+			bCmd, _ := json.Marshal(cmdMsg)
+			seq, ok := client.SendMessage(comet.MSG_CMD, 0, bCmd, replyChannel)
+			if !ok {
+			}
+			select {
+			case reply := <-replyChannel:
+				var resp comet.CommandReplyMessage
+				err := json.Unmarshal(reply.Data, &resp)
+				if err != nil {
+					log.Errorf("Bad command reply message: %s", err)
+				}
+				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, resp.Result)
+			case <-time.After(time.Duration(wait) * time.Second):
+				client.MsgTimeout(seq)
+			}
+
+		}()
+		//go comet.SendCommand(msg.DeviceId, &cmdMsg, 0)
 	}
 
 	log.Infof("handle: deliveries channel closed")
-	done <- nil
+	//done <- nil
 }

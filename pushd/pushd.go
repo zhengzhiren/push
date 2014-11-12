@@ -11,6 +11,7 @@ import (
 	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/mq"
+	"github.com/chenyf/push/mq_rpc"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/zk"
 	log "github.com/cihub/seelog"
@@ -185,7 +186,7 @@ func main() {
 		}
 	}()
 
-	rpcServer, err = NewRpcServer("amqp://guest:guest@10.154.156.121:5672/", "gibbon_rpc_exchange")
+	_, err = mq_rpc.NewRpcServer("amqp://guest:guest@10.154.156.121:5672/", "gibbon_rpc_exchange")
 	if err != nil {
 		log.Critical("failed to start RPC server: ", err)
 		os.Exit(1)

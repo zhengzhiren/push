@@ -20,7 +20,7 @@
 
 	"zookeeper" : {
 		"enable"		: true,
-		"addr"			: "10.154.156.121:2181",
+		"addr"			: "10.154.156.122:2181",
 		"timeout"		: 30,
 		"path"			: "/push"
 	},
