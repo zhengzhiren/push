@@ -4,8 +4,8 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 	"sync/atomic"
+	"time"
 	//"strings"
 	"encoding/json"
 	"github.com/chenyf/push/auth"
@@ -23,13 +23,13 @@ type Pack struct {
 }
 
 type Client struct {
-	devId      string
-	RegApps    map[string]*RegApp
-	outMsgs    chan *Pack
-	nextSeq    uint32
-	lastActive time.Time
+	devId           string
+	RegApps         map[string]*RegApp
+	outMsgs         chan *Pack
+	nextSeq         uint32
+	lastActive      time.Time
 	WaitingChannels map[uint32]chan *Message
-	ctrl       chan bool
+	ctrl            chan bool
 }
 
 type Server struct {
@@ -100,13 +100,13 @@ func (this *Client) NextSeq() uint32 {
 
 func InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
-		devId:      devid,
-		RegApps:    make(map[string]*RegApp),
-		nextSeq:    100,
-		lastActive: time.Now(),
-		outMsgs:    make(chan *Pack, 100),
+		devId:           devid,
+		RegApps:         make(map[string]*RegApp),
+		nextSeq:         100,
+		lastActive:      time.Now(),
+		outMsgs:         make(chan *Pack, 100),
 		WaitingChannels: make(map[uint32]chan *Message, 10),
-		ctrl:       make(chan bool),
+		ctrl:            make(chan bool),
 	}
 	DevicesMap.Set(devid, client)
 
@@ -118,6 +118,10 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 				b, _ := pack.msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(pack.msg.Data)
+				// add reply channel
+				if pack.reply != nil {
+					client.WaitingChannels[pack.msg.Header.Seq] = pack.reply
+				}
 				log.Infof("%s: send msg: (%d) (%s)", client.devId, pack.msg.Header.Type, pack.msg.Data)
 				time.Sleep(10 * time.Millisecond)
 			//case seq := <-client.seqCh:
@@ -143,10 +147,11 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Errorf("failed to listen, (%v)", err)
 		return nil, err
 	}
-	this.funcMap[MSG_HEARTBEAT]  = handleHeartbeat
-	this.funcMap[MSG_REGISTER]   = handleRegister
+	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
+	this.funcMap[MSG_REGISTER] = handleRegister
 	this.funcMap[MSG_UNREGISTER] = handleUnregister
 	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
+	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
 	return l, nil
 }
 
@@ -223,21 +228,21 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	this.clientCount++
 
 	var (
-		readflag    = 0
-		nRead int   = 0
-		n int       = 0
-		headBuf		[]byte = make([]byte, HEADER_SIZE)
-		dataBuf     []byte
-		header      Header
-		startTime   time.Time
+		readflag         = 0
+		nRead     int    = 0
+		n         int    = 0
+		headBuf   []byte = make([]byte, HEADER_SIZE)
+		dataBuf   []byte
+		header    Header
+		startTime time.Time
 	)
 
 	for {
 		select {
-			case <-this.exitCh:
-				log.Debugf("ask me quit\n")
-				break
-			default:
+		case <-this.exitCh:
+			log.Debugf("ask me quit\n")
+			break
+		default:
 		}
 
 		now := time.Now()
@@ -249,7 +254,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
 		conn.SetReadDeadline(now.Add(10 * time.Second))
 		if readflag == 0 {
-		// read first byte
+			// read first byte
 			n := myread(conn, headBuf[0:1])
 			if n < 0 {
 				break
@@ -264,7 +269,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			readflag = 1
 		}
 		if readflag == 1 {
-		// read header
+			// read header
 			n = myread(conn, headBuf[nRead:])
 			if n < 0 {
 				break
@@ -296,7 +301,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			}
 		}
 		if readflag == 2 {
-		// read body
+			// read body
 			n = myread(conn, dataBuf[nRead:])
 			if n < 0 {
 				break
@@ -344,7 +349,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 		case 1:
 			ok = true
 		case 2:
-			for _, regid := range(rawMsg.PushParams.RegId) {
+			for _, regid := range rawMsg.PushParams.RegId {
 				if regapp.RegId == regid {
 					ok = true
 					break
@@ -354,15 +359,15 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 			if regapp.UserId == "" {
 				continue
 			}
-			for _, uid := range(rawMsg.PushParams.UserId) {
+			for _, uid := range rawMsg.PushParams.UserId {
 				if regapp.UserId == uid {
 					ok = true
 					break
 				}
 			}
 		case 4:
-			for _, devid := range(rawMsg.PushParams.DevId) {
-			if client.devId == devid {
+			for _, devid := range rawMsg.PushParams.DevId {
+				if client.devId == devid {
 					ok = true
 					break
 				}
@@ -444,7 +449,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 
 	if msg.Sync == 0 {
-		for _, info := range(msg.Apps) {
+		for _, info := range msg.Apps {
 			if info.AppId == "" || info.RegId == "" {
 				log.Warnf("appid or regid is empty")
 				continue
@@ -470,7 +475,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 			}
 			regapp := AMInstance.AddApp(client.devId, regid, info)
 			client.RegApps[regid] = regapp
-			reply.Apps = append(reply.Apps, Base2{AppId:info.AppId, RegId:regid, Pkg:rawapp.Pkg})
+			reply.Apps = append(reply.Apps, Base2{AppId: info.AppId, RegId: regid, Pkg: rawapp.Pkg})
 		}
 	}
 
@@ -479,7 +484,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	client.SendMessage(MSG_INIT_REPLY, header.Seq, body, nil)
 
 	// 处理离线消息
-	for _, regapp := range(client.RegApps) {
+	for _, regapp := range client.RegApps {
 		handleOfflineMsgs(client, regapp)
 	}
 	return client
@@ -656,9 +661,22 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 	return 0
 }
 
+func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: CMD_REPLY body(%s)", client.devId, body)
+
+	ch, ok := client.WaitingChannels[header.Seq]
+	if ok {
+		//remove waiting channel from map
+		delete(client.WaitingChannels, header.Seq)
+		ch <- &Message{Header: *header, Data: body}
+	} else {
+		log.Warnf("no waiting channel for seq: %d, device: %s", header.Seq, client.devId)
+	}
+	return 0
+}
+
 func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	//log.Debugf("%s: HEARTBEAT", client.devId)
 	client.lastActive = time.Now()
 	return 0
 }
-
