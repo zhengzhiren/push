@@ -235,6 +235,7 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	log.Infof("after authz")
 	tprefix := getPappID()
 	if tprefix == 0 {
 		response.ErrNo = ERR_INTERNAL
@@ -243,6 +244,7 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
+	log.Infof("get from db_packages")
 	n, err := storage.Instance.HashExists("db_packages", pkg)
 	if err != nil {
 		response.ErrNo = ERR_INTERNAL
@@ -262,8 +264,9 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 	prefix := strconv.FormatInt(tprefix, 10)
 	tappid := strings.Replace(uuid.New(), "-", "", -1)
 	appId  := "appid_"  + tappid[0:(len(tappid)-len(prefix))] + prefix
-	appKey := "appkey_" + utils.RandomString(20)
-	appSec := "appsec_" + utils.RandomString(20)
+	appKey := "appkey_" + utils.RandomAlphabetic(20)
+	appSec := "appsec_" + utils.RandomAlphabetic(20)
+	log.Infof("before setPackage")
 	if err := setPackage(uid, appId, appKey, appSec, pkg); err != nil {
 		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
@@ -271,11 +274,12 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
+	log.Infof("after setPackage")
 	response.ErrNo = 0
 	response.Data = map[string]string{
-		"appId" : appId,
-		"appKey": appKey,
-		"appSec": appSec,
+		"appid" : appId,
+		"appkey": appKey,
+		"appsec": appSec,
 	}
 	b, _ := json.Marshal(response)
 	fmt.Fprintf(w, string(b))
@@ -440,6 +444,13 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msgid := getMsgID()
+	if msgid == 0 {
+	response.ErrNo = ERR_INTERNAL
+		response.ErrMsg = "no avaiabled msgid"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 500)
+		return
+	}
 	msg.MsgId = msgid
 	response.ErrNo = 0
 	response.Data = map[string]int64{"msgid": msgid}

@@ -28,6 +28,9 @@ func assertEquals(t *testing.T, arg1, arg2 interface{}, falseMsg string, params 
 
 func TestRandomString(t *testing.T) {
 
+	str0 := RandomAlphabetic(20)
+	fmt.Printf("%s\n", str0)
+
     // random utf8 string
     str1 := RandomString(21)
     assertEquals(t, len([]rune(str1)), 21, "RandomString(21) length")

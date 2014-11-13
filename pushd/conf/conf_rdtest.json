@@ -14,8 +14,8 @@
 	"redis" : {
 		"server"		: "10.154.156.121:6379",
 		"pass"			: "rpasswd",
-		"poolsize"		: 2,
-		"retry"			: 5
+		"poolsize"		: 50,
+		"retry"			: 3
 	},
 
 	"zookeeper" : {
