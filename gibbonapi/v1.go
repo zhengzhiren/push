@@ -6,10 +6,9 @@ import (
 	"net/http"
 
 	"github.com/ant0ine/go-json-rest/rest"
-	"github.com/chenyf/gibbon/cloud"
-	"github.com/chenyf/gibbon/comet"
-	"github.com/chenyf/gibbon/devcenter"
-	"github.com/chenyf/gibbon/zk"
+
+	"github.com/chenyf/push/cloud"
+	"github.com/chenyf/push/devcenter"
 	"github.com/chenyf/push/mq_rpc"
 )
 
@@ -50,32 +49,12 @@ func checkAuthz(sso_tk string, devid string) bool {
 func getStatus(w rest.ResponseWriter, r *rest.Request) {
 	resp := cloud.ApiResponse{}
 	resp.ErrNo = cloud.ERR_NOERROR
-	resp.Data = fmt.Sprintf("Total registered devices: %d", comet.DevMap.Size())
+	//resp.Data = fmt.Sprintf("Total registered devices: %d", comet.DevMap.Size())
 	w.WriteJson(resp)
-}
-
-func getGibbon(w rest.ResponseWriter, r *rest.Request) {
-	resp := cloud.ApiResponse{}
-	resp.ErrNo = cloud.ERR_NOERROR
-	resp.Data = zk.GetComet()
-	w.WriteJson(resp)
-}
-
-func getDevInfo(client *comet.Client) devInfo {
-	devInfo := devInfo{
-		Id:        client.DevId,
-		LastAlive: client.LastAlive.String(),
-		RegTime:   client.RegistTime.String(),
-	}
-	return devInfo
 }
 
 func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
 	devInfoList := []devInfo{}
-	devMap := comet.DevMap.Items()
-	for _, client := range devMap {
-		devInfoList = append(devInfoList, getDevInfo(client.(*comet.Client)))
-	}
 
 	resp := cloud.ApiResponse{}
 	resp.ErrNo = cloud.ERR_NOERROR
@@ -85,10 +64,10 @@ func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
 
 func getDevice(w rest.ResponseWriter, r *rest.Request) {
 	devId := r.PathParam("devid")
-	if !comet.DevMap.Check(devId) {
-		rest.NotFound(w, r)
-		return
-	}
+	//	if !comet.DevMap.Check(devId) {
+	//		rest.NotFound(w, r)
+	//		return
+	//	}
 
 	r.ParseForm()
 	sso_tk := r.FormValue("sso_tk")
@@ -103,12 +82,9 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 		return
 	}
 
-	client := comet.DevMap.Get(devId).(*comet.Client)
-	devInfo := getDevInfo(client)
-
 	resp := cloud.ApiResponse{}
 	resp.ErrNo = cloud.ERR_NOERROR
-	resp.Data = devInfo
+	//resp.Data = devInfo
 	w.WriteJson(resp)
 }
 
