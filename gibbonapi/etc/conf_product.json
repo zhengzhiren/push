@@ -1,9 +1,0 @@
-{
-	"web"				: "0.0.0.0:9091",
-	"command_timeout"	: 20,
-	"devcenter"			: "10.154.156.90",
-
-	"rabbit" : {
-		"uri" 			: "amqp://guest:guest@10.135.28.70:5672/"
-	}
-}
