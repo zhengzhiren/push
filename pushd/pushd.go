@@ -186,7 +186,7 @@ func main() {
 		}
 	}()
 
-	_, err = mq_rpc.NewRpcServer("amqp://guest:guest@10.154.156.121:5672/", "gibbon_rpc_exchange")
+	_, err = mq_rpc.NewRpcServer(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange")
 	if err != nil {
 		log.Critical("failed to start RPC server: ", err)
 		os.Exit(1)

@@ -16,7 +16,6 @@ import (
 )
 
 var (
-	amqpURI  string = "amqp://guest:guest@10.154.156.121:5672/"
 	exchange string = "gibbon_rpc_exchange"
 )
 
@@ -46,7 +45,7 @@ func main() {
 	waitGroup := &sync.WaitGroup{}
 
 	waitGroup.Add(1)
-	rpcClient, err = mq_rpc.NewRpcClient(amqpURI, exchange)
+	rpcClient, err = mq_rpc.NewRpcClient(conf.Config.Rabbit.Uri, exchange)
 	if err != nil {
 		log.Criticalf("Create RPC client failed: %s", err)
 		os.Exit(1)
