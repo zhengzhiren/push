@@ -1,4 +1,4 @@
-package mq_rpc
+package mq
 
 import (
 	"encoding/json"
@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	exchangeType string = "fanout"
-	routingKey   string = ""
+	rpcExchangeType string = "fanout"
 )
 
 type MQ_CRTL_MSG struct {
@@ -62,16 +61,16 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		return nil, err
 	}
 
-	log.Infof("got Channel, declaring %q Exchange (%q)", exchangeType, exchange)
+	log.Infof("got Channel, declaring %q Exchange (%q)", rpcExchangeType, exchange)
 
 	if err := client.channel.ExchangeDeclare(
-		exchange,     // name
-		exchangeType, // type
-		true,         // durable
-		false,        // auto-deleted
-		false,        // internal
-		false,        // noWait
-		nil,          // arguments
+		exchange,        // name
+		rpcExchangeType, // type
+		true,            // durable
+		false,           // auto-deleted
+		false,           // internal
+		false,           // noWait
+		nil,             // arguments
 	); err != nil {
 		log.Errorf("Exchange Declare: %s", err)
 		return nil, err
@@ -146,6 +145,7 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
+	routingKey := ""
 	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange

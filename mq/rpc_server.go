@@ -1,4 +1,4 @@
-package mq_rpc
+package mq
 
 import (
 	"encoding/json"
@@ -34,16 +34,16 @@ func NewRpcServer(amqpURI, exchange string) (*RpcServer, error) {
 		return nil, err
 	}
 
-	log.Infof("got Channel, declaring %q Exchange (%q)", exchangeType, exchange)
+	log.Infof("got Channel, declaring %q Exchange (%q)", rpcExchangeType, exchange)
 
 	if err := server.channel.ExchangeDeclare(
-		exchange,     // name
-		exchangeType, // type
-		true,         // durable
-		false,        // auto-deleted
-		false,        // internal
-		false,        // noWait
-		nil,          // arguments
+		exchange,        // name
+		rpcExchangeType, // type
+		true,            // durable
+		false,           // auto-deleted
+		false,           // internal
+		false,           // noWait
+		nil,             // arguments
 	); err != nil {
 		log.Errorf("Exchange Declare: %s", err)
 		return nil, err

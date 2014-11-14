@@ -18,7 +18,6 @@ import (
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/mq"
-	"github.com/chenyf/push/mq_rpc"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/zk"
 )
@@ -68,7 +67,7 @@ func main() {
 		log.Warnf("init zk watcher failed: %s", err)
 		os.Exit(1)
 	}
-	rpcClient, err = mq_rpc.NewRpcClient(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange")
+	rpcClient, err = mq.NewRpcClient(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange")
 	if err != nil {
 		log.Criticalf("Create RPC client failed: %s", err)
 		os.Exit(1)
