@@ -22,7 +22,7 @@
 	"zookeeper" : {
 		"addr"			: "10.154.156.122:2181",
 		"timeout"		: 30,
-		"path"			: "/push"
+		"path"			: "/push_test"
 	},
 	"auth" : {
 		"provider"		: "letv",
