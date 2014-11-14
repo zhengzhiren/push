@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/utils/safemap"
 	log "github.com/cihub/seelog"
 )
@@ -33,6 +34,7 @@ type Client struct {
 }
 
 type Server struct {
+	name          string // unique name of this server
 	exitCh        chan bool
 	wg            *sync.WaitGroup
 	funcMap       map[uint8]MsgHandler
@@ -47,6 +49,7 @@ type Server struct {
 
 func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32) *Server {
 	return &Server{
+		name:          utils.GetLocalIP(),
 		exitCh:        make(chan bool),
 		wg:            &sync.WaitGroup{},
 		funcMap:       make(map[uint8]MsgHandler),
@@ -98,7 +101,12 @@ func (this *Client) NextSeq() uint32 {
 	return atomic.AddUint32(&this.nextSeq, 1)
 }
 
-func InitClient(conn *net.TCPConn, devid string) *Client {
+func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
+	// save the client device Id to storage
+	if _, err := storage.Instance.HashSet("db_comet_"+this.name, devid, nil); err != nil {
+		log.Infof("failed to put device %s into redis:", devid, err)
+		return nil
+	}
 	client := &Client{
 		devId:           devid,
 		RegApps:         make(map[string]*RegApp),
@@ -135,8 +143,11 @@ func InitClient(conn *net.TCPConn, devid string) *Client {
 	return client
 }
 
-func CloseClient(client *Client) {
+func (this *Server) CloseClient(client *Client) {
 	client.ctrl <- true
+	if _, err := storage.Instance.HashDel("db_comet_"+this.name, client.devId); err != nil {
+		log.Errorf("failed to remove device %s from redis:", client.devId, err)
+	}
 	DevicesMap.Delete(client.devId)
 }
 
@@ -152,6 +163,20 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_UNREGISTER] = handleUnregister
 	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
 	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
+
+	// keep the data of this node not expired on redis
+	go func() {
+		for {
+			select {
+			case <-this.exitCh:
+				log.Infof("existing storage refreshing routine")
+				return
+			case <-time.After(10 * time.Second):
+				storage.Instance.Expire("db_comet_"+this.name, 30)
+			}
+		}
+	}()
+
 	return l, nil
 }
 
@@ -335,7 +360,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	for regid, _ := range client.RegApps {
 		AMInstance.RemoveApp(regid)
 	}
-	CloseClient(client)
+	this.CloseClient(client)
 	conn.Close()
 	this.clientCount--
 }
@@ -443,7 +468,11 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	client := InitClient(conn, devid)
+	client := server.InitClient(conn, devid)
+	if client == nil {
+		conn.Close()
+		return nil
+	}
 	reply := InitReplyMessage{
 		Result: 0,
 	}
