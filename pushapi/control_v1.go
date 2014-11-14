@@ -9,12 +9,12 @@ import (
 
 	"github.com/chenyf/push/cloud"
 	"github.com/chenyf/push/devcenter"
-	"github.com/chenyf/push/mq_rpc"
+	"github.com/chenyf/push/mq"
 )
 
 var (
 	commandTimeout int
-	rpcClient      *mq_rpc.RpcClient = nil
+	rpcClient      *mq.RpcClient = nil
 )
 
 type devInfo struct {
