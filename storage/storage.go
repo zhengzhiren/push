@@ -40,6 +40,8 @@ type Storage interface {
 	AddDevice(devId string) bool
 	RemoveDevice(devId string)
 
+	IsDeviceExist(devId string) (bool, error)
+
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
 	HashSet(db string, key string, val []byte) (int, error)

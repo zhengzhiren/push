@@ -468,6 +468,19 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
+	// check if the device Id has connected to other servers
+	exist, err := storage.Instance.IsDeviceExist(devid)
+	if err != nil {
+		log.Errorf("failed to check device existence:", err)
+		conn.Close()
+		return nil
+	}
+	if exist {
+		log.Warnf("device %s already exist", devid)
+		conn.Close()
+		return nil
+	}
+
 	client := server.InitClient(conn, devid)
 	if client == nil {
 		conn.Close()

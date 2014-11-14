@@ -170,6 +170,25 @@ func (r *RedisStorage) RemoveDevice(devId string) {
 	}
 }
 
+func (r *RedisStorage) IsDeviceExist(devId string) (bool, error) {
+	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
+	if err != nil {
+		log.Errorf("failed to get comet nodes KEYS:", err)
+		return false, err
+	}
+	for _, key := range keys {
+		exist, err := r.HashExists(key, devId)
+		if err != nil {
+			log.Errorf("error on HashExists:", err)
+			return false, err
+		}
+		if exist == 1 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
 	ret, err := r.Do("HGETALL", db)
 	if err != nil {
