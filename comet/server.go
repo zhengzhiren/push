@@ -103,10 +103,11 @@ func (this *Client) NextSeq() uint32 {
 
 func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	// save the client device Id to storage
-	if _, err := storage.Instance.HashSet("db_comet_"+this.name, devid, nil); err != nil {
+	if err := storage.Instance.AddDevice(this.name, devid); err != nil {
 		log.Infof("failed to put device %s into redis:", devid, err)
 		return nil
 	}
+
 	client := &Client{
 		devId:           devid,
 		RegApps:         make(map[string]*RegApp),
@@ -145,7 +146,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 
 func (this *Server) CloseClient(client *Client) {
 	client.ctrl <- true
-	if _, err := storage.Instance.HashDel("db_comet_"+this.name, client.devId); err != nil {
+	if err := storage.Instance.RemoveDevice(this.name, client.devId); err != nil {
 		log.Errorf("failed to remove device %s from redis:", client.devId, err)
 	}
 	DevicesMap.Delete(client.devId)
@@ -174,7 +175,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 				log.Infof("existing storage refreshing routine")
 				return
 			case <-time.After(10 * time.Second):
-				storage.Instance.Expire("db_comet_"+this.name, 30)
+				storage.Instance.RefreshDevices(this.name, 30)
 			}
 		}
 	}()

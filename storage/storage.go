@@ -38,10 +38,10 @@ type Storage interface {
 	GetOfflineMsgs(appId string, regId string, ctime int64) []*RawMessage
 	GetRawMsg(appId string, msgId int64) *RawMessage
 
-	AddDevice(devId string) bool
-	RemoveDevice(devId string)
-
+	AddDevice(serverName, devId string) error
+	RemoveDevice(serverName, devId string) error
 	IsDeviceExist(devId string) (bool, error)
+	RefreshDevices(serverName string, timeout int) error
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
@@ -58,8 +58,6 @@ type Storage interface {
 	SetDel(key string, val string) (int, error)
 	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
-
-	Expire(key string, seconds int) (int, error)
 }
 
 var (

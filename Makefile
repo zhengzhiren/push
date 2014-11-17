@@ -25,3 +25,14 @@ tarball: init pushd pushapi pushtest
 clean:
 	rm -rf output push.tgz
 
+TEST_DIRS:=auth storage devcenter
+
+test:
+	@for dir in $(TEST_DIRS); do \
+		cd $(CURDIR)/$$dir && go test; \
+	done
+
+bench:
+	@for dir in $(TEST_DIRS); do \
+		cd $(CURDIR)/$$dir && go test -bench .; \
+	done
