@@ -31,6 +31,36 @@ type devicesResult struct {
 	} `json:"data"`
 }
 
+func IsBinding(sso_tk, devId string) (bool, error) {
+	type BindingResp struct {
+		cloud.ApiStatus
+		Data struct {
+			BindStatus bool `json:"bindStatus"`
+		} `json:"data"`
+	}
+	url := fmt.Sprintf("http://%s/api/v1/device/bind/%s/status?sso_tk=%s", conf.Config.DevCenter, devId, sso_tk)
+	res, err := http.Get(url)
+	if err != nil {
+		return false, err
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return false, err
+	}
+
+	var result BindingResp
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return false, err
+	}
+
+	if result.ErrNo != cloud.ERR_NOERROR {
+		return false, errors.New(result.ErrMsg)
+	}
+
+	return result.Data.BindStatus, nil
+}
+
 func GetDeviceList(sso_tk string, devType int) ([]Device, error) {
 	url := fmt.Sprintf("http://%s/api/v1/device/bind/?sso_tk=%s&type=%d", conf.Config.DevCenter, sso_tk, devType)
 	res, err := http.Get(url)

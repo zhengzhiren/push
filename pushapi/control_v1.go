@@ -32,18 +32,12 @@ func checkAuthz(sso_tk string, devid string) bool {
 		return true
 	}
 
-	devices, err := devcenter.GetDeviceList(sso_tk, devcenter.DEV_ROUTER)
+	binding, err := devcenter.IsBinding(sso_tk, devid)
 	if err != nil {
-		log.Errorf("GetDeviceList failed: %s", err.Error())
+		log.Errorf("IsBinding failed: %s", err.Error())
 		return false
 	}
-
-	for _, dev := range devices {
-		if devid == dev.Id {
-			return true
-		}
-	}
-	return false
+	return binding
 }
 
 func getStatus(w rest.ResponseWriter, r *rest.Request) {
