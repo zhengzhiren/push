@@ -5,32 +5,32 @@ import (
 )
 
 type RawMessage struct {
-	Token		string		`json:"token"`
-	UserId		string		`json:"userid"`
-	AppSec      string		`json:"appsec,omitempty"`
-	MsgId		int64		`json:"msgid"`
-	AppId		string		`json:"appid"`
-	Pkg			string		`json:"pkg"`
-	CTime		int64		`json:"ctime"`
-	Platform	string		`json:"platform,omitempty"`
-	MsgType		int			`json:"msg_type"`
-	PushType	int			`json:"push_type"`
-	PushParams	struct {
-		RegId	[]string	`json:"regid,omitempty"`
-		UserId	[]string	`json:"userid,omitempty"`
-		DevId	[]string	`json:"devid,omitempty"`
-	}			`json:"push_params"`
-	Content		string		`json:"content"`
-	Options		struct {
-		TTL		int64		`json:"ttl,omitempty"`
-	}			`json:"options"`
+	Token      string `json:"token"`
+	UserId     string `json:"userid"`
+	AppSec     string `json:"appsec,omitempty"`
+	MsgId      int64  `json:"msgid"`
+	AppId      string `json:"appid"`
+	Pkg        string `json:"pkg"`
+	CTime      int64  `json:"ctime"`
+	Platform   string `json:"platform,omitempty"`
+	MsgType    int    `json:"msg_type"`
+	PushType   int    `json:"push_type"`
+	PushParams struct {
+		RegId  []string `json:"regid,omitempty"`
+		UserId []string `json:"userid,omitempty"`
+		DevId  []string `json:"devid,omitempty"`
+	} `json:"push_params"`
+	Content string `json:"content"`
+	Options struct {
+		TTL int64 `json:"ttl,omitempty"`
+	} `json:"options"`
 }
 
 type RawApp struct {
-	Pkg		string	`json:"pkg"`
-	UserId	string	`json:"userid"`
-	AppKey  string	`json:"appkey,omitempty"`
-	AppSec  string	`json:"appsec,omitempty"`
+	Pkg    string `json:"pkg"`
+	UserId string `json:"userid"`
+	AppKey string `json:"appkey,omitempty"`
+	AppSec string `json:"appsec,omitempty"`
 }
 
 type Storage interface {
@@ -39,6 +39,8 @@ type Storage interface {
 
 	AddDevice(devId string) bool
 	RemoveDevice(devId string)
+
+	IsDeviceExist(devId string) (bool, error)
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
@@ -55,6 +57,8 @@ type Storage interface {
 	SetDel(key string, val string) (int, error)
 	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
+
+	Expire(key string, seconds int) (int, error)
 }
 
 var (
@@ -65,4 +69,3 @@ func NewInstance(config *conf.ConfigStruct) bool {
 	Instance = NewRedisStorage(config)
 	return true
 }
-

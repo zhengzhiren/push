@@ -51,23 +51,23 @@ func (header *Header) Deserialize(b []byte) error {
 }
 
 type Base1 struct {
-	AppId	string		`json:"appid"`
-	RegId	string		`json:"regid"`
+	AppId string `json:"appid"`
+	RegId string `json:"regid"`
 }
 type InitMessage struct {
-	DeviceId string		`json:"devid"`
-	Sync     int		`json:"sync,omitempty"`
-	Apps     []Base1	`json:"apps,omitempty"`
+	DeviceId string  `json:"devid"`
+	Sync     int     `json:"sync,omitempty"`
+	Apps     []Base1 `json:"apps,omitempty"`
 }
 
 type Base2 struct {
-	AppId	string		`json:"appid"`
-	RegId	string		`json:"regid"`
-	Pkg		string		`json:"pkg"`
+	AppId string `json:"appid"`
+	RegId string `json:"regid"`
+	Pkg   string `json:"pkg"`
 }
 type InitReplyMessage struct {
-	Result int			`json:"result"`
-	Apps   []Base2		`json:"apps,omitempty"`
+	Result int     `json:"result"`
+	Apps   []Base2 `json:"apps,omitempty"`
 }
 type RegisterMessage struct {
 	AppId  string `json:"appid"`
@@ -106,8 +106,10 @@ type PushReplyMessage struct {
 }
 
 type CommandMessage struct {
+	Service string `json:"service"`
+	Cmd     string `json:"cmd"`
 }
 
 type CommandReplyMessage struct {
+	Result string `json:"result"`
 }
-

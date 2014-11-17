@@ -1,28 +1,29 @@
 package main
 
 import (
-	"net"
-	"log"
+	"fmt"
 	"io"
+	"log"
+	"net"
 	"os"
 	//"fmt"
-	"time"
 	"encoding/json"
+	"time"
 	//"strings"
 	"github.com/chenyf/push/comet"
 )
 
 func sendInit(conn *net.TCPConn, devid string) {
 	init_msg := comet.InitMessage{
-		DeviceId : devid,
+		DeviceId: devid,
 	}
 
 	b2, _ := json.Marshal(init_msg)
 	header := comet.Header{
 		Type: comet.MSG_INIT,
-		Ver: 0,
-		Seq: 0,
-		Len: uint32(len(b2)),
+		Ver:  0,
+		Seq:  0,
+		Len:  uint32(len(b2)),
 	}
 	b1, _ := header.Serialize()
 	n1, _ := conn.Write(b1)
@@ -32,18 +33,18 @@ func sendInit(conn *net.TCPConn, devid string) {
 
 func sendRegister(conn *net.TCPConn, appid string, appkey string, regid string, token string) {
 	reg_msg := comet.RegisterMessage{
-		AppId : appid,
-		AppKey : appkey,
-		RegId : regid,
-		Token : token,
+		AppId:  appid,
+		AppKey: appkey,
+		RegId:  regid,
+		Token:  token,
 	}
 
 	b2, _ := json.Marshal(reg_msg)
 	header := comet.Header{
 		Type: comet.MSG_REGISTER,
-		Ver: 0,
-		Seq: 0,
-		Len: uint32(len(b2)),
+		Ver:  0,
+		Seq:  0,
+		Len:  uint32(len(b2)),
 	}
 	b1, _ := header.Serialize()
 	n1, _ := conn.Write(b1)
@@ -77,7 +78,7 @@ func main() {
 
 	outMsg := make(chan *comet.Message, 10)
 	go func(out chan *comet.Message) {
-		timer := time.NewTicker(60*time.Second)
+		timer := time.NewTicker(60 * time.Second)
 		heartbeat := make([]byte, 1)
 		heartbeat[0] = 0
 		for {
@@ -89,7 +90,7 @@ func main() {
 				conn.Write(b)
 				conn.Write(msg.Data)
 				log.Printf("send: (%d) (%d) (%s)", msg.Header.Type, msg.Header.Len, msg.Data)
-			case <- timer.C:
+			case <-timer.C:
 				conn.Write(heartbeat)
 			}
 		}
@@ -130,24 +131,44 @@ func main() {
 				return
 			}
 			response := comet.PushReplyMessage{
-				MsgId : request.MsgId,
-				AppId : appid,
-				RegId : regid,
+				MsgId: request.MsgId,
+				AppId: appid,
+				RegId: regid,
 			}
 
 			b, _ := json.Marshal(response)
 			reply_header := comet.Header{
 				Type: comet.MSG_PUSH_REPLY,
-				Ver: 0,
-				Seq: header.Seq,
-				Len: uint32(len(b)),
+				Ver:  0,
+				Seq:  header.Seq,
+				Len:  uint32(len(b)),
 			}
 			reply_msg := &comet.Message{
 				Header: reply_header,
-				Data: b,
+				Data:   b,
+			}
+			outMsg <- reply_msg
+		} else if header.Type == comet.MSG_CMD {
+			var request comet.CommandMessage
+			if err := json.Unmarshal(data, &request); err != nil {
+				log.Printf("bad command request: %s", err)
+				return
+			}
+			resp := comet.CommandReplyMessage{
+				Result: fmt.Sprintf("Response from agent. service: %s, cmd: %s", request.Service, request.Cmd),
+			}
+			b, _ := json.Marshal(resp)
+			reply_header := comet.Header{
+				Type: comet.MSG_CMD_REPLY,
+				Ver:  0,
+				Seq:  header.Seq,
+				Len:  uint32(len(b)),
+			}
+			reply_msg := &comet.Message{
+				Header: reply_header,
+				Data:   b,
 			}
 			outMsg <- reply_msg
 		}
 	}
 }
-

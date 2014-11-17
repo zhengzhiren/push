@@ -4,21 +4,21 @@ import (
 	"flag"
 	"os"
 	//"time"
-	"sync"
-	"strings"
-	"os/signal"
-	"syscall"
-	"net/http"
-	"fmt"
 	"crypto/hmac"
 	"crypto/sha1"
-	"github.com/chenyf/push/conf"
-	"github.com/chenyf/push/storage"
+	"fmt"
 	"github.com/chenyf/push/auth"
-	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/comet"
-	log "github.com/cihub/seelog"
+	"github.com/chenyf/push/conf"
+	"github.com/chenyf/push/mq"
+	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/zk"
+	log "github.com/cihub/seelog"
+	"net/http"
+	"os/signal"
+	"strings"
+	"sync"
+	"syscall"
 )
 
 func deviceHandler(w http.ResponseWriter, r *http.Request) {
@@ -29,13 +29,13 @@ func deviceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprintf(w, "devid: %s\n", devid)
-	for _, regapp := range(client.RegApps) {
+	for _, regapp := range client.RegApps {
 		fmt.Fprintf(w,
-		"regid: %s\nappid: %s\nuserid: %s\nlast_msgid: %d\n",
-		regapp.RegId,
-		regapp.AppId,
-		regapp.UserId,
-		regapp.LastMsgId)
+			"regid: %s\nappid: %s\nuserid: %s\nlast_msgid: %d\n",
+			regapp.RegId,
+			regapp.AppId,
+			regapp.UserId,
+			regapp.LastMsgId)
 	}
 }
 
@@ -48,7 +48,7 @@ func checkAuthz(uid string, devid string) bool {
 	return false
 }
 
-func sign(path string, query map[string]string) []byte{
+func sign(path string, query map[string]string) []byte {
 	uid := query["uid"]
 	rid := query["rid"]
 	tid := query["tid"]
@@ -59,7 +59,7 @@ func sign(path string, query map[string]string) []byte{
 	raw := []string{path, uid, rid, tid, src, tm, pmtt}
 	args := []string{}
 	x := []int{6, 5, 4, 3, 2, 1, 0}
-	for _, item := range(x) {
+	for _, item := range x {
 		args = append(args, raw[item])
 	}
 	data := strings.Join(args, "")
@@ -74,7 +74,7 @@ func main() {
 		//flRoot               = flag.String("g", "/tmp/echoserver", "Path to use as the root of the docker runtime")
 		//flDebug		= flag.Bool("D", false, "Enable debug mode")
 		//flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
-		flConfig	= flag.String("c", "./conf/conf.json", "Config file")
+		flConfig = flag.String("c", "./conf/conf.json", "Config file")
 	)
 	log.Infof("pushd started...")
 	flag.Parse()
@@ -184,7 +184,13 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	_, err = mq.NewRpcServer(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange")
+	if err != nil {
+		log.Critical("failed to start RPC server: ", err)
+		os.Exit(1)
+	}
+
 	log.Infof("pushd running")
 	wg.Wait()
 }
-
