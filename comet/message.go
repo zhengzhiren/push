@@ -18,18 +18,22 @@ type Message struct {
 }
 
 const (
-	HEADER_SIZE          = uint32(10)
-	MSG_HEARTBEAT        = uint8(0)
-	MSG_INIT             = uint8(1)
-	MSG_INIT_REPLY       = uint8(2)
-	MSG_REGISTER         = uint8(3)
-	MSG_REGISTER_REPLY   = uint8(4)
-	MSG_UNREGISTER       = uint8(5)
-	MSG_UNREGISTER_REPLY = uint8(6)
-	MSG_PUSH             = uint8(10)
-	MSG_PUSH_REPLY       = uint8(11)
-	MSG_CMD              = uint8(20)
-	MSG_CMD_REPLY        = uint8(21)
+	HEADER_SIZE              = uint32(10)
+	MSG_HEARTBEAT            = uint8(0)
+	MSG_INIT                 = uint8(1)
+	MSG_INIT_REPLY           = uint8(2)
+	MSG_REGISTER             = uint8(3)
+	MSG_REGISTER_REPLY       = uint8(4)
+	MSG_UNREGISTER           = uint8(5)
+	MSG_UNREGISTER_REPLY     = uint8(6)
+	MSG_PUSH                 = uint8(10)
+	MSG_PUSH_REPLY           = uint8(11)
+	MSG_SUBSCRIBE            = uint8(12)
+	MSG_SUBSCRIBE_REPLY      = uint8(13)
+	MSG_UNSUBSCRIBE          = uint8(14)
+	MSG_UNSUBSCRIBE_REPLY    = uint8(15)
+	MSG_CMD                  = uint8(20)
+	MSG_CMD_REPLY            = uint8(21)
 )
 
 // msg to byte
@@ -104,6 +108,26 @@ type PushReplyMessage struct {
 	AppId string `json:"appid"`
 	RegId string `json:"regid"`
 }
+type SubscribeMessage struct {
+	AppId string	`json:"appid"`
+	RegId string	`json:"regid"`
+	Topic string	`json:"topic"`
+}
+type SubscribeReplyMessage struct {
+	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	RegId  string `json:"regid,omitempty"`
+}
+type UnsubscribeMessage struct {
+	AppId string	`json:"appid"`
+	RegId string	`json:"regid"`
+	Topic string	`json:"topic"`
+}
+type UnsubscribeReplyMessage struct {
+	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	RegId  string `json:"regid,omitempty"`
+}
 
 type CommandMessage struct {
 	Service string `json:"service"`
@@ -113,3 +137,4 @@ type CommandMessage struct {
 type CommandReplyMessage struct {
 	Result string `json:"result"`
 }
+

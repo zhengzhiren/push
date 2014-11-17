@@ -162,6 +162,8 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_REGISTER] = handleRegister
 	this.funcMap[MSG_UNREGISTER] = handleUnregister
 	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
+	this.funcMap[MSG_SUBSCRIBE] = handleSubscribe
+	this.funcMap[MSG_UNSUBSCRIBE] = handleUnsubscribe
 	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
 
 	// keep the data of this node not expired on redis
@@ -714,6 +716,86 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	} else {
 		log.Warnf("no waiting channel for seq: %d, device: %s", header.Seq, client.devId)
 	}
+	return 0
+}
+
+func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
+	var msg SubscribeMessage
+	var reply SubscribeReplyMessage
+
+	errReply := func(result int, appId string) {
+		reply.Result = result
+		reply.AppId = appId
+		sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		errReply(1, msg.AppId)
+		return 0
+	}
+
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%s: appid or regid is empty", client.devId)
+		errReply(2, msg.AppId)
+		return 0
+	}
+
+	// unknown regid
+	var ok bool
+	_, ok = client.RegApps[msg.RegId]
+	if !ok {
+		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		errReply(3, msg.AppId)
+		return 0
+	}
+
+	AMInstance.SubscribeTopic(client.devId, msg.RegId, msg.AppId, msg.Topic)
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.RegId = msg.RegId
+	sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
+	return 0
+}
+
+func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
+	var msg UnsubscribeMessage
+	var reply UnsubscribeReplyMessage
+
+	errReply := func(result int, appId string) {
+		reply.Result = result
+		reply.AppId = appId
+		sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		errReply(1, msg.AppId)
+		return 0
+	}
+
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%s: appid or regid is empty", client.devId)
+		errReply(2, msg.AppId)
+		return 0
+	}
+
+	// unknown regid
+	var ok bool
+	_, ok = client.RegApps[msg.RegId]
+	if !ok {
+		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		errReply(3, msg.AppId)
+		return 0
+	}
+
+	AMInstance.UnsubscribeTopic(client.devId, msg.RegId, msg.AppId, msg.Topic)
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.RegId = msg.RegId
+	sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
 	return 0
 }
 

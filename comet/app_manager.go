@@ -222,3 +222,9 @@ func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
 	return infos
 }
 
+func (this *AppManager)SubscribeTopic(devId string, regId string, appId string, topic string) {
+}
+
+func (this *AppManager)UnsubscribeTopic(devId string, regId string, appId string, topic string) {
+}
+
