@@ -19,6 +19,7 @@ type RawMessage struct {
 		RegId  []string `json:"regid,omitempty"`
 		UserId []string `json:"userid,omitempty"`
 		DevId  []string `json:"devid,omitempty"`
+		Topic  string	`json:"topic,omitempty"`
 	} `json:"push_params"`
 	Content string `json:"content"`
 	Options struct {

@@ -94,6 +94,11 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 				pushMessage(appId, app, &msg)
 			}
 		}
+	case 5: // topic
+		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic)
+		for _, app := range apps {
+			pushMessage(appId, app, &msg)
+		}
 	default:
 	}
 	return nil

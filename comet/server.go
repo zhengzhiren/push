@@ -399,6 +399,8 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 					break
 				}
 			}
+		case 5:
+
 		default:
 			continue
 		}
@@ -699,9 +701,16 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, msg.MsgId, regapp.LastMsgId)
 		return 0
 	}
-	if err := AMInstance.UpdateApp(regapp, msg.MsgId); err != nil {
-		log.Warnf("%s: update app failed, (%s)", client.devId, err)
+	info := &AppInfo{
+		AppId  : regapp.AppId,
+		UserId : regapp.UserId,
+		Topics : regapp.Topics,
+		LastMsgId : msg.MsgId,
 	}
+	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+	}
+	AMInstance.UpdateMsgStat(client.devId, msg.MsgId)
+	regapp.LastMsgId = msg.MsgId
 	return 0
 }
 
@@ -719,6 +728,14 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	return 0
 }
 
+/*
+** return:
+**   1: invalid JSON
+**   2: missing 'appid' or 'regid'
+**   3: unknown 'regid'
+**   4: too many topics
+**   5: storage I/O failed
+*/
 func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
 	var msg SubscribeMessage
@@ -744,14 +761,37 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 
 	// unknown regid
 	var ok bool
-	_, ok = client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[msg.RegId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
 		errReply(3, msg.AppId)
 		return 0
 	}
-
-	AMInstance.SubscribeTopic(client.devId, msg.RegId, msg.AppId, msg.Topic)
+	for _, item := range(regapp.Topics) {
+		if item == msg.Topic {
+			reply.Result = 0
+			reply.AppId = msg.AppId
+			reply.RegId = msg.RegId
+			sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
+			return 0
+		}
+	}
+	if len(regapp.Topics) >= 10 {
+		errReply(4, msg.AppId)
+		return 0
+	}
+	topics := append(regapp.Topics, msg.Topic)
+	info := &AppInfo{
+		AppId  : regapp.AppId,
+		UserId : regapp.UserId,
+		Topics : topics,
+		LastMsgId : regapp.LastMsgId,
+	}
+	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+		errReply(5, msg.AppId)
+		return 0
+	}
+	regapp.Topics = topics
 	reply.Result = 0
 	reply.AppId = msg.AppId
 	reply.RegId = msg.RegId
@@ -759,6 +799,13 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 	return 0
 }
 
+/*
+** return:
+**   1: invalid JSON
+**   2: missing 'appid' or 'regid'
+**   3: unknown 'regid'
+**   4: storage I/O failed
+*/
 func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
 	var msg UnsubscribeMessage
@@ -784,14 +831,32 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 
 	// unknown regid
 	var ok bool
-	_, ok = client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[msg.RegId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
 		errReply(3, msg.AppId)
 		return 0
 	}
-
-	AMInstance.UnsubscribeTopic(client.devId, msg.RegId, msg.AppId, msg.Topic)
+	index := -1
+	for n, item := range(regapp.Topics) {
+		if item == msg.Topic {
+			index = n
+		}
+	}
+	if index >= 0 {
+		topics := append(regapp.Topics[:index], regapp.Topics[index+1:]...)
+		info := &AppInfo{
+			AppId  : regapp.AppId,
+			UserId : regapp.UserId,
+			Topics : topics,
+			LastMsgId : regapp.LastMsgId,
+		}
+		if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+			errReply(4, msg.AppId)
+			return 0
+		}
+		regapp.Topics = topics
+	}
 	reply.Result = 0
 	reply.AppId = msg.AppId
 	reply.RegId = msg.RegId
