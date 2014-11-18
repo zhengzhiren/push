@@ -111,8 +111,13 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	resp := cloud.ApiResponse{}
 	result, err := rpcClient.Control(devId, param.Service, param.Cmd)
 	if err != nil {
-		resp.ErrNo = cloud.ERR_CMD_TIMEOUT
-		resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
+		if _, ok := err.(*mq.TimeoutError); ok {
+			resp.ErrNo = cloud.ERR_CMD_TIMEOUT
+			resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
+		} else {
+			resp.ErrNo = cloud.ERR_CMD_OTHER
+			resp.ErrMsg = err.Error()
+		}
 	} else {
 		resp.ErrNo = cloud.ERR_NOERROR
 		resp.Data = result

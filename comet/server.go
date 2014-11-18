@@ -95,6 +95,7 @@ var (
 )
 
 func (this *Client) MsgTimeout(seq uint32) {
+	delete(this.WaitingChannels, seq)
 }
 
 func (this *Client) NextSeq() uint32 {
@@ -703,10 +704,10 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 	info := &AppInfo{
-		AppId  : regapp.AppId,
-		UserId : regapp.UserId,
-		Topics : regapp.Topics,
-		LastMsgId : msg.MsgId,
+		AppId:     regapp.AppId,
+		UserId:    regapp.UserId,
+		Topics:    regapp.Topics,
+		LastMsgId: msg.MsgId,
 	}
 	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
 	}
@@ -736,7 +737,7 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 **   3: unknown 'regid'
 **   4: too many topics
 **   5: storage I/O failed
-*/
+ */
 func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
 	var msg SubscribeMessage
@@ -768,7 +769,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		errReply(3, msg.AppId)
 		return 0
 	}
-	for _, item := range(regapp.Topics) {
+	for _, item := range regapp.Topics {
 		if item == msg.Topic {
 			reply.Result = 0
 			reply.AppId = msg.AppId
@@ -783,10 +784,10 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 	}
 	topics := append(regapp.Topics, msg.Topic)
 	info := &AppInfo{
-		AppId  : regapp.AppId,
-		UserId : regapp.UserId,
-		Topics : topics,
-		LastMsgId : regapp.LastMsgId,
+		AppId:     regapp.AppId,
+		UserId:    regapp.UserId,
+		Topics:    topics,
+		LastMsgId: regapp.LastMsgId,
 	}
 	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
 		errReply(5, msg.AppId)
@@ -806,7 +807,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 **   2: missing 'appid' or 'regid'
 **   3: unknown 'regid'
 **   4: storage I/O failed
-*/
+ */
 func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
 	var msg UnsubscribeMessage
@@ -839,7 +840,7 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 		return 0
 	}
 	index := -1
-	for n, item := range(regapp.Topics) {
+	for n, item := range regapp.Topics {
 		if item == msg.Topic {
 			index = n
 		}
@@ -847,10 +848,10 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 	if index >= 0 {
 		topics := append(regapp.Topics[:index], regapp.Topics[index+1:]...)
 		info := &AppInfo{
-			AppId  : regapp.AppId,
-			UserId : regapp.UserId,
-			Topics : topics,
-			LastMsgId : regapp.LastMsgId,
+			AppId:     regapp.AppId,
+			UserId:    regapp.UserId,
+			Topics:    topics,
+			LastMsgId: regapp.LastMsgId,
 		}
 		if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
 			errReply(4, msg.AppId)
