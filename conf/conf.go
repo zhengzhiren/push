@@ -49,6 +49,12 @@ type ConfigStruct struct {
 	} `json:"auth"`
 
 	DevCenter string `json:"devcenter"`
+    Notify struct {
+        SubUrl string           `json:"sub_url"`
+        PushUrl string          `json:"push_url"`
+        MaxNotices int          `json:"max_notices"`
+        Timeout time.Duration   `json:"timeout"`
+    }                           `json:"notify"`
 }
 
 var (
