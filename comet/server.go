@@ -103,10 +103,11 @@ func (this *Client) NextSeq() uint32 {
 
 func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	// save the client device Id to storage
-	if _, err := storage.Instance.HashSet("db_comet_"+this.name, devid, nil); err != nil {
+	if err := storage.Instance.AddDevice(this.name, devid); err != nil {
 		log.Infof("failed to put device %s into redis:", devid, err)
 		return nil
 	}
+
 	client := &Client{
 		devId:           devid,
 		RegApps:         make(map[string]*RegApp),
@@ -145,7 +146,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 
 func (this *Server) CloseClient(client *Client) {
 	client.ctrl <- true
-	if _, err := storage.Instance.HashDel("db_comet_"+this.name, client.devId); err != nil {
+	if err := storage.Instance.RemoveDevice(this.name, client.devId); err != nil {
 		log.Errorf("failed to remove device %s from redis:", client.devId, err)
 	}
 	DevicesMap.Delete(client.devId)
@@ -158,11 +159,13 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Errorf("failed to listen, (%v)", err)
 		return nil, err
 	}
-	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
-	this.funcMap[MSG_REGISTER] = handleRegister
-	this.funcMap[MSG_UNREGISTER] = handleUnregister
-	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
-	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
+	this.funcMap[MSG_HEARTBEAT]   = handleHeartbeat
+	this.funcMap[MSG_REGISTER]    = handleRegister
+	this.funcMap[MSG_UNREGISTER]  = handleUnregister
+	this.funcMap[MSG_PUSH_REPLY]  = handlePushReply
+	this.funcMap[MSG_SUBSCRIBE]   = handleSubscribe
+	this.funcMap[MSG_UNSUBSCRIBE] = handleUnsubscribe
+	this.funcMap[MSG_CMD_REPLY]   = handleCmdReply
 
 	// keep the data of this node not expired on redis
 	go func() {
@@ -172,7 +175,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 				log.Infof("existing storage refreshing routine")
 				return
 			case <-time.After(10 * time.Second):
-				storage.Instance.Expire("db_comet_"+this.name, 30)
+				storage.Instance.RefreshDevices(this.name, 30)
 			}
 		}
 	}()
@@ -371,16 +374,16 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	for _, rawMsg := range msgs {
 		ok := false
 		switch rawMsg.PushType {
-		case 1:
+		case PUSH_TYPE_ALL:
 			ok = true
-		case 2:
+		case PUSH_TYPE_REGID:
 			for _, regid := range rawMsg.PushParams.RegId {
 				if regapp.RegId == regid {
 					ok = true
 					break
 				}
 			}
-		case 3:
+		case PUSH_TYPE_USERID:
 			if regapp.UserId == "" {
 				continue
 			}
@@ -390,9 +393,16 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 					break
 				}
 			}
-		case 4:
+		case PUSH_TYPE_DEVID:
 			for _, devid := range rawMsg.PushParams.DevId {
 				if client.devId == devid {
+					ok = true
+					break
+				}
+			}
+		case PUSH_TYPE_TOPIC:
+			for _, topic := range(regapp.Topics) {
+				if topic == rawMsg.PushParams.Topic {
 					ok = true
 					break
 				}
@@ -697,9 +707,16 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, msg.MsgId, regapp.LastMsgId)
 		return 0
 	}
-	if err := AMInstance.UpdateApp(regapp, msg.MsgId); err != nil {
-		log.Warnf("%s: update app failed, (%s)", client.devId, err)
+	info := &AppInfo{
+		AppId  : regapp.AppId,
+		UserId : regapp.UserId,
+		Topics : regapp.Topics,
+		LastMsgId : msg.MsgId,
 	}
+	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+	}
+	AMInstance.UpdateMsgStat(client.devId, msg.MsgId)
+	regapp.LastMsgId = msg.MsgId
 	return 0
 }
 
@@ -714,6 +731,148 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	} else {
 		log.Warnf("no waiting channel for seq: %d, device: %s", header.Seq, client.devId)
 	}
+	return 0
+}
+
+/*
+** return:
+**   1: invalid JSON
+**   2: missing 'appid' or 'regid'
+**   3: invalid 'topic' length 
+**   4: unknown 'regid'
+**   5: too many topics
+**   6: storage I/O failed
+*/
+func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
+	var msg SubscribeMessage
+	var reply SubscribeReplyMessage
+
+	errReply := func(result int, appId string) {
+		reply.Result = result
+		reply.AppId = appId
+		sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		errReply(1, msg.AppId)
+		return 0
+	}
+
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%s: appid or regid is empty", client.devId)
+		errReply(2, msg.AppId)
+		return 0
+	}
+	if len(msg.Topic) == 0 || len(msg.Topic) > 64 {
+		log.Warnf("%s: invalid 'topic' length", client.devId)
+		errReply(3, msg.AppId)
+		return 0
+	}
+
+	// unknown regid
+	var ok bool
+	regapp, ok := client.RegApps[msg.RegId]
+	if !ok {
+		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		errReply(4, msg.AppId)
+		return 0
+	}
+	for _, item := range(regapp.Topics) {
+		if item == msg.Topic {
+			reply.Result = 0
+			reply.AppId = msg.AppId
+			reply.RegId = msg.RegId
+			sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
+			return 0
+		}
+	}
+	if len(regapp.Topics) >= 10 {
+		errReply(5, msg.AppId)
+		return 0
+	}
+	topics := append(regapp.Topics, msg.Topic)
+	info := &AppInfo{
+		AppId  : regapp.AppId,
+		UserId : regapp.UserId,
+		Topics : topics,
+		LastMsgId : regapp.LastMsgId,
+	}
+	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+		errReply(6, msg.AppId)
+		return 0
+	}
+	regapp.Topics = topics
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.RegId = msg.RegId
+	sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
+	return 0
+}
+
+/*
+** return:
+**   1: invalid JSON
+**   2: missing 'appid' or 'regid'
+**   3: unknown 'regid'
+**   4: storage I/O failed
+*/
+func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
+	var msg UnsubscribeMessage
+	var reply UnsubscribeReplyMessage
+
+	errReply := func(result int, appId string) {
+		reply.Result = result
+		reply.AppId = appId
+		sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		errReply(1, msg.AppId)
+		return 0
+	}
+
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%s: appid or regid is empty", client.devId)
+		errReply(2, msg.AppId)
+		return 0
+	}
+
+	// unknown regid
+	var ok bool
+	regapp, ok := client.RegApps[msg.RegId]
+	if !ok {
+		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		errReply(3, msg.AppId)
+		return 0
+	}
+	index := -1
+	for n, item := range(regapp.Topics) {
+		if item == msg.Topic {
+			index = n
+		}
+	}
+	if index >= 0 {
+		topics := append(regapp.Topics[:index], regapp.Topics[index+1:]...)
+		info := &AppInfo{
+			AppId  : regapp.AppId,
+			UserId : regapp.UserId,
+			Topics : topics,
+			LastMsgId : regapp.LastMsgId,
+		}
+		if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+			errReply(4, msg.AppId)
+			return 0
+		}
+		regapp.Topics = topics
+	}
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.RegId = msg.RegId
+	sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
 	return 0
 }
 

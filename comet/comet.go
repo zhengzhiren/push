@@ -7,6 +7,15 @@ import (
 	log "github.com/cihub/seelog"
 )
 
+const (
+	PUSH_TYPE_ALL       = 1
+	PUSH_TYPE_REGID     = 2
+	PUSH_TYPE_USERID    = 3
+	PUSH_TYPE_DEVID     = 4
+	PUSH_TYPE_TOPIC     = 5
+	PUSH_TYPE_ALIAS     = 6
+)
+
 //func SendCommand(devId string, cmd *CommandMessage, correlationId, callbackQueue string) bool {
 //	wait := 5
 //	client := DevicesMap.Get(devId).(*Client)
@@ -68,31 +77,36 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		Content: rawMsg.Content, //FIXME
 	}
 	switch rawMsg.PushType {
-	case 1: // broadcast
+	case PUSH_TYPE_ALL: // broadcast
 		apps := AMInstance.GetApps(appId)
 		for _, app := range apps {
 			pushMessage(appId, app, &msg)
 		}
-	case 2: // regid list
+	case PUSH_TYPE_REGID: // regid list
 		for _, regid := range rawMsg.PushParams.RegId {
 			app := AMInstance.GetApp(appId, regid)
 			if app != nil {
 				pushMessage(appId, app, &msg)
 			}
 		}
-	case 3: // userid list
+	case PUSH_TYPE_USERID: // userid list
 		for _, uid := range rawMsg.PushParams.UserId {
 			apps := AMInstance.GetAppsByUser(appId, uid)
 			for _, app := range apps {
 				pushMessage(appId, app, &msg)
 			}
 		}
-	case 4: // devid list
+	case PUSH_TYPE_DEVID: // devid list
 		for _, devid := range rawMsg.PushParams.DevId {
 			app := AMInstance.GetAppByDevice(appId, devid)
 			if app != nil {
 				pushMessage(appId, app, &msg)
 			}
+		}
+	case PUSH_TYPE_TOPIC: // topic
+		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic)
+		for _, app := range apps {
+			pushMessage(appId, app, &msg)
 		}
 	default:
 	}

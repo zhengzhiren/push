@@ -151,23 +151,22 @@ func (r *RedisStorage) GetRawMsg(appId string, msgId int64) *RawMessage {
 	return rmsg
 }
 
-func (r *RedisStorage) AddDevice(devId string) bool {
-	result, err := redis.Int(r.Do("HSETNX", "db_device", devId, "1"))
+func (r *RedisStorage) AddDevice(serverName, devId string) error {
+	_, err := redis.Int(r.Do("HSET", "db_comet_"+serverName, devId, nil))
 	if err != nil {
-		log.Warnf("redis: HSETNX failed (%s)", err)
-		return false
+		log.Warnf("redis: HSET failed (%s)", err)
+		return err
 	}
-	if result == 1 {
-		return true
-	}
-	return false
+	return nil
 }
 
-func (r *RedisStorage) RemoveDevice(devId string) {
-	_, err := r.Do("HDEL", "db_device", devId)
+func (r *RedisStorage) RemoveDevice(serverName, devId string) error {
+	_, err := r.Do("HDEL", "db_comet_"+serverName, devId)
 	if err != nil {
 		log.Warnf("redis: HDEL failed (%s)", err)
+		return err
 	}
+	return nil
 }
 
 func (r *RedisStorage) IsDeviceExist(devId string) (bool, error) {
@@ -187,6 +186,14 @@ func (r *RedisStorage) IsDeviceExist(devId string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (r *RedisStorage) RefreshDevices(serverName string, timeout int) error {
+	_, err := redis.Int(r.Do("EXPIRE", "db_comet_"+serverName, timeout))
+	if err != nil {
+		log.Warnf("redis: EXPIRE failed, (%s)", err)
+	}
+	return err
 }
 
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
@@ -306,14 +313,6 @@ func (r *RedisStorage) SetMembers(key string) ([]string, error) {
 	ret, err := redis.Strings(r.Do("SMEMBERS", key))
 	if err != nil {
 		log.Warnf("redis: SMEMBERS failed, (%s)", err)
-	}
-	return ret, err
-}
-
-func (r *RedisStorage) Expire(key string, seconds int) (int, error) {
-	ret, err := redis.Int(r.Do("EXPIRE", key, seconds))
-	if err != nil {
-		log.Warnf("redis: EXPIRE failed, (%s)", err)
 	}
 	return ret, err
 }

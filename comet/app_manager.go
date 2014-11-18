@@ -15,14 +15,16 @@ type RegApp struct {
 	DevId		string
 	AppId		string
 	UserId		string
+	Topics		[]string
 	LastMsgId	int64
 }
 
 // register app in storage
 type AppInfo struct {
-	AppId		string	`json:"app_id"`
-	UserId		string	`json:"uid,omitempty"`
-	LastMsgId	int64	`json:"last_msgid"`
+	AppId		string		`json:"app_id"`
+	UserId		string		`json:"uid,omitempty"`
+	LastMsgId	int64		`json:"last_msgid"`
+	Topics		[]string	`json:"topics"`
 }
 
 type AppManager struct {
@@ -130,19 +132,44 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 	this.DelApp(devId, regId)
 }
 
-func (this *AppManager)UpdateApp(regapp *RegApp, msgId int64) error {
-	info := AppInfo {
-		AppId		: regapp.AppId,
-		UserId      : regapp.UserId,
-		LastMsgId	: msgId,
+
+func (this *AppManager)GetApp(appId string, regId string) *RegApp {
+	this.lock.RLock()
+	regapp, ok := this.appMap[regId]; if ok {
+		this.lock.RUnlock()
+		if regapp.AppId != appId {
+			return nil
+		}
+		return regapp
 	}
-	b, _ := json.Marshal(info)
-	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", regapp.AppId), regapp.RegId, b); err != nil {
-		return err
-	}
-	storage.Instance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
-	regapp.LastMsgId = msgId
+	this.lock.RUnlock()
 	return nil
+}
+
+func (this *AppManager)GetAppByDevice(appId string, devId string) *RegApp {
+	client := DevicesMap.Get(devId).(*Client)
+	if client == nil {
+		return nil
+	}
+	for _, regapp := range(client.RegApps) {
+		if regapp.AppId == appId {
+			return regapp
+		}
+	}
+	return nil
+}
+
+func (this *AppManager)GetApps(appId string) ([]*RegApp) {
+	regapps := make([]*RegApp, 0, len(this.appMap))
+	this.lock.RLock()
+	for _, regapp := range(this.appMap) {
+		if regapp.AppId == appId {
+			regapps = append(regapps, regapp)
+		}
+	}
+	this.lock.RUnlock()
+	log.Infof("get %d apps", len(regapps))
+	return regapps
 }
 
 func (this *AppManager)GetAppsByUser(appId string, userId string) []*RegApp {
@@ -167,31 +194,16 @@ func (this *AppManager)GetAppsByUser(appId string, userId string) []*RegApp {
 	return regapps
 }
 
-func (this *AppManager)GetApp(appId string, regId string) *RegApp {
-	this.lock.RLock()
-	regapp, ok := this.appMap[regId]; if ok {
-		this.lock.RUnlock()
-		if regapp.AppId != appId {
-			return nil
-		}
-		return regapp
-	}
-	this.lock.RUnlock()
-	return nil
-}
-
-func (this *AppManager)GetAppByDevice(appId string, devId string) *RegApp {
-	this.lock.RLock()
-	this.lock.RUnlock()
-	return nil
-}
-
-func (this *AppManager)GetApps(appId string) ([]*RegApp) {
+func (this *AppManager)GetAppsByTopic(appId string, topic string) ([]*RegApp) {
 	regapps := make([]*RegApp, 0, len(this.appMap))
 	this.lock.RLock()
 	for _, regapp := range(this.appMap) {
 		if regapp.AppId == appId {
-			regapps = append(regapps, regapp)
+			for _, item := range(regapp.Topics) {
+				if item == topic {
+					regapps = append(regapps, regapp)
+				}
+			}
 		}
 	}
 	this.lock.RUnlock()
@@ -220,5 +232,19 @@ func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
 		}
 	}
 	return infos
+}
+
+func (this *AppManager)UpdateAppInfo(devId string, regId string, info *AppInfo) bool {
+	b, _ := json.Marshal(info)
+	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", info.AppId), regId, b); err != nil {
+		log.Warnf("%s: update app failed, (%s)", devId, err)
+		return false
+	}
+	return true
+}
+
+func (this *AppManager)UpdateMsgStat(devId string, msgId int64) bool {
+	storage.Instance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
+	return true
 }
 
