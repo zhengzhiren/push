@@ -23,8 +23,18 @@ type RawMessage struct {
 		Topic  string	`json:"topic,omitempty"`
 	} `json:"push_params"`
 	Content string `json:"content"`
+	Notification struct {
+		Title     string	`json:"title"`
+		Desc      string	`json:"desc"`
+		Type      int		`json:"type"`
+		SoundUri  string	`json:"sound_uri,omitempty`
+		Action    int		`json:"action,omitempty"`
+		IntentUri string	`json:"intent_uri,omitempty`
+		WebUri    string	`json:"web_uri,omitempty`
+	} `json:"notification,omitempty"`
 	Options struct {
 		TTL int64 `json:"ttl,omitempty"`
+		TTS int64 `json:"tts,omitempty"`
 	} `json:"options"`
 }
 
