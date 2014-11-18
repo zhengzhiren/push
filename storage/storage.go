@@ -4,6 +4,7 @@ import (
 	"github.com/chenyf/push/conf"
 )
 
+
 type RawMessage struct {
 	Token      string `json:"token"`
 	UserId     string `json:"userid"`
