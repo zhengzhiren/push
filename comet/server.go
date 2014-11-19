@@ -375,16 +375,16 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	for _, rawMsg := range msgs {
 		ok := false
 		switch rawMsg.PushType {
-		case 1:
+		case PUSH_TYPE_ALL:
 			ok = true
-		case 2:
+		case PUSH_TYPE_REGID:
 			for _, regid := range rawMsg.PushParams.RegId {
 				if regapp.RegId == regid {
 					ok = true
 					break
 				}
 			}
-		case 3:
+		case PUSH_TYPE_USERID:
 			if regapp.UserId == "" {
 				continue
 			}
@@ -394,15 +394,20 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 					break
 				}
 			}
-		case 4:
+		case PUSH_TYPE_DEVID:
 			for _, devid := range rawMsg.PushParams.DevId {
 				if client.devId == devid {
 					ok = true
 					break
 				}
 			}
-		case 5:
-
+		case PUSH_TYPE_TOPIC:
+			for _, topic := range regapp.Topics {
+				if topic == rawMsg.PushParams.Topic {
+					ok = true
+					break
+				}
+			}
 		default:
 			continue
 		}
@@ -734,9 +739,10 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 ** return:
 **   1: invalid JSON
 **   2: missing 'appid' or 'regid'
-**   3: unknown 'regid'
-**   4: too many topics
-**   5: storage I/O failed
+**   3: invalid 'topic' length
+**   4: unknown 'regid'
+**   5: too many topics
+**   6: storage I/O failed
  */
 func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
@@ -760,13 +766,18 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		errReply(2, msg.AppId)
 		return 0
 	}
+	if len(msg.Topic) == 0 || len(msg.Topic) > 64 {
+		log.Warnf("%s: invalid 'topic' length", client.devId)
+		errReply(3, msg.AppId)
+		return 0
+	}
 
 	// unknown regid
 	var ok bool
 	regapp, ok := client.RegApps[msg.RegId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
-		errReply(3, msg.AppId)
+		errReply(4, msg.AppId)
 		return 0
 	}
 	for _, item := range regapp.Topics {
@@ -779,7 +790,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		}
 	}
 	if len(regapp.Topics) >= 10 {
-		errReply(4, msg.AppId)
+		errReply(5, msg.AppId)
 		return 0
 	}
 	topics := append(regapp.Topics, msg.Topic)
@@ -790,7 +801,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		LastMsgId: regapp.LastMsgId,
 	}
 	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
-		errReply(5, msg.AppId)
+		errReply(6, msg.AppId)
 		return 0
 	}
 	regapp.Topics = topics

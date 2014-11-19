@@ -293,7 +293,7 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pkg, ok := data["pkg"]
-	if ok {
+	if !ok {
 		response.ErrNo = ERR_INVALID_PARAMS
 		response.ErrMsg = "missing 'pkg'"
 		b, _ := json.Marshal(response)
