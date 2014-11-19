@@ -42,8 +42,8 @@ type Response struct {
 var msgBox = make(chan storage.RawMessage, 10)
 
 func checkMessage(m *storage.RawMessage) (bool, string) {
-	if m.Token == "" && m.UserId == "" {
-		return false, "must specify 'token' or 'userid'"
+	if m.AppSec == "" && m.Token == "" {
+		return false, "must specify 'appsec' or 'token'"
 	}
 	if m.AppId == "" {
 		return false, "missing 'appid'"
@@ -58,10 +58,16 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 		return false, "invalid 'push_type'"
 	}
 	if m.PushType == 2 && (m.PushParams.RegId == nil || len(m.PushParams.RegId) == 0) {
-		return false, "empty 'regid' when 'push_type'==1"
+		return false, "empty 'regid' when 'push_type'==2"
 	}
 	if m.PushType == 3 && (m.PushParams.UserId == nil || len(m.PushParams.UserId) == 0) {
-		return false, "empty 'userid' when 'push_type'==2"
+		return false, "empty 'userid' when 'push_type'==3"
+	}
+	if m.PushType == 4 && (m.PushParams.DevId == nil || len(m.PushParams.DevId) == 0) {
+		return false, "empty 'devid' when 'push_type'==4"
+	}
+	if m.PushType == 5 && m.PushParams.Topic == "" {
+		return false, "empty 'topic' when 'push_type'==5"
 	}
 	if m.Options.TTL > 3*86400 {
 		return false, "invalid 'options.ttl'"
@@ -208,28 +214,22 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	var uid string
-	var ok bool
-	uid, uid_ok := data["userid"]
-	if !uid_ok {
-		token, tk_ok := data["token"]
-		if !tk_ok {
-			response.ErrNo = ERR_INVALID_PARAMS
-			response.ErrMsg = "missing 'uid' or 'token'"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 400)
-			return
-		}
-		ok, uid = auth.Instance.Auth(token)
-		if !ok {
-			response.ErrNo = ERR_AUTHENTICATE
-			response.ErrMsg = "authenticate failed"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 401)
-			return
-		}
+	token, ok := data["token"]
+	if !ok {
+		response.ErrNo = ERR_INVALID_PARAMS
+		response.ErrMsg = "missing 'token'"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
 	}
-	log.Infof("after authz")
+	ok, uid := auth.Instance.Auth(token)
+	if !ok {
+		response.ErrNo = ERR_AUTHENTICATE
+		response.ErrMsg = "authenticate failed"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 401)
+		return
+	}
 	tprefix := getPappID()
 	if tprefix == 0 {
 		response.ErrNo = ERR_INTERNAL
@@ -238,7 +238,6 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
-	log.Infof("get from db_packages")
 	n, err := storage.Instance.HashExists("db_packages", pkg)
 	if err != nil {
 		response.ErrNo = ERR_INTERNAL
@@ -260,7 +259,6 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 	appId := "appid_" + tappid[0:(len(tappid)-len(prefix))] + prefix
 	appKey := "appkey_" + utils.RandomAlphabetic(20)
 	appSec := "appsec_" + utils.RandomAlphabetic(20)
-	log.Infof("before setPackage")
 	if err := setPackage(uid, appId, appKey, appSec, pkg); err != nil {
 		response.ErrNo = ERR_INTERNAL
 		response.ErrMsg = "storage I/O failed"
@@ -268,7 +266,6 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
-	log.Infof("after setPackage")
 	response.ErrNo = 0
 	response.Data = map[string]string{
 		"appid":  appId,
@@ -300,17 +297,17 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
+	token, ok1 := data["token"]
+	appsec, ok2 := data["appsec"]
+	if !ok1 && !ok2 {
+		response.ErrNo = ERR_INVALID_PARAMS
+		response.ErrMsg = "must specify 'appsec' or 'token'"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
 	var uid string
-	uid, ok = data["userid"]
-	if !ok {
-		token, ok := data["token"]
-		if !ok {
-			response.ErrNo = ERR_INVALID_PARAMS
-			response.ErrMsg = "missing 'uid' or 'token'"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 400)
-			return
-		}
+	if appsec == "" {
 		ok, uid = auth.Instance.Auth(token)
 		if !ok {
 			response.ErrNo = ERR_AUTHENTICATE
@@ -344,10 +341,15 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 500)
 		return
 	}
-
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
-	if rawapp.UserId != uid {
+	authz_ok := true
+	if appsec != "" && appsec != rawapp.AppSec {
+		authz_ok = false
+	} else if rawapp.UserId != uid {
+		authz_ok = false
+	}
+	if !authz_ok {
 		response.ErrNo = ERR_AUTHORIZE
 		response.ErrMsg = "authorize failed"
 		b, _ := json.Marshal(response)
@@ -393,18 +395,16 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	appSec := msg.AppSec
-	uid := msg.UserId
-	if appSec == "" { //use 'uid'
-		if uid == "" {
-			ok, uid = auth.Instance.Auth(msg.Token)
-			if !ok {
-				response.ErrNo = ERR_AUTHENTICATE
-				response.ErrMsg = "authenticate failed"
-				b, _ := json.Marshal(response)
-				http.Error(w, string(b), 401)
-				return
-			}
+	appsec := msg.AppSec
+	uid := ""
+	if appsec == "" { //use 'token'
+		ok, uid = auth.Instance.Auth(msg.Token)
+		if !ok {
+			response.ErrNo = ERR_AUTHENTICATE
+			response.ErrMsg = "authenticate failed"
+			b, _ := json.Marshal(response)
+			http.Error(w, string(b), 401)
+			return
 		}
 	}
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
@@ -425,7 +425,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
 	authz_ok := true
-	if appSec != "" && appSec != rawapp.AppSec {
+	if appsec != "" && appsec != rawapp.AppSec {
 		authz_ok = false
 	} else if uid != rawapp.UserId {
 		authz_ok = false
