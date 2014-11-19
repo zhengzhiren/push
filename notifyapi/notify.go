@@ -134,7 +134,6 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
             if n.AppSec != "" {
                 d.AppSec = n.AppSec
             }
-            log.Infof("%s", d.AppSec)
             log.Infof("get uids with notice[%d]", n.Id)
             err, resp := callThirdPartyIf("GET", fmt.Sprintf("%s?tids=%s", conf.Config.Notify.SubUrl, n.Tags), nil)
             if err != nil {
