@@ -17,7 +17,6 @@ type Notice struct {
     AppId string        `json:"appid"`
     Tags string         `json:"tags"`
     MsgType int         `json:"msg_type"`
-    PushType int        `json:"push_type"`
     Platform string     `json:"platform"`
     Content string      `json:"content"`
     TTL int64           `json:"ttl,omitempty"`
@@ -52,6 +51,8 @@ type ThirdPartyResponse struct {
     ErrMsg string               `json:"errmsg"`
     Data interface{}            `json:"data"`
 }
+
+const PUSH_WITH_UID = 3
 
 func callThirdPartyIf(method string, url string, data []byte) (error, interface{}) {
     var (
@@ -113,10 +114,10 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
         results[n.Id] = rchan
         go func(n Notice) {
             d := storage.RawMessage{
+                PushType: PUSH_WITH_UID,
                 Token: n.Token,
                 AppId: n.AppId,
                 MsgType: n.MsgType,
-                PushType: n.PushType,
                 Content: n.Content,
                 Platform: n.Platform,
             }
