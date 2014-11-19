@@ -20,7 +20,9 @@ type Notice struct {
     Platform string     `json:"platform"`
     Content string      `json:"content"`
     TTL int64           `json:"ttl,omitempty"`
-    Token string        `json:"token"`
+    TTS int64           `json:"tts,omitempty"`
+    Token string        `json:"token,omitempty"`
+    AppSec string       `json:"appsec,omitempty"`
 }
 
 type PostNotifyData struct {
@@ -115,7 +117,6 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
         go func(n Notice) {
             d := storage.RawMessage{
                 PushType: PUSH_WITH_UID,
-                Token: n.Token,
                 AppId: n.AppId,
                 MsgType: n.MsgType,
                 Content: n.Content,
@@ -124,6 +125,16 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
             if n.TTL != 0 {
                 d.Options.TTL = n.TTL
             }
+            if n.TTS != 0 {
+                d.Options.TTS = n.TTS
+            }
+            if n.Token != "" {
+                d.Token = n.Token
+            }
+            if n.AppSec != "" {
+                d.AppSec = n.AppSec
+            }
+            log.Infof("%s", d.AppSec)
             log.Infof("get uids with notice[%d]", n.Id)
             err, resp := callThirdPartyIf("GET", fmt.Sprintf("%s?tids=%s", conf.Config.Notify.SubUrl, n.Tags), nil)
             if err != nil {
