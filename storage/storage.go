@@ -6,9 +6,8 @@ import (
 
 
 type RawMessage struct {
-	Token      string `json:"token"`
-	UserId     string `json:"userid"`
 	AppSec     string `json:"appsec,omitempty"`
+	Token      string `json:"token,omitempty"`
 	MsgId      int64  `json:"msgid"`
 	AppId      string `json:"appid"`
 	Pkg        string `json:"pkg"`
