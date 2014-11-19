@@ -74,7 +74,12 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		MsgId:   rawMsg.MsgId,
 		AppId:   appId,
 		Type:    rawMsg.MsgType,
-		Content: rawMsg.Content, //FIXME
+	}
+	if rawMsg.MsgType == 1 {
+		msg.Content = rawMsg.Content
+	} else {
+		b, _ := json.Marshal(rawMsg.Notification)
+		msg.Content = string(b)
 	}
 	switch rawMsg.PushType {
 	case PUSH_TYPE_ALL: // broadcast

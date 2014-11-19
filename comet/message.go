@@ -128,12 +128,10 @@ type UnsubscribeReplyMessage struct {
 	AppId  string `json:"appid"`
 	RegId  string `json:"regid,omitempty"`
 }
-
 type CommandMessage struct {
 	Service string `json:"service"`
 	Cmd     string `json:"cmd"`
 }
-
 type CommandReplyMessage struct {
 	Result string `json:"result"`
 }

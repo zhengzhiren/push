@@ -48,8 +48,8 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	if m.AppId == "" {
 		return false, "missing 'appid'"
 	}
-	if m.Content == "" {
-		return false, "missing 'content'"
+	if m.MsgType == 1 && m.Content == "" {
+		return false, "missing 'content' when 'msg_type'==1"
 	}
 	if m.MsgType < 1 || m.MsgType > 2 {
 		return false, "invalid 'msg_type'"
