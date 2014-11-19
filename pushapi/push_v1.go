@@ -343,11 +343,11 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 	}
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
-	authz_ok := true
-	if appsec != "" && appsec != rawapp.AppSec {
-		authz_ok = false
-	} else if rawapp.UserId != uid {
-		authz_ok = false
+	authz_ok := false
+	if appsec != "" && appsec == rawapp.AppSec {
+		authz_ok = true
+	} else if uid != "" && uid == rawapp.UserId {
+		authz_ok = true
 	}
 	if !authz_ok {
 		response.ErrNo = ERR_AUTHORIZE
@@ -423,12 +423,14 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var rawapp storage.RawApp
-	json.Unmarshal(b, &rawapp)
-	authz_ok := true
-	if appsec != "" && appsec != rawapp.AppSec {
-		authz_ok = false
-	} else if uid != rawapp.UserId {
-		authz_ok = false
+	if err := json.Unmarshal(b, &rawapp); err != nil {
+		log.Warnf("unmarshal failed, (%s)", err)
+	}
+	authz_ok := false
+	if appsec != "" && appsec == rawapp.AppSec {
+		authz_ok = true
+	} else if uid != "" && uid == rawapp.UserId {
+		authz_ok = true
 	}
 	if !authz_ok {
 		response.ErrNo = ERR_AUTHORIZE
