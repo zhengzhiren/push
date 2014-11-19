@@ -90,10 +90,6 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	}
 
 	devId := r.PathParam("devid")
-	//	if !comet.DevMap.Check(devId) {
-	//		rest.NotFound(w, r)
-	//		return
-	//	}
 	param := ControlParam{}
 	err := r.DecodeJsonPayload(&param)
 	if err != nil {
@@ -111,9 +107,18 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	resp := cloud.ApiResponse{}
 	result, err := rpcClient.Control(devId, param.Service, param.Cmd)
 	if err != nil {
-		if _, ok := err.(*mq.TimeoutError); ok {
+		if _, ok := err.(*mq.NoDeviceError); ok {
+			rest.NotFound(w, r)
+			return
+		} else if _, ok := err.(*mq.TimeoutError); ok {
 			resp.ErrNo = cloud.ERR_CMD_TIMEOUT
 			resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
+		} else if _, ok := err.(*mq.InvalidServiceError); ok {
+			resp.ErrNo = cloud.ERR_CMD_INVALID_SERVICE
+			resp.ErrMsg = fmt.Sprintf("Device [%s] has no service [%s]", devId, param.Service)
+		} else if _, ok := err.(*mq.SdkError); ok {
+			resp.ErrNo = cloud.ERR_CMD_SDK_ERROR
+			resp.ErrMsg = fmt.Sprintf("Error when calling service [%s] on [%s]", param.Service, devId)
 		} else {
 			resp.ErrNo = cloud.ERR_CMD_OTHER
 			resp.ErrMsg = err.Error()

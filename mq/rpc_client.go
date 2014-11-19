@@ -9,17 +9,43 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/streadway/amqp"
+
+	"github.com/chenyf/push/storage"
 )
 
 var (
 	rpcExchangeType string = "fanout"
 )
 
+type NoDeviceError struct {
+	msg string
+}
+
+func (this *NoDeviceError) Error() string {
+	return this.msg
+}
+
 type TimeoutError struct {
 	msg string
 }
 
 func (this *TimeoutError) Error() string {
+	return this.msg
+}
+
+type InvalidServiceError struct {
+	msg string
+}
+
+func (this *InvalidServiceError) Error() string {
+	return this.msg
+}
+
+type SdkError struct {
+	msg string
+}
+
+func (this *SdkError) Error() string {
 	return this.msg
 }
 
@@ -138,6 +164,15 @@ func handleResponse(client *RpcClient) {
 }
 
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
+	exist, err := storage.Instance.IsDeviceExist(deviceId)
+	if err != nil {
+		log.Errorf("failed to check device existence:", err)
+		return "", err
+	}
+	if !exist {
+		return "", &NoDeviceError{"No device"}
+	}
+
 	requestId := this.nextReqeustId()
 	msg := MQ_Msg_Crtl{
 		DeviceId: deviceId,
@@ -182,6 +217,12 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 		if err := json.Unmarshal(replyData, &reply); err != nil {
 			log.Errorf("failed to unmarshal RPC reply: %s", err)
 			return "", err
+		}
+		switch reply.Status {
+		case 1:
+			return "", &InvalidServiceError{"Invalid service name"}
+		case 2:
+			return "", &SdkError{"Exception on calling service"}
 		}
 		return reply.Result, nil
 	case <-time.After(time.Duration(this.rpcTimeout) * time.Second):
