@@ -34,7 +34,7 @@ type Client struct {
 }
 
 type Server struct {
-	name          string // unique name of this server
+	Name          string // unique name of this server
 	exitCh        chan bool
 	wg            *sync.WaitGroup
 	funcMap       map[uint8]MsgHandler
@@ -49,7 +49,7 @@ type Server struct {
 
 func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32) *Server {
 	return &Server{
-		name:          utils.GetLocalIP(),
+		Name:          utils.GetLocalIP(),
 		exitCh:        make(chan bool),
 		wg:            &sync.WaitGroup{},
 		funcMap:       make(map[uint8]MsgHandler),
@@ -95,6 +95,7 @@ var (
 )
 
 func (this *Client) MsgTimeout(seq uint32) {
+	delete(this.WaitingChannels, seq)
 }
 
 func (this *Client) NextSeq() uint32 {
@@ -103,7 +104,7 @@ func (this *Client) NextSeq() uint32 {
 
 func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	// save the client device Id to storage
-	if err := storage.Instance.AddDevice(this.name, devid); err != nil {
+	if err := storage.Instance.AddDevice(this.Name, devid); err != nil {
 		log.Infof("failed to put device %s into redis:", devid, err)
 		return nil
 	}
@@ -146,7 +147,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 
 func (this *Server) CloseClient(client *Client) {
 	client.ctrl <- true
-	if err := storage.Instance.RemoveDevice(this.name, client.devId); err != nil {
+	if err := storage.Instance.RemoveDevice(this.Name, client.devId); err != nil {
 		log.Errorf("failed to remove device %s from redis:", client.devId, err)
 	}
 	DevicesMap.Delete(client.devId)
@@ -159,13 +160,13 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Errorf("failed to listen, (%v)", err)
 		return nil, err
 	}
-	this.funcMap[MSG_HEARTBEAT]   = handleHeartbeat
-	this.funcMap[MSG_REGISTER]    = handleRegister
-	this.funcMap[MSG_UNREGISTER]  = handleUnregister
-	this.funcMap[MSG_PUSH_REPLY]  = handlePushReply
-	this.funcMap[MSG_SUBSCRIBE]   = handleSubscribe
+	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
+	this.funcMap[MSG_REGISTER] = handleRegister
+	this.funcMap[MSG_UNREGISTER] = handleUnregister
+	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
+	this.funcMap[MSG_SUBSCRIBE] = handleSubscribe
 	this.funcMap[MSG_UNSUBSCRIBE] = handleUnsubscribe
-	this.funcMap[MSG_CMD_REPLY]   = handleCmdReply
+	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
 
 	// keep the data of this node not expired on redis
 	go func() {
@@ -175,7 +176,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 				log.Infof("existing storage refreshing routine")
 				return
 			case <-time.After(10 * time.Second):
-				storage.Instance.RefreshDevices(this.name, 30)
+				storage.Instance.RefreshDevices(this.Name, 30)
 			}
 		}
 	}()
@@ -401,7 +402,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 				}
 			}
 		case PUSH_TYPE_TOPIC:
-			for _, topic := range(regapp.Topics) {
+			for _, topic := range regapp.Topics {
 				if topic == rawMsg.PushParams.Topic {
 					ok = true
 					break
@@ -413,9 +414,9 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 
 		if ok {
 			msg := PushMessage{
-				MsgId:   rawMsg.MsgId,
-				AppId:   rawMsg.AppId,
-				Type:    rawMsg.MsgType,
+				MsgId: rawMsg.MsgId,
+				AppId: rawMsg.AppId,
+				Type:  rawMsg.MsgType,
 			}
 			if rawMsg.MsgType == 1 {
 				msg.Content = rawMsg.Content
@@ -484,14 +485,14 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 
 	// check if the device Id has connected to other servers
-	exist, err := storage.Instance.IsDeviceExist(devid)
+	serverName, err := storage.Instance.CheckDevice(devid)
 	if err != nil {
 		log.Errorf("failed to check device existence:", err)
 		conn.Close()
 		return nil
 	}
-	if exist {
-		log.Warnf("device %s hash connected with other server", devid)
+	if serverName != "" {
+		log.Warnf("device %s has connected with server [%s]", devid, serverName)
 		conn.Close()
 		return nil
 	}
@@ -713,10 +714,10 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 	info := &AppInfo{
-		AppId  : regapp.AppId,
-		UserId : regapp.UserId,
-		Topics : regapp.Topics,
-		LastMsgId : msg.MsgId,
+		AppId:     regapp.AppId,
+		UserId:    regapp.UserId,
+		Topics:    regapp.Topics,
+		LastMsgId: msg.MsgId,
 	}
 	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
 	}
@@ -743,11 +744,11 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 ** return:
 **   1: invalid JSON
 **   2: missing 'appid' or 'regid'
-**   3: invalid 'topic' length 
+**   3: invalid 'topic' length
 **   4: unknown 'regid'
 **   5: too many topics
 **   6: storage I/O failed
-*/
+ */
 func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
 	var msg SubscribeMessage
@@ -784,7 +785,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		errReply(4, msg.AppId)
 		return 0
 	}
-	for _, item := range(regapp.Topics) {
+	for _, item := range regapp.Topics {
 		if item == msg.Topic {
 			reply.Result = 0
 			reply.AppId = msg.AppId
@@ -799,10 +800,10 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 	}
 	topics := append(regapp.Topics, msg.Topic)
 	info := &AppInfo{
-		AppId  : regapp.AppId,
-		UserId : regapp.UserId,
-		Topics : topics,
-		LastMsgId : regapp.LastMsgId,
+		AppId:     regapp.AppId,
+		UserId:    regapp.UserId,
+		Topics:    topics,
+		LastMsgId: regapp.LastMsgId,
 	}
 	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
 		errReply(6, msg.AppId)
@@ -822,7 +823,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 **   2: missing 'appid' or 'regid'
 **   3: unknown 'regid'
 **   4: storage I/O failed
-*/
+ */
 func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
 	var msg UnsubscribeMessage
@@ -855,7 +856,7 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 		return 0
 	}
 	index := -1
-	for n, item := range(regapp.Topics) {
+	for n, item := range regapp.Topics {
 		if item == msg.Topic {
 			index = n
 		}
@@ -863,10 +864,10 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 	if index >= 0 {
 		topics := append(regapp.Topics[:index], regapp.Topics[index+1:]...)
 		info := &AppInfo{
-			AppId  : regapp.AppId,
-			UserId : regapp.UserId,
-			Topics : topics,
-			LastMsgId : regapp.LastMsgId,
+			AppId:     regapp.AppId,
+			UserId:    regapp.UserId,
+			Topics:    topics,
+			LastMsgId: regapp.LastMsgId,
 		}
 		if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
 			errReply(4, msg.AppId)

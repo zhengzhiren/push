@@ -9,16 +9,44 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/streadway/amqp"
+
+	"github.com/chenyf/push/storage"
 )
 
 var (
-	rpcExchangeType string = "fanout"
+	rpcExchangeType string = "direct"
 )
 
-type MQ_CRTL_MSG struct {
-	DeviceId string `json:"dev_id"`
-	Service  string `json:"svc"`
-	Cmd      string `json:"cmd"`
+type NoDeviceError struct {
+	msg string
+}
+
+func (this *NoDeviceError) Error() string {
+	return this.msg
+}
+
+type TimeoutError struct {
+	msg string
+}
+
+func (this *TimeoutError) Error() string {
+	return this.msg
+}
+
+type InvalidServiceError struct {
+	msg string
+}
+
+func (this *InvalidServiceError) Error() string {
+	return this.msg
+}
+
+type SdkError struct {
+	msg string
+}
+
+func (this *SdkError) Error() string {
+	return this.msg
 }
 
 type RpcClient struct {
@@ -27,7 +55,7 @@ type RpcClient struct {
 	exchange      string
 	callbackQueue string
 	requestId     uint32
-	requestTable  map[uint32]chan string
+	requestTable  map[uint32]chan []byte
 	rpcTimeout    int
 }
 
@@ -44,7 +72,7 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		exchange:     exchange,
 		requestId:    0,
 		rpcTimeout:   10,
-		requestTable: make(map[uint32]chan string),
+		requestTable: make(map[uint32]chan []byte),
 	}
 
 	var err error
@@ -126,9 +154,9 @@ func handleResponse(client *RpcClient) {
 			log.Errorf("Invalid RPC response Id: %s", d.CorrelationId)
 			continue
 		}
-		reply, ok := client.requestTable[uint32(requestId)]
+		replyCh, ok := client.requestTable[uint32(requestId)]
 		if ok {
-			reply <- string(d.Body)
+			replyCh <- d.Body
 		} else {
 			log.Warnf("Unknown RPC response Id: %d", requestId)
 		}
@@ -136,8 +164,17 @@ func handleResponse(client *RpcClient) {
 }
 
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
+	serverName, err := storage.Instance.CheckDevice(deviceId)
+	if err != nil {
+		log.Errorf("failed to check device existence:", err)
+		return "", err
+	}
+	if serverName == "" {
+		return "", &NoDeviceError{"No device"}
+	}
+
 	requestId := this.nextReqeustId()
-	msg := MQ_CRTL_MSG{
+	msg := MQ_Msg_Crtl{
 		DeviceId: deviceId,
 		Service:  service,
 		Cmd:      cmd,
@@ -145,11 +182,10 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
-	routingKey := ""
 	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
-		routingKey,    // routing to 0 or more queues
+		serverName,    // routing to 0 or more queues
 		false,         // mandatory
 		false,         // immediate
 		amqp.Publishing{
@@ -168,18 +204,28 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 	}
 
 	//TODO: lock
-	reply := make(chan string)
-	this.requestTable[requestId] = reply
+	replyCh := make(chan []byte)
+	this.requestTable[requestId] = replyCh
 	defer delete(this.requestTable, requestId)
-	defer close(reply)
+	defer close(replyCh)
 
 	select {
-	case result := <-reply:
-		log.Infof("RPC response [%d]: %s", requestId, result)
-		return result, nil
+	case replyData := <-replyCh:
+		log.Infof("RPC response [%d]: %s", requestId, replyData)
+		var reply MQ_Msg_CtrlReply
+		if err := json.Unmarshal(replyData, &reply); err != nil {
+			log.Errorf("failed to unmarshal RPC reply: %s", err)
+			return "", err
+		}
+		switch reply.Status {
+		case 1:
+			return "", &InvalidServiceError{"Invalid service name"}
+		case 2:
+			return "", &SdkError{"Exception on calling service"}
+		}
+		return reply.Result, nil
 	case <-time.After(time.Duration(this.rpcTimeout) * time.Second):
-		//TODO
 		log.Warnf("RPC request [%d] timeout", requestId)
-		return "", nil
+		return "", &TimeoutError{"RPC timeout"}
 	}
 }

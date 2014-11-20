@@ -185,7 +185,7 @@ func main() {
 		}
 	}()
 
-	_, err = mq.NewRpcServer(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange")
+	_, err = mq.NewRpcServer(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange", cometServer.Name)
 	if err != nil {
 		log.Critical("failed to start RPC server: ", err)
 		os.Exit(1)

@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
-	log "github.com/cihub/seelog"
 	"net/http"
+	"strings"
 
 	"github.com/ant0ine/go-json-rest/rest"
+	log "github.com/cihub/seelog"
 
 	"github.com/chenyf/push/cloud"
 	"github.com/chenyf/push/devcenter"
 	"github.com/chenyf/push/mq"
+	"github.com/chenyf/push/storage"
 )
 
 var (
@@ -19,20 +21,20 @@ var (
 
 type devInfo struct {
 	Id        string `json:"id"`
-	LastAlive string `json:"last_alive"`
-	RegTime   string `json:"reg_time"`
+	LastAlive string `json:"last_alive,omitempty"`
+	RegTime   string `json:"reg_time,omitempty"`
 }
 
 //
-// Check if the user (sso_tk) has authority to the device
+// Check if the user (token) has authority to the device
 //
-func checkAuthz(sso_tk string, devid string) bool {
+func checkAuthz(token string, devid string) bool {
 	// TODO: remove this is for test
-	if sso_tk == "000000000" {
+	if token == "000000000" {
 		return true
 	}
 
-	binding, err := devcenter.IsBinding(sso_tk, devid)
+	binding, err := devcenter.IsBinding(token, devid)
 	if err != nil {
 		log.Errorf("IsBinding failed: %s", err.Error())
 		return false
@@ -49,6 +51,22 @@ func getStatus(w rest.ResponseWriter, r *rest.Request) {
 
 func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
 	devInfoList := []devInfo{}
+	r.ParseForm()
+	dev_ids := r.FormValue("dev_ids")
+	if dev_ids != "" {
+		ids := strings.Split(dev_ids, ",")
+		for _, id := range ids {
+			if serverName, err := storage.Instance.CheckDevice(id); err == nil && serverName != "" {
+				info := devInfo{
+					Id: id,
+				}
+				devInfoList = append(devInfoList, info)
+			}
+		}
+	} else {
+		rest.Error(w, "Missing \"dev_ids\"", http.StatusBadRequest)
+		return
+	}
 
 	resp := cloud.ApiResponse{}
 	resp.ErrNo = cloud.ERR_NOERROR
@@ -64,14 +82,14 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 	//	}
 
 	r.ParseForm()
-	sso_tk := r.FormValue("sso_tk")
-	if sso_tk == "" {
-		rest.Error(w, "Missing \"sso_tk\"", http.StatusBadRequest)
+	token := r.FormValue("token")
+	if token == "" {
+		rest.Error(w, "Missing \"token\"", http.StatusBadRequest)
 		return
 	}
 
-	if !checkAuthz(sso_tk, devId) {
-		log.Warnf("Auth failed. sso_tk: %s, device_id: %s", sso_tk, devId)
+	if !checkAuthz(token, devId) {
+		log.Warnf("Auth failed. token: %s, device_id: %s", token, devId)
 		rest.Error(w, "Authorization failed", http.StatusForbidden)
 		return
 	}
@@ -84,16 +102,12 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 
 func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	type ControlParam struct {
-		Sso_tk  string `json:"sso_tk"`
+		Token   string `json:"token"`
 		Service string `json:"service"`
 		Cmd     string `json:"cmd"`
 	}
 
 	devId := r.PathParam("devid")
-	//	if !comet.DevMap.Check(devId) {
-	//		rest.NotFound(w, r)
-	//		return
-	//	}
 	param := ControlParam{}
 	err := r.DecodeJsonPayload(&param)
 	if err != nil {
@@ -102,8 +116,8 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 		return
 	}
 
-	if !checkAuthz(param.Sso_tk, devId) {
-		log.Warnf("Auth failed. sso_tk: %s, device_id: %s", param.Sso_tk, devId)
+	if !checkAuthz(param.Token, devId) {
+		log.Warnf("Auth failed. token: %s, device_id: %s", param.Token, devId)
 		rest.Error(w, "Authorization failed", http.StatusForbidden)
 		return
 	}
@@ -111,8 +125,22 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	resp := cloud.ApiResponse{}
 	result, err := rpcClient.Control(devId, param.Service, param.Cmd)
 	if err != nil {
-		resp.ErrNo = cloud.ERR_CMD_TIMEOUT
-		resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
+		if _, ok := err.(*mq.NoDeviceError); ok {
+			rest.NotFound(w, r)
+			return
+		} else if _, ok := err.(*mq.TimeoutError); ok {
+			resp.ErrNo = cloud.ERR_CMD_TIMEOUT
+			resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
+		} else if _, ok := err.(*mq.InvalidServiceError); ok {
+			resp.ErrNo = cloud.ERR_CMD_INVALID_SERVICE
+			resp.ErrMsg = fmt.Sprintf("Device [%s] has no service [%s]", devId, param.Service)
+		} else if _, ok := err.(*mq.SdkError); ok {
+			resp.ErrNo = cloud.ERR_CMD_SDK_ERROR
+			resp.ErrMsg = fmt.Sprintf("Error when calling service [%s] on [%s]", param.Service, devId)
+		} else {
+			resp.ErrNo = cloud.ERR_CMD_OTHER
+			resp.ErrMsg = err.Error()
+		}
 	} else {
 		resp.ErrNo = cloud.ERR_NOERROR
 		resp.Data = result
