@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
-	log "github.com/cihub/seelog"
 	"net/http"
+	"strings"
 
 	"github.com/ant0ine/go-json-rest/rest"
+	log "github.com/cihub/seelog"
 
 	"github.com/chenyf/push/cloud"
 	"github.com/chenyf/push/devcenter"
 	"github.com/chenyf/push/mq"
+	"github.com/chenyf/push/storage"
 )
 
 var (
@@ -19,8 +21,8 @@ var (
 
 type devInfo struct {
 	Id        string `json:"id"`
-	LastAlive string `json:"last_alive"`
-	RegTime   string `json:"reg_time"`
+	LastAlive string `json:"last_alive,omitempty"`
+	RegTime   string `json:"reg_time,omitempty"`
 }
 
 //
@@ -49,6 +51,22 @@ func getStatus(w rest.ResponseWriter, r *rest.Request) {
 
 func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
 	devInfoList := []devInfo{}
+	r.ParseForm()
+	dev_ids := r.FormValue("dev_ids")
+	if dev_ids != "" {
+		ids := strings.Split(dev_ids, ",")
+		for _, id := range ids {
+			if serverName, err := storage.Instance.CheckDevice(id); err == nil && serverName != "" {
+				info := devInfo{
+					Id: id,
+				}
+				devInfoList = append(devInfoList, info)
+			}
+		}
+	} else {
+		rest.Error(w, "Missing \"dev_ids\"", http.StatusBadRequest)
+		return
+	}
 
 	resp := cloud.ApiResponse{}
 	resp.ErrNo = cloud.ERR_NOERROR
