@@ -4,7 +4,6 @@ import (
 	"github.com/chenyf/push/conf"
 )
 
-
 type RawMessage struct {
 	AppSec     string `json:"appsec,omitempty"`
 	Token      string `json:"token,omitempty"`
@@ -19,17 +18,17 @@ type RawMessage struct {
 		RegId  []string `json:"regid,omitempty"`
 		UserId []string `json:"userid,omitempty"`
 		DevId  []string `json:"devid,omitempty"`
-		Topic  string	`json:"topic,omitempty"`
+		Topic  string   `json:"topic,omitempty"`
 	} `json:"push_params"`
-	Content string `json:"content,omitempty"`
+	Content      string `json:"content,omitempty"`
 	Notification struct {
-		Title     string	`json:"title"`
-		Desc      string	`json:"desc"`
-		Type      int		`json:"type"`
-		SoundUri  string	`json:"sound_uri,omitempty`
-		Action    int		`json:"action,omitempty"`
-		IntentUri string	`json:"intent_uri,omitempty`
-		WebUri    string	`json:"web_uri,omitempty`
+		Title     string `json:"title"`
+		Desc      string `json:"desc"`
+		Type      int    `json:"type"`
+		SoundUri  string `json:"sound_uri,omitempty`
+		Action    int    `json:"action,omitempty"`
+		IntentUri string `json:"intent_uri,omitempty`
+		WebUri    string `json:"web_uri,omitempty`
 	} `json:"notification,omitempty"`
 	Options struct {
 		TTL int64 `json:"ttl,omitempty"`
@@ -50,7 +49,9 @@ type Storage interface {
 
 	AddDevice(serverName, devId string) error
 	RemoveDevice(serverName, devId string) error
-	IsDeviceExist(devId string) (bool, error)
+
+	// check if the device Id exists, return the server name
+	CheckDevice(devId string) (string, error)
 	RefreshDevices(serverName string, timeout int) error
 
 	HashGetAll(db string) ([]string, error)

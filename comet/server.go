@@ -34,7 +34,7 @@ type Client struct {
 }
 
 type Server struct {
-	name          string // unique name of this server
+	Name          string // unique name of this server
 	exitCh        chan bool
 	wg            *sync.WaitGroup
 	funcMap       map[uint8]MsgHandler
@@ -49,7 +49,7 @@ type Server struct {
 
 func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32) *Server {
 	return &Server{
-		name:          utils.GetLocalIP(),
+		Name:          utils.GetLocalIP(),
 		exitCh:        make(chan bool),
 		wg:            &sync.WaitGroup{},
 		funcMap:       make(map[uint8]MsgHandler),
@@ -104,7 +104,7 @@ func (this *Client) NextSeq() uint32 {
 
 func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	// save the client device Id to storage
-	if err := storage.Instance.AddDevice(this.name, devid); err != nil {
+	if err := storage.Instance.AddDevice(this.Name, devid); err != nil {
 		log.Infof("failed to put device %s into redis:", devid, err)
 		return nil
 	}
@@ -147,7 +147,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 
 func (this *Server) CloseClient(client *Client) {
 	client.ctrl <- true
-	if err := storage.Instance.RemoveDevice(this.name, client.devId); err != nil {
+	if err := storage.Instance.RemoveDevice(this.Name, client.devId); err != nil {
 		log.Errorf("failed to remove device %s from redis:", client.devId, err)
 	}
 	DevicesMap.Delete(client.devId)
@@ -176,7 +176,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 				log.Infof("existing storage refreshing routine")
 				return
 			case <-time.After(10 * time.Second):
-				storage.Instance.RefreshDevices(this.name, 30)
+				storage.Instance.RefreshDevices(this.Name, 30)
 			}
 		}
 	}()
@@ -414,9 +414,9 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 
 		if ok {
 			msg := PushMessage{
-				MsgId:   rawMsg.MsgId,
-				AppId:   rawMsg.AppId,
-				Type:    rawMsg.MsgType,
+				MsgId: rawMsg.MsgId,
+				AppId: rawMsg.AppId,
+				Type:  rawMsg.MsgType,
 			}
 			if rawMsg.MsgType == 1 {
 				msg.Content = rawMsg.Content
@@ -485,14 +485,14 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 
 	// check if the device Id has connected to other servers
-	exist, err := storage.Instance.IsDeviceExist(devid)
+	serverName, err := storage.Instance.CheckDevice(devid)
 	if err != nil {
 		log.Errorf("failed to check device existence:", err)
 		conn.Close()
 		return nil
 	}
-	if exist {
-		log.Warnf("device %s hash connected with other server", devid)
+	if serverName != "" {
+		log.Warnf("device %s has connected with server [%s]", devid, serverName)
 		conn.Close()
 		return nil
 	}

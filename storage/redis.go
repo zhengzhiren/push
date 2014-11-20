@@ -7,6 +7,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -169,23 +170,23 @@ func (r *RedisStorage) RemoveDevice(serverName, devId string) error {
 	return nil
 }
 
-func (r *RedisStorage) IsDeviceExist(devId string) (bool, error) {
+func (r *RedisStorage) CheckDevice(devId string) (string, error) {
 	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
 	if err != nil {
 		log.Errorf("failed to get comet nodes KEYS:", err)
-		return false, err
+		return "", err
 	}
 	for _, key := range keys {
 		exist, err := r.HashExists(key, devId)
 		if err != nil {
 			log.Errorf("error on HashExists:", err)
-			return false, err
+			return "", err
 		}
 		if exist == 1 {
-			return true, nil
+			return strings.TrimPrefix(key, "db_comet_"), nil
 		}
 	}
-	return false, nil
+	return "", nil
 }
 
 func (r *RedisStorage) RefreshDevices(serverName string, timeout int) error {

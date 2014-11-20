@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	rpcExchangeType string = "fanout"
+	rpcExchangeType string = "direct"
 )
 
 type NoDeviceError struct {
@@ -164,12 +164,12 @@ func handleResponse(client *RpcClient) {
 }
 
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
-	exist, err := storage.Instance.IsDeviceExist(deviceId)
+	serverName, err := storage.Instance.CheckDevice(deviceId)
 	if err != nil {
 		log.Errorf("failed to check device existence:", err)
 		return "", err
 	}
-	if !exist {
+	if serverName == "" {
 		return "", &NoDeviceError{"No device"}
 	}
 
@@ -182,11 +182,10 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
-	routingKey := ""
 	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
-		routingKey,    // routing to 0 or more queues
+		serverName,    // routing to 0 or more queues
 		false,         // mandatory
 		false,         // immediate
 		amqp.Publishing{

@@ -24,15 +24,15 @@ type devInfo struct {
 }
 
 //
-// Check if the user (sso_tk) has authority to the device
+// Check if the user (token) has authority to the device
 //
-func checkAuthz(sso_tk string, devid string) bool {
+func checkAuthz(token string, devid string) bool {
 	// TODO: remove this is for test
-	if sso_tk == "000000000" {
+	if token == "000000000" {
 		return true
 	}
 
-	binding, err := devcenter.IsBinding(sso_tk, devid)
+	binding, err := devcenter.IsBinding(token, devid)
 	if err != nil {
 		log.Errorf("IsBinding failed: %s", err.Error())
 		return false
@@ -64,14 +64,14 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 	//	}
 
 	r.ParseForm()
-	sso_tk := r.FormValue("sso_tk")
-	if sso_tk == "" {
-		rest.Error(w, "Missing \"sso_tk\"", http.StatusBadRequest)
+	token := r.FormValue("token")
+	if token == "" {
+		rest.Error(w, "Missing \"token\"", http.StatusBadRequest)
 		return
 	}
 
-	if !checkAuthz(sso_tk, devId) {
-		log.Warnf("Auth failed. sso_tk: %s, device_id: %s", sso_tk, devId)
+	if !checkAuthz(token, devId) {
+		log.Warnf("Auth failed. token: %s, device_id: %s", token, devId)
 		rest.Error(w, "Authorization failed", http.StatusForbidden)
 		return
 	}
@@ -84,7 +84,7 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 
 func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	type ControlParam struct {
-		Sso_tk  string `json:"sso_tk"`
+		Token   string `json:"token"`
 		Service string `json:"service"`
 		Cmd     string `json:"cmd"`
 	}
@@ -98,8 +98,8 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 		return
 	}
 
-	if !checkAuthz(param.Sso_tk, devId) {
-		log.Warnf("Auth failed. sso_tk: %s, device_id: %s", param.Sso_tk, devId)
+	if !checkAuthz(param.Token, devId) {
+		log.Warnf("Auth failed. token: %s, device_id: %s", param.Token, devId)
 		rest.Error(w, "Authorization failed", http.StatusForbidden)
 		return
 	}

@@ -15,7 +15,7 @@ type RpcServer struct {
 	exchange string
 }
 
-func NewRpcServer(amqpURI, exchange string) (*RpcServer, error) {
+func NewRpcServer(amqpURI, exchange, bindingKey string) (*RpcServer, error) {
 	server := &RpcServer{
 		exchange: exchange,
 	}
@@ -65,7 +65,7 @@ func NewRpcServer(amqpURI, exchange string) (*RpcServer, error) {
 
 	if err = server.channel.QueueBind(
 		rpcQueue.Name, // name of the queue
-		"",            // bindingKey
+		bindingKey,    // bindingKey
 		exchange,      // sourceExchange
 		false,         // noWait
 		nil,           // arguments
