@@ -417,7 +417,12 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 				MsgId:   rawMsg.MsgId,
 				AppId:   rawMsg.AppId,
 				Type:    rawMsg.MsgType,
-				Content: rawMsg.Content,
+			}
+			if rawMsg.MsgType == 1 {
+				msg.Content = rawMsg.Content
+			} else {
+				b, _ := json.Marshal(rawMsg.Notification)
+				msg.Content = string(b)
 			}
 			b, _ := json.Marshal(msg)
 			client.SendMessage(MSG_PUSH, 0, b, nil)
@@ -487,7 +492,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 	if exist {
-		log.Warnf("device %s already exist", devid)
+		log.Warnf("device %s hash connected with other server", devid)
 		conn.Close()
 		return nil
 	}

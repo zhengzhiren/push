@@ -6,9 +6,8 @@ import (
 
 
 type RawMessage struct {
-	Token      string `json:"token"`
-	UserId     string `json:"userid"`
 	AppSec     string `json:"appsec,omitempty"`
+	Token      string `json:"token,omitempty"`
 	MsgId      int64  `json:"msgid"`
 	AppId      string `json:"appid"`
 	Pkg        string `json:"pkg"`
@@ -22,7 +21,7 @@ type RawMessage struct {
 		DevId  []string `json:"devid,omitempty"`
 		Topic  string	`json:"topic,omitempty"`
 	} `json:"push_params"`
-	Content string `json:"content"`
+	Content string `json:"content,omitempty"`
 	Notification struct {
 		Title     string	`json:"title"`
 		Desc      string	`json:"desc"`
