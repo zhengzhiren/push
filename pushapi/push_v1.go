@@ -484,6 +484,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func messageHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
 	var response Response
 	switch r.Method {
 	case "POST":

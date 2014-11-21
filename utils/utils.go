@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/hmac"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"sync"
 	"time"
 	"net"
+	"sort"
 )
 
 var (
@@ -1171,3 +1173,22 @@ func GetLocalIP() string {
 	}
 	return ip
 }
+
+func Sign(method string, forms map[string]string, body []byte, key string) string {
+	var items []string
+	for k, v := range(forms) {
+		if k == "sign" {
+			continue
+		}
+		items = append(items, fmt.Sprintf("%s=%s", k, v))
+	}
+	sort.Strings(items)
+	basic_str := method + string(strings.Join(items, ""))
+	if body != nil {
+		basic_str += string(body)
+	}
+	mac := hmac.New(sha1.New, []byte(key))
+	mac.Write([]byte(basic_str))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
