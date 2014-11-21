@@ -6,14 +6,14 @@
 	"devcenter"			: "10.154.156.90",
 
 	"rabbit" : {
-		"uri" 			: "amqp://guest:guest@10.154.156.121:5672/",
+		"uri" 			: "amqp://guest:guest@10.154.156.122:5672/",
 		"exchange" 		: "test-exchange",
 		"exchange_type" : "fanout",
 		"qos" 			: 1
 	},
 
 	"redis" : {
-		"server"		: "10.154.156.121:6379",
+		"server"		: "10.154.156.122:6380",
 		"pass"			: "rpasswd",
 		"poolsize"		: 50,
 		"retry"			: 3
