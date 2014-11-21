@@ -32,6 +32,8 @@ const (
 	MSG_SUBSCRIBE_REPLY   = uint8(13)
 	MSG_UNSUBSCRIBE       = uint8(14)
 	MSG_UNSUBSCRIBE_REPLY = uint8(15)
+	MSG_GET_TOPICS        = uint8(16)
+	MSG_GET_TOPICS_REPLY  = uint8(17)
 	MSG_CMD               = uint8(20)
 	MSG_CMD_REPLY         = uint8(21)
 )
@@ -127,6 +129,15 @@ type UnsubscribeReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
 	RegId  string `json:"regid,omitempty"`
+}
+type GetTopicsMessage struct {
+	AppId string `json:"appid"`
+	RegId string `json:"regid"`
+}
+type GetTopicsReplyMessage struct {
+	AppId string `json:"appid"`
+	RegId string `json:"regid"`
+	Topics []string `json:"topics"`
 }
 type CommandMessage struct {
 	Service string `json:"service"`

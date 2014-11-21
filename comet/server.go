@@ -166,6 +166,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_PUSH_REPLY] = handlePushReply
 	this.funcMap[MSG_SUBSCRIBE] = handleSubscribe
 	this.funcMap[MSG_UNSUBSCRIBE] = handleUnsubscribe
+	this.funcMap[MSG_GET_TOPICS] = handleGetTopics
 	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
 
 	// keep the data of this node not expired on redis
@@ -879,6 +880,10 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 	reply.AppId = msg.AppId
 	reply.RegId = msg.RegId
 	sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
+	return 0
+}
+
+func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	return 0
 }
 
