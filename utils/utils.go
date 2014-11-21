@@ -1174,13 +1174,15 @@ func GetLocalIP() string {
 	return ip
 }
 
-func Sign(method string, forms map[string]string, body []byte, key string) string {
+func Sign(method string, forms map[string][]string, body []byte, key string) string {
 	var items []string
-	for k, v := range(forms) {
+	for k, a := range(forms) {
 		if k == "sign" {
 			continue
 		}
-		items = append(items, fmt.Sprintf("%s=%s", k, v))
+		for _, v := range(a) {
+			items = append(items, fmt.Sprintf("%s=%s", k, v))
+		}
 	}
 	sort.Strings(items)
 	basic_str := method + string(strings.Join(items, ""))

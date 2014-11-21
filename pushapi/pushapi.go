@@ -29,6 +29,7 @@ const (
 	ERR_INVALID_PARAMS     = 1003
 	ERR_AUTHENTICATE       = 1004
 	ERR_AUTHORIZE          = 1005
+	ERR_SIGN               = 1006
 	ERR_EXIST              = 2001
 	ERR_NOT_EXIST          = 2002
 )
@@ -42,9 +43,6 @@ type Response struct {
 var msgBox = make(chan storage.RawMessage, 10)
 
 func checkMessage(m *storage.RawMessage) (bool, string) {
-	if m.AppSec == "" && m.Token == "" {
-		return false, "must specify 'appsec' or 'token'"
-	}
 	if m.AppId == "" {
 		return false, "missing 'appid'"
 	}
@@ -75,6 +73,14 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	return true, ""
 }
 
+func errResponse(w http.ResponseWriter, errno int, errmsg string, httpcode int) {
+	var response Response
+	response.ErrNo = errno
+	response.ErrMsg = errmsg
+	b, _ := json.Marshal(response)
+	http.Error(w, string(b), httpcode)
+}
+
 func setPappID() error {
 	if _, err := storage.Instance.SetNotExist(PappID, []byte("0")); err != nil {
 		log.Infof("failed to set AppID prefix: %s", err)
@@ -92,7 +98,100 @@ func getPappID() int64 {
 	}
 }
 
-func setPackage(uid string, appId string, appKey string, appSec string, pkg string) error {
+func serverHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		errResponse(w, ERR_METHOD_NOT_ALLOWED, "method not allowed", 405)
+		return
+	}
+	node := zk.GetComet()
+	if node == nil {
+		node = []string{}
+	}
+	var response Response
+	response.ErrNo = 0
+	response.Data = map[string][]string{"servers": node}
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
+func testHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		errResponse(w, ERR_METHOD_NOT_ALLOWED, "method not allowed", 405)
+		return
+	}
+	var response Response
+	response.ErrNo = 0
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
+func getApp(w http.ResponseWriter, r *http.Request) {
+	pkg := r.FormValue("pkg")
+	if pkg == "" {
+		errResponse(w, ERR_INVALID_PARAMS, "missing 'pkg'", 400)
+		return
+	}
+	appid, err := storage.Instance.HashGet("db_packages", pkg)
+	if err != nil {
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		return
+	}
+	if appid == nil {
+		errResponse(w, ERR_NOT_EXIST, "app not exist", 400)
+		return
+	}
+	var response Response
+	response.ErrNo = 0
+	response.Data = map[string]string{"appid": string(appid)}
+	b, _ := json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
+func addApp(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	var data map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		response.ErrNo = ERR_BAD_REQUEST
+		response.ErrMsg = "Bad request"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	pkg, pkg_ok := data["pkg"]
+	if !pkg_ok {
+		errResponse(w, ERR_INVALID_PARAMS, "missing 'pkg'", 400)
+		return
+	}
+	token, ok := data["token"]
+	if !ok {
+		errResponse(w, ERR_INVALID_PARAMS, "missing 'token'", 400)
+		return
+	}
+	ok, uid := auth.Instance.Auth(token)
+	if !ok {
+		errResponse(w, ERR_AUTHENTICATE, "authenticate failed", 401)
+		return
+	}
+	tprefix := getPappID()
+	if tprefix == 0 {
+		errResponse(w, ERR_INTERNAL, "no avaiable appid", 500)
+		return
+	}
+	n, err := storage.Instance.HashExists("db_packages", pkg)
+	if err != nil {
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		return
+	}
+	if n > 0 {
+		errResponse(w, ERR_EXIST, "package exist", 400)
+		return
+	}
+
+	prefix := strconv.FormatInt(tprefix, 10)
+	tappid := strings.Replace(uuid.New(), "-", "", -1)
+	appId := "appid_" + tappid[0:(len(tappid)-len(prefix))] + prefix
+	appKey := "appkey_" + utils.RandomAlphabetic(20)
+	appSec := "appsec_" + utils.RandomAlphabetic(20)
 	rawapp := storage.RawApp{
 		Pkg:    pkg,
 		UserId: uid,
@@ -101,50 +200,58 @@ func setPackage(uid string, appId string, appKey string, appSec string, pkg stri
 	}
 	b, _ := json.Marshal(rawapp)
 	if _, err := storage.Instance.HashSet("db_apps", appId, b); err != nil {
-		log.Infof("failed to set 'db_apps': %s", err)
-		return err
-	}
-	if _, err := storage.Instance.HashSet("db_packages", pkg, []byte(appId)); err != nil {
-		log.Infof("failed to set 'db_packages': %s", err)
-		return err
-	}
-	return nil
-}
-
-func serverHandler(w http.ResponseWriter, r *http.Request) {
-	var response Response
-	if r.Method != "GET" {
-		response.ErrNo = ERR_METHOD_NOT_ALLOWED
-		response.ErrMsg = "Method not allowed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 405)
+		errResponse(w, ERR_INTERNAL, "set 'db_apps' failed", 500)
 		return
 	}
-	node := zk.GetComet()
-	if node == nil {
-		node = []string{}
+	if _, err := storage.Instance.HashSet("db_packages", pkg, []byte(appId)); err != nil {
+		errResponse(w, ERR_INTERNAL, "set 'db_packages' failed", 500)
+		return
 	}
 	response.ErrNo = 0
-	response.Data = map[string][]string{"servers": node}
-	b, _ := json.Marshal(response)
+	response.Data = map[string]string{
+		"appid":  appId,
+		"appkey": appKey,
+		"appsec": appSec,
+	}
+	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
 
-func testHandler(w http.ResponseWriter, r *http.Request) {
-	var response Response
-	if r.Method != "POST" {
-		response.ErrNo = ERR_METHOD_NOT_ALLOWED
-		response.ErrMsg = "Method not allowed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 405)
+func delApp(w http.ResponseWriter, r *http.Request) {
+	appid := r.FormValue("appid")
+	sign := r.FormValue("sign")
+	b, err := storage.Instance.HashGet("db_apps", appid)
+	if err != nil {
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
 		return
 	}
+	if b == nil {
+		errResponse(w, ERR_NOT_EXIST, "app not exist", 400)
+		return
+	}
+
+	var rawapp storage.RawApp
+	json.Unmarshal(b, &rawapp)
+	if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
+		errResponse(w, ERR_SIGN, "check sign failed", 400)
+		return
+	}
+	if _, err = storage.Instance.HashDel("db_apps", appid); err != nil {
+		errResponse(w, ERR_INTERNAL, "del 'db_apps' failed", 500)
+		return
+	}
+	if _, err = storage.Instance.HashDel("db_packages", rawapp.Pkg); err != nil {
+		errResponse(w, ERR_INTERNAL, "del 'db_packages' failed", 500)
+		return
+	}
+	var response Response
 	response.ErrNo = 0
-	b, _ := json.Marshal(response)
+	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
 
 func appHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
 	var response Response
 	switch r.Method {
 	case "POST":
@@ -165,213 +272,46 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func getApp(w http.ResponseWriter, r *http.Request) {
-	var response Response
-	pkg := r.FormValue("pkg")
-	if pkg == "" {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = "missing 'pkg'"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	appid, err := storage.Instance.HashGet("db_packages", pkg)
+func addMessage2(w http.ResponseWriter, r *http.Request) {
+	appid := r.FormValue("appid")
+	sign := r.FormValue("sign")
+	b, err := storage.Instance.HashGet("db_apps", appid)
 	if err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
-		return
-	}
-	if appid == nil {
-		response.ErrNo = ERR_NOT_EXIST
-		response.ErrMsg = "package not exist"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	response.ErrNo = 0
-	response.Data = map[string]string{"appid": string(appid)}
-	b, _ := json.Marshal(response)
-	fmt.Fprintf(w, string(b))
-}
-
-func addApp(w http.ResponseWriter, r *http.Request) {
-	var response Response
-	var data map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		response.ErrNo = ERR_BAD_REQUEST
-		response.ErrMsg = "Bad request"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	pkg, pkg_ok := data["pkg"]
-	if !pkg_ok {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = "missing 'pkg'"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	token, ok := data["token"]
-	if !ok {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = "missing 'token'"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	ok, uid := auth.Instance.Auth(token)
-	if !ok {
-		response.ErrNo = ERR_AUTHENTICATE
-		response.ErrMsg = "authenticate failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 401)
-		return
-	}
-	tprefix := getPappID()
-	if tprefix == 0 {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "no avaiabled appid"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
-		return
-	}
-	n, err := storage.Instance.HashExists("db_packages", pkg)
-	if err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
-		return
-	}
-	if n > 0 {
-		response.ErrNo = ERR_EXIST
-		response.ErrMsg = "package exist"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-
-	prefix := strconv.FormatInt(tprefix, 10)
-	tappid := strings.Replace(uuid.New(), "-", "", -1)
-	appId := "appid_" + tappid[0:(len(tappid)-len(prefix))] + prefix
-	appKey := "appkey_" + utils.RandomAlphabetic(20)
-	appSec := "appsec_" + utils.RandomAlphabetic(20)
-	if err := setPackage(uid, appId, appKey, appSec, pkg); err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
-		return
-	}
-	response.ErrNo = 0
-	response.Data = map[string]string{
-		"appid":  appId,
-		"appkey": appKey,
-		"appsec": appSec,
-	}
-	b, _ := json.Marshal(response)
-	fmt.Fprintf(w, string(b))
-}
-
-func delApp(w http.ResponseWriter, r *http.Request) {
-	var response Response
-	var data map[string]string
-	var b []byte
-	var err error
-	var ok bool
-	if err = json.NewDecoder(r.Body).Decode(&data); err != nil {
-		response.ErrNo = ERR_BAD_REQUEST
-		response.ErrMsg = "Bad request"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	pkg, ok := data["pkg"]
-	if !ok {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = "missing 'pkg'"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	token, ok1 := data["token"]
-	appsec, ok2 := data["appsec"]
-	if !ok1 && !ok2 {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = "must specify 'appsec' or 'token'"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	var uid string
-	if appsec == "" {
-		ok, uid = auth.Instance.Auth(token)
-		if !ok {
-			response.ErrNo = ERR_AUTHENTICATE
-			response.ErrMsg = "authenticate failed"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 401)
-			return
-		}
-	}
-	b, err = storage.Instance.HashGet("db_packages", pkg)
-	if err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+		errResponse(w, ERR_INTERNAL, "get 'db_apps' failed", 500)
 		return
 	}
 	if b == nil {
-		response.ErrNo = ERR_NOT_EXIST
-		response.ErrMsg = "package not exist"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
-		return
-	}
-	appid := string(b)
-	b, err = storage.Instance.HashGet("db_apps", appid)
-	if err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+		errResponse(w, ERR_NOT_EXIST, "app not exist", 400)
 		return
 	}
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
-	authz_ok := false
-	if appsec != "" && appsec == rawapp.AppSec {
-		authz_ok = true
-	} else if uid != "" && uid == rawapp.UserId {
-		authz_ok = true
-	}
-	if !authz_ok {
-		response.ErrNo = ERR_AUTHORIZE
-		response.ErrMsg = "authorize failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+	if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
+		errResponse(w, ERR_SIGN, "check sign failed", 400)
 		return
 	}
 
-	if _, err = storage.Instance.HashDel("db_apps", appid); err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+	msg := storage.RawMessage{}
+	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+		errResponse(w, ERR_BAD_REQUEST, "json decode body failed", 400)
 		return
 	}
-	if _, err = storage.Instance.HashDel("db_packages", pkg); err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+	ok, desc := checkMessage(&msg)
+	if !ok {
+		errResponse(w, ERR_INVALID_PARAMS, desc, 400)
 		return
 	}
+	msgid := getMsgID()
+	if msgid == 0 {
+		errResponse(w, ERR_INTERNAL, "no avaiable msgid", 500)
+		return
+	}
+	msg.MsgId = msgid
+	var response Response
 	response.ErrNo = 0
+	response.Data = map[string]int64{"msgid": msgid}
+	msg.CTime = time.Now().Unix()
+	msgBox <- msg
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
@@ -380,46 +320,23 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	msg := storage.RawMessage{}
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-		response.ErrNo = ERR_BAD_REQUEST
-		response.ErrMsg = "Bad request"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+		errResponse(w, ERR_BAD_REQUEST, "json decode body failed", 400)
 		return
 	}
 	var ok bool
 	ok, desc := checkMessage(&msg)
 	if !ok {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = desc
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+		errResponse(w, ERR_INVALID_PARAMS, desc, 400)
 		return
 	}
 	appsec := msg.AppSec
-	uid := ""
-	if appsec == "" { //use 'token'
-		ok, uid = auth.Instance.Auth(msg.Token)
-		if !ok {
-			response.ErrNo = ERR_AUTHENTICATE
-			response.ErrMsg = "authenticate failed"
-			b, _ := json.Marshal(response)
-			http.Error(w, string(b), 401)
-			return
-		}
-	}
 	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
 	if err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+		errResponse(w, ERR_INTERNAL, "get 'db_apps' failed", 500)
 		return
 	}
 	if b == nil {
-		response.ErrNo = ERR_NOT_EXIST
-		response.ErrMsg = "app not exist"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+		errResponse(w, ERR_NOT_EXIST, "app not exist", 400)
 		return
 	}
 	var rawapp storage.RawApp
@@ -429,22 +346,14 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	authz_ok := false
 	if appsec != "" && appsec == rawapp.AppSec {
 		authz_ok = true
-	} else if uid != "" && uid == rawapp.UserId {
-		authz_ok = true
 	}
 	if !authz_ok {
-		response.ErrNo = ERR_AUTHORIZE
-		response.ErrMsg = "authorize failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+		errResponse(w, ERR_AUTHORIZE, "authorize failed", 400)
 		return
 	}
 	msgid := getMsgID()
 	if msgid == 0 {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "no avaiabled msgid"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+		errResponse(w, ERR_INTERNAL, "no avaiable msgid", 500)
 		return
 	}
 	msg.MsgId = msgid
@@ -457,23 +366,17 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getMessage(w http.ResponseWriter, r *http.Request) {
-	var response Response
 	msgid := r.FormValue("msgid")
 	if msgid == "" {
-		response.ErrNo = ERR_INVALID_PARAMS
-		response.ErrMsg = "missing 'msgid'"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 400)
+		errResponse(w, ERR_INVALID_PARAMS, "missing 'msgid'", 400)
 		return
 	}
 	b, err := storage.Instance.HashGet("db_msg_stat", msgid)
 	if err != nil {
-		response.ErrNo = ERR_INTERNAL
-		response.ErrMsg = "storage I/O failed"
-		b, _ := json.Marshal(response)
-		http.Error(w, string(b), 500)
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
 		return
 	}
+	var response Response
 	response.ErrNo = 0
 	response.Data = map[string]string{"send": string(b)}
 	b, err = json.Marshal(response)
