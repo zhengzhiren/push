@@ -220,13 +220,15 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 
 func delApp(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
+	contentMD5 := r.Header.Get("Content-MD5")
+	date := r.Header.Get("Date")
 	auth := strings.Split(authstr, " ")
 	if len(auth) != 3 {
 		errResponse(w, ERR_AUTHORIZE, "invalid 'Authorization' header", 400)
 		return
 	}
 	appid := auth[1]
-	sign  := auth[2]
+	sign := auth[2]
 	b, err := storage.Instance.HashGet("db_apps", appid)
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
@@ -240,7 +242,7 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
 	if sign != ADMIN_SIGN {
-		if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
+		if utils.Sign(rawapp.AppSec, r.Method, contentMD5, date, r.Form) != sign {
 			errResponse(w, ERR_SIGN, "check sign failed", 400)
 			return
 		}
@@ -283,13 +285,15 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 
 func addMessage(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
+	contentMD5 := r.Header.Get("Content-MD5")
+	date := r.Header.Get("Date")
 	auth := strings.Split(authstr, " ")
 	if len(auth) != 3 {
 		errResponse(w, ERR_AUTHORIZE, "invalid 'Authorization' header", 400)
 		return
 	}
 	appid := auth[1]
-	sign  := auth[2]
+	sign := auth[2]
 	// load app info
 	b, err := storage.Instance.HashGet("db_apps", appid)
 	if err != nil {
@@ -305,7 +309,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 
 	// check sign
 	if sign != ADMIN_SIGN {
-		if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
+		if utils.Sign(rawapp.AppSec, r.Method, contentMD5, date, r.Form) != sign {
 			errResponse(w, ERR_SIGN, "check sign failed", 400)
 			return
 		}

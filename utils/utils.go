@@ -2,27 +2,29 @@ package utils
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/sha1"
 	"crypto/sha256"
-	"crypto/hmac"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"index/suffixarray"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"net"
-	"sort"
+
+	log "github.com/cihub/seelog"
 )
 
 var (
@@ -582,6 +584,7 @@ func CompareKernelVersion(a, b *KernelVersionInfo) int {
 
 	return 0
 }
+
 /*
 func GetKernelVersion() (*KernelVersionInfo, error) {
 	var (
@@ -1148,7 +1151,7 @@ func GetLocalIP() string {
 	}
 	ifnum := 0
 	for _, i := range ifs {
-		if (i.Flags & net.FlagUp == 1) && (i.Name == "eth0" || i.Name == "eth1") {
+		if (i.Flags&net.FlagUp == 1) && (i.Name == "eth0" || i.Name == "eth1") {
 			ifnum += 1
 		}
 	}
@@ -1174,23 +1177,24 @@ func GetLocalIP() string {
 	return ip
 }
 
-func Sign(method string, forms map[string][]string, body []byte, key string) string {
-	var items []string
-	for k, a := range(forms) {
-		if k == "sign" {
-			continue
-		}
-		for _, v := range(a) {
-			items = append(items, fmt.Sprintf("%s=%s", k, v))
+func Sign(key string, method string, contentMD5 string, date string, forms map[string][]string) string {
+	var params []string
+	for k, a := range forms {
+		for _, v := range a {
+			params = append(params, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
-	sort.Strings(items)
-	basic_str := method + string(strings.Join(items, ""))
-	if body != nil {
-		basic_str += string(body)
-	}
+	sort.Strings(params)
+	paramString := strings.Join(params, "&")
+
+	stringToSign := method + "\n" +
+		contentMD5 + "\n" +
+		date + "\n" +
+		paramString
+
+	log.Debugf("stringToSign: %s", stringToSign)
+
 	mac := hmac.New(sha1.New, []byte(key))
-	mac.Write([]byte(basic_str))
+	mac.Write([]byte(stringToSign))
 	return hex.EncodeToString(mac.Sum(nil))
 }
-
