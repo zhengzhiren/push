@@ -96,8 +96,8 @@ type UnregisterMessage struct {
 type UnregisterReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg,omitempty"`
 	RegId  string `json:"regid,omitempty"`
+	Pkg    string `json:"pkg,omitempty"`
 }
 type PushMessage struct {
 	MsgId   int64  `json:"msgid"`
@@ -135,6 +135,7 @@ type GetTopicsMessage struct {
 	RegId string `json:"regid"`
 }
 type GetTopicsReplyMessage struct {
+	Result int    `json:"result"`
 	AppId string `json:"appid"`
 	RegId string `json:"regid"`
 	Topics []string `json:"topics"`

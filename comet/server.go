@@ -884,6 +884,41 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 }
 
 func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: GETTOPICS body(%s)", client.devId, body)
+	var msg GetTopicsMessage
+	var reply GetTopicsReplyMessage
+
+	errReply := func(result int, appId string) {
+		reply.Result = result
+		reply.AppId = appId
+		sendReply(client, MSG_GET_TOPICS_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		errReply(1, msg.AppId)
+		return 0
+	}
+
+	if msg.AppId == "" || msg.RegId == "" {
+		log.Warnf("%s: appid or regid is empty", client.devId)
+		errReply(2, msg.AppId)
+		return 0
+	}
+
+	// unknown regid
+	var ok bool
+	regapp, ok := client.RegApps[msg.RegId]
+	if !ok {
+		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		errReply(3, msg.AppId)
+		return 0
+	}
+	reply.Result = 0
+	reply.AppId = msg.AppId
+	reply.RegId = msg.RegId
+	reply.Topics = regapp.Topics
+	sendReply(client, MSG_GET_TOPICS_REPLY, header.Seq, &reply)
 	return 0
 }
 
