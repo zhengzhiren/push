@@ -20,6 +20,7 @@ const (
 	MsgID       = "msgid"
 	PappID      = "pappid" //appid prefix
 	MaxMsgCount = 9223372036854775807
+	ADMIN_SIGN  = "pushtest"
 )
 
 const (
@@ -218,8 +219,14 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func delApp(w http.ResponseWriter, r *http.Request) {
-	appid := r.FormValue("appid")
-	sign := r.FormValue("sign")
+	authstr := r.Header.Get("Authorization")
+	auth := strings.Split(authstr, " ")
+	if len(auth) != 3 {
+		errResponse(w, ERR_AUTHORIZE, "invalid 'Authorization' header", 400)
+		return
+	}
+	appid := auth[1]
+	sign  := auth[2]
 	b, err := storage.Instance.HashGet("db_apps", appid)
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
@@ -232,9 +239,11 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
-	if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
-		errResponse(w, ERR_SIGN, "check sign failed", 400)
-		return
+	if sign != ADMIN_SIGN {
+		if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
+			errResponse(w, ERR_SIGN, "check sign failed", 400)
+			return
+		}
 	}
 	if _, err = storage.Instance.HashDel("db_apps", appid); err != nil {
 		errResponse(w, ERR_INTERNAL, "del 'db_apps' failed", 500)
@@ -272,9 +281,16 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func addMessage2(w http.ResponseWriter, r *http.Request) {
-	appid := r.FormValue("appid")
-	sign := r.FormValue("sign")
+func addMessage(w http.ResponseWriter, r *http.Request) {
+	authstr := r.Header.Get("Authorization")
+	auth := strings.Split(authstr, " ")
+	if len(auth) != 3 {
+		errResponse(w, ERR_AUTHORIZE, "invalid 'Authorization' header", 400)
+		return
+	}
+	appid := auth[1]
+	sign  := auth[2]
+	// load app info
 	b, err := storage.Instance.HashGet("db_apps", appid)
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "get 'db_apps' failed", 500)
@@ -286,16 +302,23 @@ func addMessage2(w http.ResponseWriter, r *http.Request) {
 	}
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
-	if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
-		errResponse(w, ERR_SIGN, "check sign failed", 400)
-		return
+
+	// check sign
+	if sign != ADMIN_SIGN {
+		if utils.Sign(r.Method, r.Form, nil, rawapp.AppSec) != sign {
+			errResponse(w, ERR_SIGN, "check sign failed", 400)
+			return
+		}
 	}
 
+	// decode JSON body
 	msg := storage.RawMessage{}
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		errResponse(w, ERR_BAD_REQUEST, "json decode body failed", 400)
 		return
 	}
+	msg.AppId = appid
+	// check message format
 	ok, desc := checkMessage(&msg)
 	if !ok {
 		errResponse(w, ERR_INVALID_PARAMS, desc, 400)
@@ -316,6 +339,7 @@ func addMessage2(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 }
 
+/*
 func addMessage(w http.ResponseWriter, r *http.Request) {
 	var response Response
 	msg := storage.RawMessage{}
@@ -364,6 +388,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
 }
+*/
 
 func getMessage(w http.ResponseWriter, r *http.Request) {
 	msgid := r.FormValue("msgid")
