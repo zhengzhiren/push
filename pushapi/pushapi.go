@@ -9,6 +9,7 @@ import (
 	"github.com/chenyf/push/zk"
 	log "github.com/cihub/seelog"
 	uuid "github.com/codeskyblue/go-uuid"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -220,7 +221,6 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 
 func delApp(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
-	contentMD5 := r.Header.Get("Content-MD5")
 	date := r.Header.Get("Date")
 	auth := strings.Split(authstr, " ")
 	if len(auth) != 3 {
@@ -241,8 +241,9 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
+	body, _ := ioutil.ReadAll(r.Body)
 	if sign != ADMIN_SIGN {
-		if utils.Sign(rawapp.AppSec, r.Method, contentMD5, date, r.Form) != sign {
+		if utils.Sign(rawapp.AppSec, r.Method, body, date, r.Form) != sign {
 			errResponse(w, ERR_SIGN, "check sign failed", 400)
 			return
 		}
@@ -285,7 +286,6 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 
 func addMessage(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
-	contentMD5 := r.Header.Get("Content-MD5")
 	date := r.Header.Get("Date")
 	auth := strings.Split(authstr, " ")
 	if len(auth) != 3 {
@@ -307,9 +307,10 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
 
+	body, _ := ioutil.ReadAll(r.Body)
 	// check sign
 	if sign != ADMIN_SIGN {
-		if utils.Sign(rawapp.AppSec, r.Method, contentMD5, date, r.Form) != sign {
+		if utils.Sign(rawapp.AppSec, r.Method, body, date, r.Form) != sign {
 			errResponse(w, ERR_SIGN, "check sign failed", 400)
 			return
 		}
@@ -317,7 +318,8 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 
 	// decode JSON body
 	msg := storage.RawMessage{}
-	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Error(err)
 		errResponse(w, ERR_BAD_REQUEST, "json decode body failed", 400)
 		return
 	}

@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1177,7 +1178,7 @@ func GetLocalIP() string {
 	return ip
 }
 
-func Sign(key string, method string, contentMD5 string, date string, forms map[string][]string) string {
+func Sign(key string, method string, body []byte, date string, forms map[string][]string) string {
 	var params []string
 	for k, a := range forms {
 		for _, v := range a {
@@ -1187,8 +1188,15 @@ func Sign(key string, method string, contentMD5 string, date string, forms map[s
 	sort.Strings(params)
 	paramString := strings.Join(params, "&")
 
+	bodyMD5 := ""
+	if body != nil {
+		h := md5.New()
+		h.Write(body)
+		bodyMD5 = hex.EncodeToString(h.Sum(nil))
+	}
+
 	stringToSign := method + "\n" +
-		contentMD5 + "\n" +
+		bodyMD5 + "\n" +
 		date + "\n" +
 		paramString
 

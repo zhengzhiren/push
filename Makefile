@@ -30,7 +30,7 @@ tarball: init pushd pushapi pushtest notifyapi
 clean:
 	rm -rf output push.tgz
 
-TEST_DIRS:=auth storage devcenter
+TEST_DIRS:=auth storage devcenter pushapi
 
 test:
 	@for dir in $(TEST_DIRS); do \
