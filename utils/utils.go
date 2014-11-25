@@ -1189,7 +1189,7 @@ func Sign(key string, method string, body []byte, date string, forms map[string]
 	paramString := strings.Join(params, "&")
 
 	bodyMD5 := ""
-	if body != nil {
+	if body != nil && len(body) != 0 {
 		h := md5.New()
 		h.Write(body)
 		bodyMD5 = hex.EncodeToString(h.Sum(nil))
