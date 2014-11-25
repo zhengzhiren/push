@@ -174,3 +174,10 @@ func startHttp(addr string, cmdTimeout int) {
 		os.Exit(1)
 	}
 }
+
+func AuthHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(*r.URL)
+		h.ServeHTTP(w, r)
+	})
+}
