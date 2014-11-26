@@ -3,7 +3,7 @@
 	"web"				: "0.0.0.0:19999",
 	"pushapi"			: "0.0.0.0:8080",
 	"command_timeout"	: 20,
-	"devcenter"			: "10.154.156.90",
+	"devcenter"			: "device.scloud.letv.com",
 
 	"rabbit" : {
 		"uri" 			: "amqp://guest:guest@10.154.156.122:5672/",
