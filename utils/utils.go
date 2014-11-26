@@ -1178,7 +1178,7 @@ func GetLocalIP() string {
 	return ip
 }
 
-func Sign(key string, method string, body []byte, date string, forms map[string][]string) string {
+func Sign(key string, method string, path string, body []byte, date string, forms map[string][]string) string {
 	var params []string
 	for k, a := range forms {
 		for _, v := range a {
@@ -1196,6 +1196,7 @@ func Sign(key string, method string, body []byte, date string, forms map[string]
 	}
 
 	stringToSign := method + "\n" +
+		path + "\n" +
 		bodyMD5 + "\n" +
 		date + "\n" +
 		paramString

@@ -23,8 +23,8 @@ func TestSign(t *testing.T) {
 	appSec := "appsec_ckeasUHYFkAvEitqagAr"
 	date := time.Now().Format(time.RFC1123)
 	body, _ := json.Marshal(param)
-	sign := utils.Sign(appSec, "POST", body, date, nil)
 	req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/api/v1/message", bytes.NewBuffer(body))
+	sign := utils.Sign(appSec, "POST", req.URL.Path, body, date, nil)
 	//req, _ := http.NewRequest("POST", "http://push.scloud.letv.com/api/v1/message", bytes.NewBuffer(body))
 	req.Header.Add("Date", date)
 	req.Header.Add("Authorization", fmt.Sprintf("LETV %s %s", appId, sign))
@@ -36,6 +36,7 @@ func TestSign(t *testing.T) {
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Errorf("request err: %s", err)
+		t.FailNow()
 	}
 
 	respDump, _ := httputil.DumpResponse(resp, true)
