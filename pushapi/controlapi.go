@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ant0ine/go-json-rest/rest"
 	log "github.com/cihub/seelog"
@@ -12,6 +15,7 @@ import (
 	"github.com/chenyf/push/devcenter"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/utils"
 )
 
 var (
@@ -42,11 +46,49 @@ func checkAuthz(token string, devid string) bool {
 	return binding
 }
 
-func getStatus(w rest.ResponseWriter, r *rest.Request) {
-	resp := cloud.ApiResponse{}
-	resp.ErrNo = cloud.ERR_NOERROR
-	//resp.Data = fmt.Sprintf("Total registered devices: %d", comet.DevMap.Size())
-	w.WriteJson(resp)
+//
+// check the signature of the request
+// the signature calulation need to read full content of request body
+// the body is then put into the request.Env["body"] and passed to
+// the next handler
+//
+func AuthMiddlewareFunc(h rest.HandlerFunc) rest.HandlerFunc {
+	return func(w rest.ResponseWriter, r *rest.Request) {
+		controlAK := "820b4376bad3486199e13a7ada104106"
+		secretKey := "EwYmYyqdChgitRcrInBg"
+		authstr := r.Header.Get("Authorization")
+		auth := strings.Split(authstr, " ")
+		if len(auth) != 3 {
+			rest.Error(w, "Invalid 'Authorization' header", http.StatusBadRequest)
+			return
+		}
+		accessKey := auth[1]
+		sign := auth[2]
+		if accessKey != controlAK {
+			rest.Error(w, "Invalid AccessKey", http.StatusForbidden)
+			return
+		}
+
+		dateStr := r.Header.Get("Date")
+		date, err := time.Parse(time.RFC1123, dateStr)
+		if err != nil {
+			rest.Error(w, "Invalid 'Date' header", http.StatusBadRequest)
+			log.Warnf("Unknown 'Date' header: ", err)
+			return
+		}
+		log.Debugf("Date header: %s", date.String())
+
+		body, _ := ioutil.ReadAll(r.Body)
+		r.ParseForm()
+		if sign != "supersignature" { //TODO: remove this
+			if utils.Sign(secretKey, r.Method, "/api/v1"+r.URL.Path, body, dateStr, r.Form) != sign {
+				rest.Error(w, "Signature varification failed", http.StatusForbidden)
+				return
+			}
+		}
+		r.Env["body"] = body
+		h(w, r)
+	}
 }
 
 func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
@@ -108,10 +150,15 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 	}
 
 	devId := r.PathParam("devid")
+	body := r.Env["body"]
+	if body == nil {
+		rest.Error(w, "Empty body", http.StatusBadRequest)
+		return
+	}
+	b := body.([]byte)
 	param := ControlParam{}
-	err := r.DecodeJsonPayload(&param)
-	if err != nil {
-		log.Warnf("Error decode param: %s", err.Error())
+	if err := json.Unmarshal(b, &param); err != nil {
+		log.Warnf("Error decode body: %s", err.Error())
 		rest.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

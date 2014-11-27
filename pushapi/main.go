@@ -147,12 +147,21 @@ func startHttp(addr string, cmdTimeout int) {
 	log.Infof("Starting HTTP server on %s, command timeout: %ds", addr, cmdTimeout)
 	commandTimeout = cmdTimeout
 
-	handler := rest.ResourceHandler{}
+	handler := rest.ResourceHandler{
+		DisableXPoweredBy:        true,
+		DisableJsonIndent:        true,
+		EnableStatusService:      true,
+		EnableResponseStackTrace: true,
+	}
 	err := handler.SetRoutes(
-		&rest.Route{"GET", "/devices", getDeviceList},
-		&rest.Route{"GET", "/devices/:devid", getDevice},
-		&rest.Route{"POST", "/devices/:devid", controlDevice},
-		&rest.Route{"GET", "/status", getStatus},
+		&rest.Route{"GET", "/devices", AuthMiddlewareFunc(getDeviceList)},
+		&rest.Route{"GET", "/devices/:devid", AuthMiddlewareFunc(getDevice)},
+		&rest.Route{"POST", "/devices/:devid", AuthMiddlewareFunc(controlDevice)},
+		&rest.Route{"GET", "/.status",
+			func(w rest.ResponseWriter, r *rest.Request) {
+				w.WriteJson(handler.GetStatus())
+			},
+		},
 	)
 	if err != nil {
 		log.Criticalf("http SetRoutes: ", err)
@@ -173,11 +182,4 @@ func startHttp(addr string, cmdTimeout int) {
 		log.Criticalf("http listen: ", err)
 		os.Exit(1)
 	}
-}
-
-func AuthHandler(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(*r.URL)
-		h.ServeHTTP(w, r)
-	})
 }

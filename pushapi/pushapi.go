@@ -243,7 +243,7 @@ func delApp(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(b, &rawapp)
 	body, _ := ioutil.ReadAll(r.Body)
 	if sign != ADMIN_SIGN {
-		if utils.Sign(rawapp.AppSec, r.Method, body, date, r.Form) != sign {
+		if utils.Sign(rawapp.AppSec, r.Method, r.URL.Path, body, date, r.Form) != sign {
 			errResponse(w, ERR_SIGN, "check sign failed", 400)
 			return
 		}
@@ -310,7 +310,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	body, _ := ioutil.ReadAll(r.Body)
 	// check sign
 	if sign != ADMIN_SIGN {
-		if utils.Sign(rawapp.AppSec, r.Method, body, date, r.Form) != sign {
+		if utils.Sign(rawapp.AppSec, r.Method, r.URL.Path, body, date, r.Form) != sign {
 			errResponse(w, ERR_SIGN, "check sign failed", 400)
 			return
 		}
