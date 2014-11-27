@@ -23,8 +23,8 @@ type RawMessage struct {
 	Content      string `json:"content,omitempty"`
 	Notification struct {
 		Title     string `json:"title"`
-		Desc      string `json:"desc"`
-		Type      int    `json:"type"`
+		Desc      string `json:"desc,omitempty"`
+		Type      int    `json:"type,omitempty"`
 		SoundUri  string `json:"sound_uri,omitempty`
 		Action    int    `json:"action,omitempty"`
 		IntentUri string `json:"intent_uri,omitempty`

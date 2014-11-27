@@ -48,11 +48,17 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	if m.AppId == "" {
 		return false, "missing 'appid'"
 	}
-	if m.MsgType == 1 && m.Content == "" {
-		return false, "missing 'content' when 'msg_type'==1"
-	}
 	if m.MsgType < 1 || m.MsgType > 2 {
 		return false, "invalid 'msg_type'"
+	}
+	if m.MsgType == 2 {
+		if m.Content == "" {
+			return false, "missing 'content' or empty 'content' when 'msg_type'==2"
+		}
+	} else {
+		if m.Notification.Title == "" {
+			return false, "missing 'notification.title' or empty when 'msg_type'==1"
+		}
 	}
 	if m.PushType < 1 || m.PushType > 5 {
 		return false, "invalid 'push_type'"
