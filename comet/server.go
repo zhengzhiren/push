@@ -419,7 +419,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 				AppId: rawMsg.AppId,
 				Type:  rawMsg.MsgType,
 			}
-			if rawMsg.MsgType == 1 {
+			if rawMsg.MsgType == 2 {
 				msg.Content = rawMsg.Content
 			} else {
 				b, _ := json.Marshal(rawMsg.Notification)
