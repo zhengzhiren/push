@@ -75,7 +75,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		AppId:   appId,
 		Type:    rawMsg.MsgType,
 	}
-	if rawMsg.MsgType == 1 {
+	if rawMsg.MsgType == 2 {
 		msg.Content = rawMsg.Content
 	} else {
 		b, _ := json.Marshal(rawMsg.Notification)
