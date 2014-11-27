@@ -197,6 +197,14 @@ func (r *RedisStorage) RefreshDevices(serverName string, timeout int) error {
 	return err
 }
 
+func (r *RedisStorage) InitDevices(serverName string) error {
+	_, err := redis.Int(r.Do("DEL", "db_comet_"+serverName))
+	if err != nil {
+		log.Warnf("redis: DEL failed, (%s)", err)
+	}
+	return err
+}
+
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
 	ret, err := r.Do("HGETALL", db)
 	if err != nil {
