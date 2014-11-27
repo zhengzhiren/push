@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ant0ine/go-json-rest/rest"
 	log "github.com/cihub/seelog"
@@ -53,22 +54,34 @@ func checkAuthz(token string, devid string) bool {
 //
 func AuthMiddlewareFunc(h rest.HandlerFunc) rest.HandlerFunc {
 	return func(w rest.ResponseWriter, r *rest.Request) {
+		controlAK := "820b4376bad3486199e13a7ada104106"
+		secretKey := "EwYmYyqdChgitRcrInBg"
 		authstr := r.Header.Get("Authorization")
 		auth := strings.Split(authstr, " ")
 		if len(auth) != 3 {
-			rest.Error(w, "invalid 'Authorization' header", http.StatusBadRequest)
+			rest.Error(w, "Invalid 'Authorization' header", http.StatusBadRequest)
 			return
 		}
-		//accessKey := auth[1]
+		accessKey := auth[1]
 		sign := auth[2]
+		if accessKey != controlAK {
+			rest.Error(w, "Invalid AccessKey", http.StatusForbidden)
+			return
+		}
 
-		date := r.Header.Get("Date")
-		//TODO: check the date format
+		dateStr := r.Header.Get("Date")
+		date, err := time.Parse(time.RFC1123, dateStr)
+		if err != nil {
+			rest.Error(w, "Invalid 'Date' header", http.StatusBadRequest)
+			log.Warnf("Unknown 'Date' header: ", err)
+			return
+		}
+		log.Debugf("Date header: %s", date.String())
+
 		body, _ := ioutil.ReadAll(r.Body)
-		secretKey := "XXX" // TODO
 		r.ParseForm()
-		if sign != "supersignature" {
-			if utils.Sign(secretKey, r.Method, r.URL.Path, body, date, r.Form) != sign {
+		if sign != "supersignature" { //TODO: remove this
+			if utils.Sign(secretKey, r.Method, "/api/v1"+r.URL.Path, body, dateStr, r.Form) != sign {
 				rest.Error(w, "Signature varification failed", http.StatusForbidden)
 				return
 			}
