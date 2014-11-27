@@ -7,22 +7,35 @@ import (
     "flag"
     "time"
     "bytes"
+    "strings"
+    "io"
     log "github.com/cihub/seelog"
     "github.com/chenyf/push/storage"
     "github.com/chenyf/push/conf"
+    "github.com/chenyf/push/utils"
 )
 
 type Notice struct {
     Id int64            `json:"id"`
     AppId string        `json:"appid"`
+    AppSec string       `json:"appsec"`
     Tags string         `json:"tags"`
     MsgType int         `json:"msg_type"`
-    Platform string     `json:"platform"`
-    Content string      `json:"content"`
-    TTL int64           `json:"ttl,omitempty"`
-    TTS int64           `json:"tts,omitempty"`
-    Token string        `json:"token,omitempty"`
-    AppSec string       `json:"appsec,omitempty"`
+    Platform string     `json:"platform,omitempty"`
+    Content string      `json:"content,omitempty"`
+	Notification struct {
+		Title     string `json:"title"`
+		Desc      string `json:"desc,omitempty"`
+		Type      int    `json:"type,omitempty"`
+		SoundUri  string `json:"sound_uri,omitempty"`
+		Action    int    `json:"action,omitempty"`
+		IntentUri string `json:"intent_uri,omitempty"`
+        WebUri    string `json:"web_uri,omitempty"`
+	} `json:"notification,omitempty"`
+	Options struct {
+		TTL int64 `json:"ttl,omitempty"`
+		TTS int64 `json:"tts,omitempty"`
+	} `json:"options"`
 }
 
 type PostNotifyData struct {
@@ -38,8 +51,8 @@ type Response struct {
     ErrNo int               `json:"errno"`
     ErrMsg string           `json:"errmsg,omitempty"`
     Data struct {
-        Sent []ResponseItem     `json:"sent"`
-        UnSent []ResponseItem   `json:"unsent"`
+        Sent []ResponseItem     `json:"sent,omitempty"`
+        UnSent []ResponseItem   `json:"unsent,omitempty"`
     }                       `json:"data,omitempty"`
 }
 
@@ -56,33 +69,30 @@ type ThirdPartyResponse struct {
 
 const PUSH_WITH_UID = 3
 
-func callThirdPartyIf(method string, url string, data []byte) (error, interface{}) {
-    var (
-        r *http.Response
-        err error
-    )
-    if method == "GET" {
-        r, err = http.Get(url)
-    } else if method == "POST" {
-        r, err = http.Post(url, "application/json", bytes.NewBuffer(data))
-    } else {
-        return fmt.Errorf("unknow http method with thirdparty interface"), nil
-    }
-
+func callThirdPartyIf(method string, url string, body io.Reader, header *map[string]string) (error, interface{}) {
+    client := &http.Client{}
+    req, err := http.NewRequest(method, url, body)
     if err != nil {
         return err, nil
     }
 
-    resp := ThirdPartyResponse{}
-    err = json.NewDecoder(r.Body).Decode(&resp);
+    if header != nil {
+        for k, v := range *header {
+            req.Header.Set(k, v)
+        }
+    }
+    resp, err := client.Do(req)
+
+    r := ThirdPartyResponse{}
+    err = json.NewDecoder(resp.Body).Decode(&r)
 
     if err != nil {
         return err, nil
     }
-    if resp.ErrMsg != "" {
-        return fmt.Errorf("failed to get response data [%s]", resp.ErrMsg), nil
+    if r.ErrMsg != "" {
+        return fmt.Errorf("failed to get response data [%s]", r.ErrMsg), nil
     }
-    return nil, resp.Data
+    return nil, r.Data
 }
 
 func postNotify(w http.ResponseWriter, r *http.Request) {
@@ -122,20 +132,10 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
                 Content: n.Content,
                 Platform: n.Platform,
             }
-            if n.TTL != 0 {
-                d.Options.TTL = n.TTL
-            }
-            if n.TTS != 0 {
-                d.Options.TTS = n.TTS
-            }
-            if n.Token != "" {
-                d.Token = n.Token
-            }
-            if n.AppSec != "" {
-                d.AppSec = n.AppSec
-            }
+            d.Notification = n.Notification
+            d.Options = n.Options
             log.Infof("get uids with notice[%d]", n.Id)
-            err, resp := callThirdPartyIf("GET", fmt.Sprintf("%s?tids=%s", conf.Config.Notify.SubUrl, n.Tags), nil)
+            err, resp := callThirdPartyIf("GET", fmt.Sprintf("%s%s", conf.Config.Notify.SubUrl, n.Tags), nil, nil)
             if err != nil {
                 rchan <- &Result{
                     Error: err,
@@ -145,13 +145,28 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
             }
             rdata := resp.(map[string]interface{})
             var uids []string
-            for _, i := range rdata["uids"].([]interface{}) {
-                uids = append(uids, i.(string))
+            for _, v := range rdata {
+                vdata := v.(map[string]interface{})
+                for i, j := range vdata {
+                    if i == "uids" {
+                        for _, uid := range j.([]interface{}) {
+                            uids = append(uids, uid.(string))
+                        }
+                    }
+                }
             }
             d.PushParams.UserId = uids
             data, _ := json.Marshal(d)
             log.Infof("push msgs with notice[%d]", n.Id)
-            err, resp = callThirdPartyIf("POST", conf.Config.Notify.PushUrl, data)
+            path := strings.SplitN(conf.Config.Notify.PushUrl, "/", 4)
+            date := time.Now().UTC().String()
+            sign := utils.Sign(n.AppSec, "POST", fmt.Sprintf("/%s", path[3]), data, date, nil)
+            header := map[string]string{
+                "Content-Type": "application/json",
+                "Date": date,
+                "Authorization": fmt.Sprintf("LETV %s %s", n.AppId, sign),
+            }
+            err, resp = callThirdPartyIf("POST", conf.Config.Notify.PushUrl, bytes.NewBuffer(data), &header)
             rchan <- &Result{
                 Error: err,
                 Data: resp,
@@ -198,7 +213,7 @@ func main() {
     }
 
     http.HandleFunc("/api/v1/notify", postNotify)
-    err = http.ListenAndServe(":9999", nil)
+    err = http.ListenAndServe(conf.Config.Notify.Addr, nil)
     if err != nil {
         log.Warnf("failed to ListenAndServe: ", err)
 		os.Exit(1)

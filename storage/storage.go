@@ -25,10 +25,10 @@ type RawMessage struct {
 		Title     string `json:"title"`
 		Desc      string `json:"desc,omitempty"`
 		Type      int    `json:"type,omitempty"`
-		SoundUri  string `json:"sound_uri,omitempty`
+		SoundUri  string `json:"sound_uri,omitempty"`
 		Action    int    `json:"action,omitempty"`
-		IntentUri string `json:"intent_uri,omitempty`
-		WebUri    string `json:"web_uri,omitempty`
+		IntentUri string `json:"intent_uri,omitempty"`
+		WebUri    string `json:"web_uri,omitempty"`
 	} `json:"notification,omitempty"`
 	Options struct {
 		TTL int64 `json:"ttl,omitempty"`
