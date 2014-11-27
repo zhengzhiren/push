@@ -53,6 +53,7 @@ type Storage interface {
 	// check if the device Id exists, return the server name
 	CheckDevice(devId string) (string, error)
 	RefreshDevices(serverName string, timeout int) error
+	InitDevices(serverName string) error
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)

@@ -169,6 +169,11 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_GET_TOPICS] = handleGetTopics
 	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
 
+	if err := storage.Instance.InitDevices(this.Name); err != nil {
+		log.Errorf("failed to InitDevices: %s", err.Error())
+		return nil, err
+	}
+
 	// keep the data of this node not expired on redis
 	go func() {
 		for {

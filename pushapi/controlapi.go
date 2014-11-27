@@ -57,7 +57,7 @@ func AuthMiddlewareFunc(h rest.HandlerFunc) rest.HandlerFunc {
 		controlAK := "820b4376bad3486199e13a7ada104106"
 		secretKey := "EwYmYyqdChgitRcrInBg"
 		authstr := r.Header.Get("Authorization")
-		auth := strings.Split(authstr, " ")
+		auth := strings.Fields(authstr)
 		if len(auth) != 3 {
 			rest.Error(w, "Invalid 'Authorization' header", http.StatusBadRequest)
 			return
@@ -73,7 +73,7 @@ func AuthMiddlewareFunc(h rest.HandlerFunc) rest.HandlerFunc {
 		date, err := time.Parse(time.RFC1123, dateStr)
 		if err != nil {
 			rest.Error(w, "Invalid 'Date' header", http.StatusBadRequest)
-			log.Warnf("Unknown 'Date' header: ", err)
+			log.Warnf("Unknown 'Date' header: %s", err.Error())
 			return
 		}
 		log.Debugf("Date header: %s", date.String())
