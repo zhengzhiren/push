@@ -222,8 +222,8 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 func delApp(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
 	date := r.Header.Get("Date")
-	auth := strings.Split(authstr, " ")
-	if len(auth) != 3 {
+	auth := strings.Fields(authstr)
+	if len(auth) < 3 {
 		errResponse(w, ERR_AUTHORIZE, "invalid 'Authorization' header", 400)
 		return
 	}
@@ -287,8 +287,8 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 func addMessage(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
 	date := r.Header.Get("Date")
-	auth := strings.Split(authstr, " ")
-	if len(auth) != 3 {
+	auth := strings.Fields(authstr)
+	if len(auth) < 3 {
 		errResponse(w, ERR_AUTHORIZE, "invalid 'Authorization' header", 400)
 		return
 	}
