@@ -95,6 +95,25 @@ func callThirdPartyIf(method string, url string, body io.Reader, header *map[str
     return nil, r.Data
 }
 
+func getUids(resp interface{}, uids *[]string) {
+    data := resp.(map[string]interface{})
+    found := make(map[string]bool)
+    for _, vdata := range data {
+        _vdata := vdata.(map[string]interface{})
+        for key, val := range _vdata {
+            if key == "uids" {
+                for _, uid := range val.([]interface{}) {
+                    _uid := uid.(string)
+                    if _, ok := found[_uid]; !ok {
+                        found[_uid] = true
+                        *uids = append(*uids, uid.(string))
+                    }
+                }
+            }
+        }
+    }
+}
+
 func postNotify(w http.ResponseWriter, r *http.Request) {
     var response Response
     response.ErrNo = 10000
@@ -143,18 +162,8 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
                 }
                 return
             }
-            rdata := resp.(map[string]interface{})
             var uids []string
-            for _, v := range rdata {
-                vdata := v.(map[string]interface{})
-                for i, j := range vdata {
-                    if i == "uids" {
-                        for _, uid := range j.([]interface{}) {
-                            uids = append(uids, uid.(string))
-                        }
-                    }
-                }
-            }
+            getUids(resp, &uids)
             d.PushParams.UserId = uids
             data, _ := json.Marshal(d)
             log.Infof("push msgs with notice[%d]", n.Id)
