@@ -82,7 +82,7 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		return nil, err
 	}
 
-	log.Infof("got Connection, getting Channel")
+	log.Infof("got Connection to %s, getting Channel", amqpURI)
 	client.channel, err = client.conn.Channel()
 	if err != nil {
 		log.Errorf("Channel: %s", err)
@@ -164,13 +164,19 @@ func handleResponse(client *RpcClient) {
 }
 
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
-	serverName, err := storage.Instance.CheckDevice(deviceId)
-	if err != nil {
-		log.Errorf("failed to check device existence:", err)
-		return "", err
-	}
-	if serverName == "" {
-		return "", &NoDeviceError{"No device"}
+	var routingKey string
+	if service != "gibbon_agent" {
+		serverName, err := storage.Instance.CheckDevice(deviceId)
+		if err != nil {
+			log.Errorf("failed to check device existence:", err)
+			return "", err
+		}
+		if serverName == "" {
+			return "", &NoDeviceError{"No device"}
+		}
+		routingKey = serverName
+	} else {
+		routingKey = "gibbon"
 	}
 
 	requestId := this.nextReqeustId()
@@ -182,10 +188,10 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
-	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
+	log.Infof("publishing %dB cmd. RoutingKey: %s", len(cmd), routingKey)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
-		serverName,    // routing to 0 or more queues
+		routingKey,    // routing to 0 or more queues
 		false,         // mandatory
 		false,         // immediate
 		amqp.Publishing{

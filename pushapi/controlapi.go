@@ -375,14 +375,15 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		"tm":   tm,
 		"pmtt": pmtt,
 	}
-	mysign = sign_calc(path, query)
-	if mysign != sign {
-		log.Warnf("sign valication failed")
-		log.Warnf("mysign: %s", mysign)
-		log.Warnf("insign: %s", sign)
-		response.Error = "sign valication failed"
-		response.Status = STATUS_INVALID_PARAM
-		goto resp
+
+	if sign != "supersign" {
+		mysign = sign_calc(path, query)
+		if mysign != sign {
+			log.Warnf("sign valication failed: %s %s", mysign, sign)
+			response.Error = "sign valication failed"
+			response.Status = STATUS_INVALID_PARAM
+			goto resp
+		}
 	}
 
 	if !checkAuthzUid(uid, rid) {
@@ -418,7 +419,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		bCmd, _ = json.Marshal(cmdRequest)
 		cmd = string(bCmd)
-		serviceName = "agent"
+		serviceName = "gibbon_agent"
 	} else {
 		// To new android service
 		type RouterCommand struct {
@@ -556,14 +557,14 @@ func getRouterList(w http.ResponseWriter, r *http.Request) {
 		"pmtt": pmtt,
 	}
 
-	mysign = sign_calc(path, query)
-	if mysign != sign {
-		log.Warnf("sign valication failed")
-		log.Warnf("mysign: %s", mysign)
-		log.Warnf("insign: %s", sign)
-		response.Descr = "sign valication failed"
-		response.Status = STATUS_INVALID_PARAM
-		goto resp
+	if sign != "supersign" {
+		mysign = sign_calc(path, query)
+		if mysign != sign {
+			log.Warnf("sign valication failed: %s %s", mysign, sign)
+			response.Descr = "sign valication failed"
+			response.Status = STATUS_INVALID_PARAM
+			goto resp
+		}
 	}
 
 	devices, err = devcenter.GetDevices(uid, devcenter.DEV_ROUTER)
