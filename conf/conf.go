@@ -50,6 +50,7 @@ type ConfigStruct struct {
 
 	DevCenter string `json:"devcenter"`
     Notify struct {
+        Addr string             `json:"addr"`
         SubUrl string           `json:"sub_url"`
         PushUrl string          `json:"push_url"`
         MaxNotices int          `json:"max_notices"`
