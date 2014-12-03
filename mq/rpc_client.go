@@ -3,6 +3,7 @@ package mq
 import (
 	"encoding/json"
 	"strconv"
+	"sync"
 	"time"
 	//	"sync"
 	"sync/atomic"
@@ -56,6 +57,7 @@ type RpcClient struct {
 	callbackQueue string
 	requestId     uint32
 	requestTable  map[uint32]chan []byte
+	lock          *sync.RWMutex
 	rpcTimeout    int
 }
 
@@ -73,6 +75,7 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		requestId:    0,
 		rpcTimeout:   10,
 		requestTable: make(map[uint32]chan []byte),
+		lock:         new(sync.RWMutex),
 	}
 
 	var err error
@@ -120,20 +123,20 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 	log.Infof("declared callback queue [%s]", client.callbackQueue)
 	log.Infof("MQ RPC succesfully inited")
 
-	go handleResponse(client)
+	go client.handleResponse()
 
 	return client, nil
 }
 
-func handleResponse(client *RpcClient) {
-	deliveries, err := client.channel.Consume(
-		client.callbackQueue, // name
-		"",                   // consumerTag,
-		false,                // noAck
-		false,                // exclusive
-		false,                // noLocal
-		false,                // noWait
-		nil,                  // arguments
+func (this *RpcClient) handleResponse() {
+	deliveries, err := this.channel.Consume(
+		this.callbackQueue, // name
+		"",                 // consumerTag,
+		false,              // noAck
+		false,              // exclusive
+		false,              // noLocal
+		false,              // noWait
+		nil,                // arguments
 	)
 	if err != nil {
 		log.Errorf("consume error: %s", err)
@@ -154,7 +157,9 @@ func handleResponse(client *RpcClient) {
 			log.Errorf("Invalid RPC response Id: %s", d.CorrelationId)
 			continue
 		}
-		replyCh, ok := client.requestTable[uint32(requestId)]
+		this.lock.RLock()
+		replyCh, ok := this.requestTable[uint32(requestId)]
+		this.lock.RUnlock()
 		if ok {
 			replyCh <- d.Body
 		} else {
@@ -164,20 +169,15 @@ func handleResponse(client *RpcClient) {
 }
 
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
-	var routingKey string
-	if service != "gibbon_agent" {
-		serverName, err := storage.Instance.CheckDevice(deviceId)
-		if err != nil {
-			log.Errorf("failed to check device existence:", err)
-			return "", err
-		}
-		if serverName == "" {
-			return "", &NoDeviceError{"No device"}
-		}
-		routingKey = serverName
-	} else {
-		routingKey = "gibbon"
+	serverName, err := storage.Instance.CheckDevice(deviceId)
+	if err != nil {
+		log.Errorf("failed to check device existence:", err)
+		return "", err
 	}
+	if serverName == "" {
+		return "", &NoDeviceError{"No device"}
+	}
+	routingKey := serverName
 
 	requestId := this.nextReqeustId()
 	msg := MQ_Msg_Crtl{
@@ -188,7 +188,8 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
-	log.Infof("publishing %dB cmd. RoutingKey: %s", len(cmd), routingKey)
+	log.Infof("publishing %dB cmd. RoutingKey: %s. Exchange: %s. Body: %s",
+		len(cmd), routingKey, this.exchange, msgData)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
 		routingKey,    // routing to 0 or more queues
@@ -209,11 +210,17 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 		return "", err
 	}
 
-	//TODO: lock
 	replyCh := make(chan []byte)
+	this.lock.Lock()
 	this.requestTable[requestId] = replyCh
-	defer delete(this.requestTable, requestId)
-	defer close(replyCh)
+	this.lock.Unlock()
+
+	defer func() {
+		this.lock.Lock()
+		delete(this.requestTable, requestId)
+		this.lock.Unlock()
+		close(replyCh)
+	}()
 
 	select {
 	case replyData := <-replyCh:

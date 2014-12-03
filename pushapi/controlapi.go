@@ -305,7 +305,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		mysign      string
 		query       map[string]string
 		response    CommandResponse
-		serviceName string
+		serviceName string = "agent" // FIXME
 		cmd         string
 		result      string
 		body        []byte
@@ -419,7 +419,6 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		bCmd, _ = json.Marshal(cmdRequest)
 		cmd = string(bCmd)
-		serviceName = "gibbon_agent"
 	} else {
 		// To new android service
 		type RouterCommand struct {
@@ -437,7 +436,6 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 			response.Error = "'forward' is empty"
 			goto resp
 		}
-		serviceName = "agent" //FIXME
 	}
 
 	result, err = rpcClient.Control(rid, serviceName, cmd)
@@ -457,6 +455,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		w.Write([]byte(result))
+		return
 	}
 
 resp:
