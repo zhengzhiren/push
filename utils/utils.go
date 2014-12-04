@@ -1207,3 +1207,12 @@ func Sign(key string, method string, path string, body []byte, date string, form
 	mac.Write([]byte(stringToSign))
 	return hex.EncodeToString(mac.Sum(nil))
 }
+
+func SeelogFormatterMs(message string, level log.LogLevel, context log.LogContextInterface) interface{} {
+	ms := context.CallTime().Nanosecond() / int(time.Millisecond)
+	return fmt.Sprintf("%03d", ms)
+}
+
+func CreateMsFormatter(params string) log.FormatterFunc {
+	return SeelogFormatterMs
+}

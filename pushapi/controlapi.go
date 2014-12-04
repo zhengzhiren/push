@@ -410,11 +410,11 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	if len(rid) == len("c80e774a1e78") {
 		// To old agent
 		type CommandRequest struct {
-			Uid string `json:"uid"`
+			//Uid string `json:"uid"`
 			Cmd string `json:"cmd"`
 		}
 		cmdRequest := CommandRequest{
-			Uid: uid,
+			//Uid: uid,
 			Cmd: string(body),
 		}
 		bCmd, _ = json.Marshal(cmdRequest)
@@ -455,6 +455,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		w.Write([]byte(result))
+		log.Infof("postRouterCommand write: %s", result)
 		return
 	}
 
@@ -465,8 +466,6 @@ resp:
 }
 
 func getRouterList(w http.ResponseWriter, r *http.Request) {
-	log.Tracef("getRouterList")
-
 	type RouterInfo struct {
 		Rid   string `json:"rid"`
 		Rname string `json:"rname"`

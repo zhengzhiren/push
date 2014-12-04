@@ -85,14 +85,14 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		return nil, err
 	}
 
-	log.Infof("got Connection to %s, getting Channel", amqpURI)
+	log.Infof("Got Connection to %s, getting Channel", amqpURI)
 	client.channel, err = client.conn.Channel()
 	if err != nil {
 		log.Errorf("Channel: %s", err)
 		return nil, err
 	}
 
-	log.Infof("got Channel, declaring %q Exchange (%q)", rpcExchangeType, exchange)
+	log.Infof("Got Channel, declaring %q Exchange (%q)", rpcExchangeType, exchange)
 
 	if err := client.channel.ExchangeDeclare(
 		exchange,        // name
@@ -121,7 +121,6 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 	}
 	client.callbackQueue = callbackQueue.Name
 	log.Infof("declared callback queue [%s]", client.callbackQueue)
-	log.Infof("MQ RPC succesfully inited")
 
 	go client.handleResponse()
 
@@ -143,13 +142,13 @@ func (this *RpcClient) handleResponse() {
 		//return "", err
 	}
 
+	log.Infof("MQ RPC succesfully inited")
+
 	for d := range deliveries {
 		log.Debugf(
-			"got %dB response [%s]: [%v] %q",
+			"Got %dB RPC response. RequestId: %s",
 			len(d.Body),
 			d.CorrelationId,
-			d.DeliveryTag,
-			d.Body,
 		)
 		d.Ack(false)
 		requestId, err := strconv.Atoi(d.CorrelationId)
@@ -171,7 +170,7 @@ func (this *RpcClient) handleResponse() {
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
 	serverName, err := storage.Instance.CheckDevice(deviceId)
 	if err != nil {
-		log.Errorf("failed to check device existence:", err)
+		log.Errorf("Failed to check device existence:", err)
 		return "", err
 	}
 	if serverName == "" {
@@ -188,8 +187,8 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
-	log.Infof("publishing %dB cmd. RoutingKey: %s. Exchange: %s. Body: %s",
-		len(cmd), routingKey, this.exchange, msgData)
+	log.Infof("publishing %dB cmd. RoutingKey: %s. RequestId: %d",
+		len(cmd), routingKey, requestId)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
 		routingKey,    // routing to 0 or more queues
@@ -199,7 +198,7 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 			Headers:         amqp.Table{},
 			ContentType:     "text/plain",
 			ContentEncoding: "",
-			DeliveryMode:    amqp.Transient, // 1=non-persistent, 2=persistent
+			DeliveryMode:    amqp.Transient, // non-persistent
 			Priority:        0,              // 0-9
 			ReplyTo:         this.callbackQueue,
 			CorrelationId:   strconv.Itoa(int(requestId)),
@@ -224,10 +223,10 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	select {
 	case replyData := <-replyCh:
-		log.Infof("RPC response [%d]: %s", requestId, replyData)
+		log.Infof("RPC response [%d]", requestId)
 		var reply MQ_Msg_CtrlReply
 		if err := json.Unmarshal(replyData, &reply); err != nil {
-			log.Errorf("failed to unmarshal RPC reply: %s", err)
+			log.Errorf("Failed to unmarshal RPC reply: %s", err)
 			return "", err
 		}
 		switch reply.Status {

@@ -19,6 +19,7 @@ import (
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
 )
 
@@ -33,6 +34,12 @@ func main() {
 	err := conf.LoadConfig(*configFile)
 	if err != nil {
 		fmt.Printf("LoadConfig (%s) failed: (%s)\n", *configFile, err)
+		os.Exit(1)
+	}
+
+	err = log.RegisterCustomFormatter("Ms", utils.CreateMsFormatter)
+	if err != nil {
+		fmt.Printf("Failed to create custom formatter: (%s)\n", err)
 		os.Exit(1)
 	}
 
