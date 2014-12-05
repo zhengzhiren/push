@@ -34,6 +34,7 @@ type RawMessage struct {
 		TTL int64 `json:"ttl,omitempty"`
 		TTS int64 `json:"tts,omitempty"`
 	} `json:"options"`
+	SendId        string `json:"sendid,omitempty"`
 }
 
 type RawApp struct {

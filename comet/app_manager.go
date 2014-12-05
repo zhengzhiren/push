@@ -9,22 +9,20 @@ import (
 	"github.com/chenyf/push/storage"
 )
 
-// register app in memory
-type RegApp struct {
-	RegId		string
-	DevId		string
-	AppId		string
-	UserId		string
-	Topics		[]string
-	LastMsgId	int64
-}
-
 // register app in storage
 type AppInfo struct {
 	AppId		string		`json:"app_id"`
 	UserId		string		`json:"uid,omitempty"`
 	LastMsgId	int64		`json:"last_msgid"`
 	Topics		[]string	`json:"topics"`
+	SendIds     []string	`json:"sendids,omitempty"`
+}
+
+// register app in memory
+type RegApp struct {
+	DevId		string
+	RegId		string
+	AppInfo
 }
 
 type AppManager struct {
@@ -43,13 +41,6 @@ func RegId(devid string, appId string, userId string) string {
 	return fmt.Sprintf("%x", (sha1.Sum([]byte(fmt.Sprintf("%s_%s_%s", devid, appId, userId)))))
 }
 
-func (this *AppManager)RemoveApp(regId string)  {
-	this.lock.Lock()
-	//log.Infof("remove app (%s)", regId)
-	delete(this.appMap, regId)
-	this.lock.Unlock()
-}
-
 func (this *AppManager)AddApp(devId string, regId string, info *AppInfo) (*RegApp) {
 	this.lock.RLock()
 	if app, ok := this.appMap[regId]; ok {
@@ -59,19 +50,20 @@ func (this *AppManager)AddApp(devId string, regId string, info *AppInfo) (*RegAp
 	}
 	this.lock.RUnlock()
 	app := &RegApp{
-		RegId : regId,
-		DevId : devId,
-		AppId : info.AppId,
-		UserId : info.UserId,
-		LastMsgId : info.LastMsgId,
+		DevId     : devId,
+		RegId     : regId,
 	}
+	app.AppInfo = *info
 	this.lock.Lock()
 	this.appMap[regId] = app
 	this.lock.Unlock()
 	return app
 }
 
-func (this *AppManager)DelApp(devId string, regId string) {
+/*
+** delete regapp from app map
+*/
+func (this *AppManager)DelApp(regId string) {
 	this.lock.Lock()
 	_, ok := this.appMap[regId]
 	if ok {
@@ -80,7 +72,13 @@ func (this *AppManager)DelApp(devId string, regId string) {
 	this.lock.Unlock()
 }
 
-// APP注册
+/*
+** APP注册
+** 1. 如果已经在内存中，则失败；不允许多次注册
+** 2. 尝试从storage读取app info，如果有的话，则记录到内存中，并返回
+** 3. 如果storage中没有，则创建新的结构，保存到storage中，然后记录到内存中，返回
+** 
+*/
 func (this *AppManager)RegisterApp(devId string, regId string, appId string, userId string) (*RegApp) {
 	this.lock.RLock()
 	if _, ok := this.appMap[regId]; ok {
@@ -90,22 +88,21 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 	}
 	this.lock.RUnlock()
 
-	// 如果已经在后端存储中存在，则获取 last_msgid
 	key := fmt.Sprintf("db_app_%s", appId)
 	var info AppInfo
 	val, err := storage.Instance.HashGet(key, regId)
-	if err == nil && val != nil {
+	if err != nil {
+		return nil
+	}
+	if val != nil {
+	// found in storage
 		if err := json.Unmarshal(val, &info); err != nil {
 			log.Warnf("invalid app info from storage")
+			//TODO need replace it
 			return nil
 		}
-		//log.Infof("got last msgid %d", info.LastMsgId)
 	} else {
-		/*
-		if err != nil {
-			log.Infof("failed get from (%s) with regid (%s), (%s)", key, regId, err)
-		}
-		*/
+	// not found from storage
 		info.AppId = appId
 		info.UserId = userId
 		info.LastMsgId = -1
@@ -120,6 +117,9 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 	return regapp
 }
 
+/*
+** 从内存中删除结构
+*/
 func (this *AppManager)UnregisterApp(devId string, regId string, appId string, userId string) {
 	if regId == "" {
 		return
@@ -129,9 +129,20 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 	if userId != "" {
 		storage.Instance.HashDel(fmt.Sprintf("db_user_%s", userId), regId)
 	}
-	this.DelApp(devId, regId)
+	this.DelApp(regId)
 }
 
+/*
+** update app info into storage
+*/
+func (this *AppManager)UpdateAppInfo(devId string, regId string, info *AppInfo) bool {
+	b, _ := json.Marshal(info)
+	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", info.AppId), regId, b); err != nil {
+		log.Warnf("%s: update app failed, (%s)", devId, err)
+		return false
+	}
+	return true
+}
 
 func (this *AppManager)GetApp(appId string, regId string) *RegApp {
 	this.lock.RLock()
@@ -232,15 +243,6 @@ func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
 		}
 	}
 	return infos
-}
-
-func (this *AppManager)UpdateAppInfo(devId string, regId string, info *AppInfo) bool {
-	b, _ := json.Marshal(info)
-	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", info.AppId), regId, b); err != nil {
-		log.Warnf("%s: update app failed, (%s)", devId, err)
-		return false
-	}
-	return true
 }
 
 func (this *AppManager)UpdateMsgStat(devId string, msgId int64) bool {

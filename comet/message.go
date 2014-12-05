@@ -36,6 +36,10 @@ const (
 	MSG_GET_TOPICS_REPLY  = uint8(17)
 	MSG_CMD               = uint8(20)
 	MSG_CMD_REPLY         = uint8(21)
+	MSG_REGISTER2         = uint8(23)
+	MSG_REGISTER2_REPLY   = uint8(24)
+	MSG_UNREGISTER2       = uint8(25)
+	MSG_UNREGISTER2_REPLY = uint8(26)
 )
 
 // msg to byte
@@ -61,9 +65,9 @@ type Base1 struct {
 	RegId string `json:"regid"`
 }
 type InitMessage struct {
-	DeviceId string  `json:"devid"`
-	Sync     int     `json:"sync,omitempty"`
-	Apps     []Base1 `json:"apps,omitempty"`
+	DevId string  `json:"devid"`
+	Sync  int     `json:"sync,omitempty"`
+	Apps  []Base1 `json:"apps,omitempty"`
 }
 
 type Base2 struct {
@@ -91,13 +95,11 @@ type UnregisterMessage struct {
 	AppId  string `json:"appid"`
 	AppKey string `json:"appkey"`
 	RegId  string `json:"regid"`
-	Token  string `json:"token"`
+	//Token  string `json:"token"`
 }
 type UnregisterReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	RegId  string `json:"regid,omitempty"`
-	Pkg    string `json:"pkg,omitempty"`
 }
 type PushMessage struct {
 	MsgId   int64  `json:"msgid"`
@@ -148,3 +150,26 @@ type CommandReplyMessage struct {
 	Status int    `json:"status"`
 	Result string `json:"result"`
 }
+
+type Register2Message struct {
+	Pkg     string   `json:"pkg"`
+	Uid     string   `json:"uid,omitempty"`
+	SendIds []string `json:"sendids"`
+}
+type Register2ReplyMessage struct {
+	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	Pkg    string `json:"pkg,omitempty"`
+	RegId  string `json:"regid,omitempty"`
+}
+type Unregister2Message struct {
+	Pkg     string `json:"pkg"`
+	Uid     string `json:"uid,omitempty"`
+	SendId  string `json:"sendid"`  // [all]
+}
+type Unregister2ReplyMessage struct {
+	Result int    `json:"result"`
+	AppId  string `json:"appid"`
+	SenderCnt int `json:"sendercnt"`
+}
+

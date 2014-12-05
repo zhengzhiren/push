@@ -54,7 +54,20 @@ const (
 //	return false
 //}
 
-func pushMessage(appId string, app *RegApp, msg *PushMessage) bool {
+func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *PushMessage) bool {
+	if rawMsg.SendId != "" {
+		found := false
+		for _, sendid := range(app.SendIds) {
+			if sendid == rawMsg.SendId {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
 	client := DevicesMap.Get(app.DevId).(*Client)
 	if client == nil {
 		return false
@@ -85,33 +98,33 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 	case PUSH_TYPE_ALL: // broadcast
 		apps := AMInstance.GetApps(appId)
 		for _, app := range apps {
-			pushMessage(appId, app, &msg)
+			pushMessage(appId, app, rawMsg, &msg)
 		}
 	case PUSH_TYPE_REGID: // regid list
 		for _, regid := range rawMsg.PushParams.RegId {
 			app := AMInstance.GetApp(appId, regid)
 			if app != nil {
-				pushMessage(appId, app, &msg)
+				pushMessage(appId, app, rawMsg, &msg)
 			}
 		}
 	case PUSH_TYPE_USERID: // userid list
 		for _, uid := range rawMsg.PushParams.UserId {
 			apps := AMInstance.GetAppsByUser(appId, uid)
 			for _, app := range apps {
-				pushMessage(appId, app, &msg)
+				pushMessage(appId, app, rawMsg, &msg)
 			}
 		}
 	case PUSH_TYPE_DEVID: // devid list
 		for _, devid := range rawMsg.PushParams.DevId {
 			app := AMInstance.GetAppByDevice(appId, devid)
 			if app != nil {
-				pushMessage(appId, app, &msg)
+				pushMessage(appId, app, rawMsg, &msg)
 			}
 		}
 	case PUSH_TYPE_TOPIC: // topic
 		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic)
 		for _, app := range apps {
-			pushMessage(appId, app, &msg)
+			pushMessage(appId, app, rawMsg, &msg)
 		}
 	default:
 	}

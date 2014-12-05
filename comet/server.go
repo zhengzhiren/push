@@ -168,6 +168,8 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_UNSUBSCRIBE] = handleUnsubscribe
 	this.funcMap[MSG_GET_TOPICS] = handleGetTopics
 	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
+	this.funcMap[MSG_REGISTER2] = handleRegister2
+	this.funcMap[MSG_UNREGISTER2] = handleUnregister2
 
 	if err := storage.Instance.InitDevices(this.Name); err != nil {
 		log.Errorf("failed to InitDevices: %s", err.Error())
@@ -368,7 +370,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	// don't use defer to improve performance
 	log.Debugf("%s: close connection", client.devId)
 	for regid, _ := range client.RegApps {
-		AMInstance.RemoveApp(regid)
+		AMInstance.DelApp(regid)
 	}
 	this.CloseClient(client)
 	conn.Close()
@@ -470,14 +472,14 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 
 	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
-	var msg InitMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
+	var request InitMessage
+	if err := json.Unmarshal(data, &request); err != nil {
 		log.Warnf("%p: decode INIT body failed: (%v)", conn, err)
 		conn.Close()
 		return nil
 	}
 
-	devid := msg.DeviceId
+	devid := request.DeviceId
 	if devid == "" {
 		log.Warnf("%p: invalid device id", conn)
 		conn.Close()
@@ -512,8 +514,8 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		Result: 0,
 	}
 
-	if msg.Sync == 0 {
-		for _, info := range msg.Apps {
+	if request.Sync == 0 {
+		for _, info := range request.Apps {
 			if info.AppId == "" || info.RegId == "" {
 				log.Warnf("appid or regid is empty")
 				continue
@@ -562,82 +564,75 @@ func sendReply(client *Client, msgType uint8, seq uint32, v interface{}) {
 // app注册后，才可以接收消息
 func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: REGISTER body(%s)", client.devId, body)
-	var msg RegisterMessage
+	var request RegisterMessage
 	var reply RegisterReplyMessage
 
-	errReply := func(result int, appId string) {
+	onReply := func(result int, appId string, pkg string, regId string) {
 		reply.Result = result
 		reply.AppId = appId
+		reply.Pkg = pkg
+		reply.RegId = regId
 		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
 	}
 
-	if err := json.Unmarshal(body, &msg); err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		errReply(1, "")
+		onReply(1, "", "", "")
 		return 0
 	}
-	if msg.AppId == "" {
+	if request.AppId == "" {
 		log.Warnf("%s: appid is empty", client.devId)
-		errReply(2, msg.AppId)
+		onReply(2, request.AppId, "", "")
 		return 0
 	}
 
 	var rawapp storage.RawApp
-	b, err := storage.Instance.HashGet("db_apps", msg.AppId)
+	b, err := storage.Instance.HashGet("db_apps", request.AppId)
 	if err != nil {
-		log.Warnf("%s: hashget 'db_apps' failed, (%s). appid (%s)", client.devId, msg.AppId)
-		errReply(4, msg.AppId)
+		log.Warnf("%s: hashget 'db_apps' failed, (%s). appid (%s)", client.devId, request.AppId)
+		onReply(4, request.AppId, "", "")
 		return 0
 	}
 	if b == nil {
-		log.Warnf("%s: unknow appid (%s)", client.devId, msg.AppId)
-		errReply(5, msg.AppId)
+		log.Warnf("%s: unknow appid (%s)", client.devId, request.AppId)
+		onReply(5, request.AppId, "", "")
 		return 0
 	}
 
 	if err := json.Unmarshal(b, &rawapp); err != nil {
-		log.Warnf("%s: invalid data from storage. appid (%s)", client.devId, msg.AppId)
-		errReply(6, msg.AppId)
+		log.Warnf("%s: invalid data from storage. appid (%s)", client.devId, request.AppId)
+		onReply(6, request.AppId, "", "")
 		return 0
 	}
 
-	var regUid string = ""
+	var reguid string = ""
 	var ok bool
-	if msg.Token != "" {
-		ok, regUid = auth.Instance.Auth(msg.Token)
+	if request.Token != "" {
+		ok, reguid = auth.Instance.Auth(request.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			errReply(3, msg.AppId)
+			onReply(3, request.AppId, "", "")
 			return 0
 		}
 	}
 
-	regid := RegId(client.devId, msg.AppId, regUid)
-	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, regUid, regid)
+	regid := RegId(client.devId, request.AppId, reguid)
+	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, reguid, regid)
 	if _, ok := client.RegApps[regid]; ok {
 		// 已经在内存中，直接返回
-		reply.Result = 0
-		reply.AppId = msg.AppId
-		reply.Pkg = rawapp.Pkg
-		reply.RegId = regid
-		sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
+		onReply(0, request.AppId, rawapp.Pkg, regid)
 		return 0
 	}
 
-	// 到app管理中心去注册
-	regapp := AMInstance.RegisterApp(client.devId, regid, msg.AppId, regUid)
+	regapp := AMInstance.RegisterApp(client.devId, regid, request.AppId, reguid)
 	if regapp == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
-		errReply(5, msg.AppId)
+		onReply(5, request.AppId, "", "")
 		return 0
 	}
-	// 记录到client管理的hash table中
+	// 记录到client自己的hash table中
 	client.RegApps[regid] = regapp
-	reply.Result = 0
-	reply.AppId = msg.AppId
-	reply.Pkg = rawapp.Pkg
-	reply.RegId = regid
-	sendReply(client, MSG_REGISTER_REPLY, header.Seq, &reply)
+	onReply(0, request.AppId, rawapp.Pkg, regid)
 
 	// 处理离线消息
 	handleOfflineMsgs(client, regapp)
@@ -646,89 +641,74 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: UNREGISTER body(%s)", client.devId, body)
-	var msg UnregisterMessage
+	var request UnregisterMessage
 	var reply UnregisterReplyMessage
 
-	errReply := func(result int, appId string) {
+	onReply := func(result int, appId string) {
 		reply.Result = result
 		reply.AppId = appId
 		sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
 	}
 
-	if err := json.Unmarshal(body, &msg); err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		errReply(1, "")
+		onReply(1, "")
 		return 0
 	}
 
-	if msg.AppId == "" || msg.RegId == "" {
+	if request.AppId == "" || request.RegId == "" {
 		log.Warnf("%s: appid or regid is empty", client.devId)
-		errReply(2, msg.AppId)
+		onReply(2, request.AppId)
 		return 0
 	}
 
 	// unknown regid
 	var ok bool
-	_, ok = client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[request.RegId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
-		errReply(3, msg.AppId)
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(3, request.AppId)
 		return 0
 	}
-
-	var regUid string = ""
-	if msg.Token != "" {
-		ok, regUid = auth.Instance.Auth(msg.Token)
-		if !ok {
-			log.Warnf("%s: auth failed", client.devId)
-			errReply(4, msg.AppId)
-			return 0
-		}
-	}
-	//log.Debugf("%s: uid is (%s)", client.devId, uid)
-	AMInstance.UnregisterApp(client.devId, msg.RegId, msg.AppId, regUid)
-	delete(client.RegApps, msg.RegId)
-
-	reply.Result = 0
-	reply.AppId = msg.AppId
-	reply.RegId = msg.RegId
-	sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
+	AMInstance.UnregisterApp(client.devId, request.RegId, request.AppId, regapp.UserId)
+	delete(client.RegApps, request.RegId)
+	onReply(0, request.AppId)
 	return 0
 }
 
 func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: PUSH_REPLY body(%s)", client.devId, body)
-	var msg PushReplyMessage
-	if err := json.Unmarshal(body, &msg); err != nil {
+	var request PushReplyMessage
+	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
 		return -1
 	}
 
-	if msg.AppId == "" || msg.RegId == "" {
+	if request.AppId == "" || request.RegId == "" {
 		log.Warnf("%s: appid or regis is empty", client.devId)
 		return -1
 	}
 	// unknown regid
-	regapp, ok := client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[request.RegId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		return 0
 	}
 
-	if msg.MsgId <= regapp.LastMsgId {
-		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, msg.MsgId, regapp.LastMsgId)
+	if request.MsgId <= regapp.LastMsgId {
+		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, request.MsgId, regapp.LastMsgId)
 		return 0
 	}
 	info := &AppInfo{
 		AppId:     regapp.AppId,
 		UserId:    regapp.UserId,
 		Topics:    regapp.Topics,
-		LastMsgId: msg.MsgId,
+		LastMsgId: request.MsgId,
 	}
-	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
+	if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, info); !ok {
 	}
-	AMInstance.UpdateMsgStat(client.devId, msg.MsgId)
-	regapp.LastMsgId = msg.MsgId
+	AMInstance.UpdateMsgStat(client.devId, request.MsgId)
+	regapp.LastMsgId = request.MsgId
 	return 0
 }
 
@@ -746,6 +726,209 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	return 0
 }
 
+// app注册后，才可以接收消息
+func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: REGISTER2 body(%s)", client.devId, body)
+	var request Register2Message
+	var reply Register2ReplyMessage
+
+	onReply := func(result int, appId string, pkg string, regId string) {
+		reply.Result = result
+		reply.AppId = appId
+		reply.Pkg = pkg
+		reply.RegId = regId
+		sendReply(client, MSG_REGISTER2_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &request); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		onReply(1, "", "", "")
+		return 0
+	}
+	// check 'pkg'
+	if request.Pkg == "" {
+		log.Warnf("%s: 'pkg' is empty", client.devId)
+		onReply(2, "", "", "")
+		return 0
+	}
+	// check 'sendids'
+	if len(request.SendIds) == 0 {
+		log.Warnf("%s: 'sendids' is empty", client.devId)
+		onReply(3, "", request.Pkg, "")
+		return 0
+	}
+
+	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
+	if val == nil {
+		log.Warnf("%s: no pkg '%s'", client.devId, request.Pkg)
+		onReply(4, "", request.Pkg, "")
+		return 0
+	}
+	appid := string(val)
+	regid := RegId(client.devId, appid, request.Uid)
+
+	if regapp, ok := client.RegApps[regid]; ok {
+		// 已经在内存中，修改sendids后返回
+		var added []string
+		for _, s1 := range(request.SendIds) {
+			found := false
+			for _, s2 := range(regapp.SendIds) {
+				if s1 == s2 {
+					found = true
+					break
+				}
+			}
+			if !found {
+				added = append(added, s1)
+			}
+		}
+
+		// update 'sendids'
+		if len(added) != 0 {
+			sendids := append(regapp.SendIds, added...)
+			info := &AppInfo{
+				AppId:     regapp.AppId,
+				UserId:    regapp.UserId,
+				SendIds:   sendids,
+				LastMsgId: regapp.LastMsgId,
+			}
+			if ok := AMInstance.UpdateAppInfo(client.devId, regid, info); !ok {
+				onReply(6, appid, request.Pkg, regid)
+				return 0
+			}
+			regapp.SendIds = sendids
+		}
+		onReply(0, appid, request.Pkg, regid)
+		return 0
+	}
+
+	// 内存中没有，先到app管理中心去注册
+	regapp := AMInstance.RegisterApp(client.devId, regid, appid, request.Uid)
+	if regapp == nil {
+		log.Warnf("%s: AMInstance register app failed", client.devId)
+		onReply(7, appid, request.Pkg, regid)
+		return 0
+	}
+	// 记录到client管理的hash table中
+	client.RegApps[regid] = regapp
+
+	var added []string
+	for _, s1 := range(request.SendIds) {
+		found := false
+		for _, s2 := range(regapp.SendIds) {
+			if s1 == s2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			added = append(added, s1)
+		}
+	}
+	if len(added) != 0 {
+		sendids := append(regapp.SendIds, added...)
+		info := &AppInfo{
+			AppId:     regapp.AppId,
+			UserId:    regapp.UserId,
+			SendIds:   sendids,
+			LastMsgId: regapp.LastMsgId,
+		}
+		if ok := AMInstance.UpdateAppInfo(client.devId, regid, info); !ok {
+			onReply(6, appid, request.Pkg, regid)
+			return 0
+		}
+		regapp.SendIds = sendids
+	}
+	onReply(0, appid, request.Pkg, regid)
+
+	// 处理离线消息
+	handleOfflineMsgs(client, regapp)
+	return 0
+}
+
+func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: UNREGISTER2 body(%s)", client.devId, body)
+	var request Unregister2Message
+	var reply Unregister2ReplyMessage
+
+	onReply := func(result int, appId string, senderCnt int) {
+		reply.Result = result
+		reply.AppId = appId
+		reply.SenderCnt = senderCnt
+		sendReply(client, MSG_UNREGISTER2_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &request); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		onReply(1, "", 0)
+		return 0
+	}
+
+	if request.Pkg == "" {
+		log.Warnf("%s: 'pkg' is empty", client.devId)
+		onReply(2, "", 0)
+		return 0
+	}
+	if request.SendId == "" {
+		log.Warnf("%s: 'sendid' is empty", client.devId)
+		onReply(3, "", 0)
+		return 0
+	}
+
+	// FUCK: no 'appid', no 'regid'; got them by request.Pkg
+	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
+	if val == nil {
+		log.Warnf("%s: no pkg '%s'", client.devId, request.Pkg)
+		onReply(4, "", 0)
+		return 0
+	}
+	appid := string(val)
+	regid := RegId(client.devId, appid, request.Uid)
+	regapp, ok := client.RegApps[regid]
+	if !ok {
+		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
+		onReply(5, "", 0)
+		return 0
+	}
+
+	if request.SendId != "[all]" {
+		index := -1
+		for n, item := range regapp.SendIds {
+			if item == request.SendId {
+				index = n
+				break
+			}
+		}
+		if index < 0 {
+			// not found
+			onReply(0, appid, len(regapp.SendIds))
+			return 0
+		}
+		// delete it
+		sendids := append(regapp.SendIds[:index], regapp.SendIds[index+1:]...)
+		info := &AppInfo{
+			AppId:     regapp.AppId,
+			UserId:    regapp.UserId,
+			SendIds:   sendids,
+			LastMsgId: regapp.LastMsgId,
+		}
+		if ok := AMInstance.UpdateAppInfo(client.devId, regid, info); !ok {
+			onReply(4, appid, 0)
+			return 0
+		}
+		regapp.SendIds = sendids
+		if len(regapp.SendIds) != 0 {
+			onReply(0, appid, len(regapp.SendIds))
+			return 0
+		}
+	}
+	//log.Debugf("%s: uid is (%s)", client.devId, uid)
+	AMInstance.UnregisterApp(client.devId, regid, appid, request.Uid)
+	delete(client.RegApps, regid)
+	onReply(0, appid, 0)
+	return 0
+}
+
 /*
 ** return:
 **   1: invalid JSON
@@ -757,68 +940,68 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
  */
 func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
-	var msg SubscribeMessage
+	var request SubscribeMessage
 	var reply SubscribeReplyMessage
 
-	errReply := func(result int, appId string) {
+	onReply := func(result int, appId string) {
 		reply.Result = result
 		reply.AppId = appId
 		sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
 	}
 
-	if err := json.Unmarshal(body, &msg); err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		errReply(1, msg.AppId)
+		onReply(1, request.AppId)
 		return 0
 	}
 
-	if msg.AppId == "" || msg.RegId == "" {
+	if request.AppId == "" || request.RegId == "" {
 		log.Warnf("%s: appid or regid is empty", client.devId)
-		errReply(2, msg.AppId)
+		onReply(2, request.AppId)
 		return 0
 	}
-	if len(msg.Topic) == 0 || len(msg.Topic) > 64 {
+	if len(request.Topic) == 0 || len(request.Topic) > 64 {
 		log.Warnf("%s: invalid 'topic' length", client.devId)
-		errReply(3, msg.AppId)
+		onReply(3, request.AppId)
 		return 0
 	}
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[request.RegId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
-		errReply(4, msg.AppId)
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(4, request.AppId)
 		return 0
 	}
 	for _, item := range regapp.Topics {
-		if item == msg.Topic {
+		if item == request.Topic {
 			reply.Result = 0
-			reply.AppId = msg.AppId
-			reply.RegId = msg.RegId
+			reply.AppId = request.AppId
+			reply.RegId = request.RegId
 			sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
 			return 0
 		}
 	}
 	if len(regapp.Topics) >= 10 {
-		errReply(5, msg.AppId)
+		onReply(5, request.AppId)
 		return 0
 	}
-	topics := append(regapp.Topics, msg.Topic)
+	topics := append(regapp.Topics, request.Topic)
 	info := &AppInfo{
 		AppId:     regapp.AppId,
 		UserId:    regapp.UserId,
 		Topics:    topics,
 		LastMsgId: regapp.LastMsgId,
 	}
-	if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
-		errReply(6, msg.AppId)
+	if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, info); !ok {
+		onReply(6, request.AppId)
 		return 0
 	}
 	regapp.Topics = topics
 	reply.Result = 0
-	reply.AppId = msg.AppId
-	reply.RegId = msg.RegId
+	reply.AppId = request.AppId
+	reply.RegId = request.RegId
 	sendReply(client, MSG_SUBSCRIBE_REPLY, header.Seq, &reply)
 	return 0
 }
@@ -832,38 +1015,38 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
  */
 func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
-	var msg UnsubscribeMessage
+	var request UnsubscribeMessage
 	var reply UnsubscribeReplyMessage
 
-	errReply := func(result int, appId string) {
+	onReply := func(result int, appId string) {
 		reply.Result = result
 		reply.AppId = appId
 		sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
 	}
 
-	if err := json.Unmarshal(body, &msg); err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		errReply(1, msg.AppId)
+		onReply(1, request.AppId)
 		return 0
 	}
 
-	if msg.AppId == "" || msg.RegId == "" {
+	if request.AppId == "" || request.RegId == "" {
 		log.Warnf("%s: appid or regid is empty", client.devId)
-		errReply(2, msg.AppId)
+		onReply(2, request.AppId)
 		return 0
 	}
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[request.RegId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
-		errReply(3, msg.AppId)
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(3, request.AppId)
 		return 0
 	}
 	index := -1
 	for n, item := range regapp.Topics {
-		if item == msg.Topic {
+		if item == request.Topic {
 			index = n
 		}
 	}
@@ -875,53 +1058,53 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 			Topics:    topics,
 			LastMsgId: regapp.LastMsgId,
 		}
-		if ok := AMInstance.UpdateAppInfo(client.devId, msg.RegId, info); !ok {
-			errReply(4, msg.AppId)
+		if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, info); !ok {
+			onReply(4, request.AppId)
 			return 0
 		}
 		regapp.Topics = topics
 	}
 	reply.Result = 0
-	reply.AppId = msg.AppId
-	reply.RegId = msg.RegId
+	reply.AppId = request.AppId
+	reply.RegId = request.RegId
 	sendReply(client, MSG_UNSUBSCRIBE_REPLY, header.Seq, &reply)
 	return 0
 }
 
 func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: GETTOPICS body(%s)", client.devId, body)
-	var msg GetTopicsMessage
+	var request GetTopicsMessage
 	var reply GetTopicsReplyMessage
 
-	errReply := func(result int, appId string) {
+	onReply := func(result int, appId string) {
 		reply.Result = result
 		reply.AppId = appId
 		sendReply(client, MSG_GET_TOPICS_REPLY, header.Seq, &reply)
 	}
 
-	if err := json.Unmarshal(body, &msg); err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		errReply(1, msg.AppId)
+		onReply(1, request.AppId)
 		return 0
 	}
 
-	if msg.AppId == "" || msg.RegId == "" {
+	if request.AppId == "" || request.RegId == "" {
 		log.Warnf("%s: appid or regid is empty", client.devId)
-		errReply(2, msg.AppId)
+		onReply(2, request.AppId)
 		return 0
 	}
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[msg.RegId]
+	regapp, ok := client.RegApps[request.RegId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, msg.RegId)
-		errReply(3, msg.AppId)
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(3, request.AppId)
 		return 0
 	}
 	reply.Result = 0
-	reply.AppId = msg.AppId
-	reply.RegId = msg.RegId
+	reply.AppId = request.AppId
+	reply.RegId = request.RegId
 	reply.Topics = regapp.Topics
 	sendReply(client, MSG_GET_TOPICS_REPLY, header.Seq, &reply)
 	return 0
