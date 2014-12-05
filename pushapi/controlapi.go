@@ -301,11 +301,10 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 		tm          string
 		src         string
 		pmtt        string
-		path        string = "/router/command"
 		mysign      string
 		query       map[string]string
 		response    CommandResponse
-		serviceName string = "agent" // FIXME
+		serviceName string = "com.letv.letvroutersettingservice"
 		cmd         string
 		result      string
 		body        []byte
@@ -377,7 +376,7 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sign != "supersign" {
-		mysign = sign_calc(path, query)
+		mysign = sign_calc(r.URL.Path, query)
 		if mysign != sign {
 			log.Warnf("sign valication failed: %s %s", mysign, sign)
 			response.Error = "sign valication failed"
@@ -485,7 +484,6 @@ func getRouterList(w http.ResponseWriter, r *http.Request) {
 		src      string
 		tm       string
 		pmtt     string
-		path     string = "/router/list"
 		query    map[string]string
 		mysign   string
 		response ResponseRouterList
@@ -556,7 +554,7 @@ func getRouterList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sign != "supersign" {
-		mysign = sign_calc(path, query)
+		mysign = sign_calc(r.URL.Path, query)
 		if mysign != sign {
 			log.Warnf("sign valication failed: %s %s", mysign, sign)
 			response.Descr = "sign valication failed"
