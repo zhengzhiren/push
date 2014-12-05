@@ -453,8 +453,25 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 			response.Error = err.Error()
 		}
 	} else {
-		w.Write([]byte(result))
-		log.Infof("postRouterCommand write: %s", result)
+		if len(rid) == len("c80e774a1e78") {
+			// reply from gibbon agent
+			w.Write([]byte(result))
+			log.Infof("postRouterCommand write: %s", result)
+		} else {
+			// reply from android service
+			type RouterCommandReply struct {
+				Status int    `json:"status"`
+				Descr  string `json:"descr"`
+				Result string `json:"result"`
+			}
+			var reply RouterCommandReply
+			reply.Status = 0
+			reply.Descr = "OK"
+			reply.Result = result
+			bReply, _ := json.Marshal(&reply)
+			w.Write(bReply)
+			log.Infof("postRouterCommand write: %s", string(bReply))
+		}
 		return
 	}
 
