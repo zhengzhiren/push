@@ -124,7 +124,8 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 	if regId == "" {
 		return
 	}
-	storage.Instance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
+	// the regapp is still there
+	//storage.Instance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
 	storage.Instance.HashDel(fmt.Sprintf("db_device_%s", devId), appId)
 	if userId != "" {
 		storage.Instance.HashDel(fmt.Sprintf("db_user_%s", userId), regId)
@@ -237,6 +238,7 @@ func (this *AppManager)LoadAppInfosByDevice(devId string) map[string]*AppInfo {
 			var info AppInfo
 			if err := json.Unmarshal(val, &info); err != nil {
 				log.Warnf("invalid app info from storage")
+				//TODO delete it???
 				continue
 			}
 			infos[regid] = &info

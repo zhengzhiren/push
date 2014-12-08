@@ -718,14 +718,9 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		log.Warnf("%s: msgid mismatch: %d <= %d", client.devId, request.MsgId, regapp.LastMsgId)
 		return 0
 	}
-	info := &AppInfo{
-		AppId:     regapp.AppId,
-		UserId:    regapp.UserId,
-		Topics:    regapp.Topics,
-		LastMsgId: request.MsgId,
-	}
-	if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, info); !ok {
-	}
+	info := regapp.AppInfo
+	info.LastMsgId = request.MsgId
+	AMInstance.UpdateAppInfo(client.devId, request.RegId, &info)
 	AMInstance.UpdateMsgStat(client.devId, request.MsgId)
 	regapp.LastMsgId = request.MsgId
 	return 0
@@ -745,9 +740,9 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	return 0
 }
 
-func addSendids(client *Client, regId string, regapp *RegApp, ids []string) bool {
+func addSendids(client *Client, regId string, regapp *RegApp, sendids []string) bool {
 	var added []string
-	for _, s1 := range(ids) {
+	for _, s1 := range(sendids) {
 		if s1 == "" {
 			continue
 		}
@@ -765,45 +760,40 @@ func addSendids(client *Client, regId string, regapp *RegApp, ids []string) bool
 
 	// update 'sendids'
 	if len(added) != 0 {
-		newids := append(regapp.SendIds, added...)
-		info := &AppInfo{
-			AppId:     regapp.AppId,
-			UserId:    regapp.UserId,
-			SendIds:   newids,
-			LastMsgId: regapp.LastMsgId,
-		}
-		if ok := AMInstance.UpdateAppInfo(client.devId, regId, info); !ok {
+		new_sendids := append(regapp.SendIds, added...)
+		info := regapp.AppInfo
+		info.SendIds = new_sendids
+		if ok := AMInstance.UpdateAppInfo(client.devId, regId, &info); !ok {
 			return false
 		}
-		regapp.SendIds = newids
+		regapp.SendIds = new_sendids
 	}
 	return true
 }
 
-func delSendid (client *Client, regId string, regapp *RegApp, sendid string) bool {
-	index := -1
-	for n, item := range regapp.SendIds {
-		if item == sendid {
-			index = n
-			break
+func delSendid(client *Client, regId string, regapp *RegApp, sendid string) bool {
+	new_sendids := []string{}
+	if sendid != "[all]" {
+		index := -1
+		for n, item := range regapp.SendIds {
+			if item == sendid {
+				index = n
+				break
+			}
 		}
+		if index < 0 {
+			// not found
+			return true
+		}
+		// delete it
+		new_sendids = append(regapp.SendIds[:index], regapp.SendIds[index+1:]...)
 	}
-	if index < 0 {
-		// not found
-		return true
-	}
-	// delete it
-	sendids := append(regapp.SendIds[:index], regapp.SendIds[index+1:]...)
-	info := &AppInfo{
-		AppId:     regapp.AppId,
-		UserId:    regapp.UserId,
-		SendIds:   sendids,
-		LastMsgId: regapp.LastMsgId,
-	}
-	if ok := AMInstance.UpdateAppInfo(client.devId, regId, info); !ok {
+	info := regapp.AppInfo
+	info.SendIds = new_sendids
+	if ok := AMInstance.UpdateAppInfo(client.devId, regId, &info); !ok {
 		return false
 	}
-	regapp.SendIds = sendids
+	regapp.SendIds = new_sendids
 	return true
 }
 
@@ -925,17 +915,16 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 		onReply(5, appid, request.Pkg, 0)
 		return 0
 	}
-	if request.SendId != "[all]" {
-		if ok := delSendid(client, regid, regapp, request.SendId); !ok {
-			onReply(6, appid, request.Pkg, 0)
-			return 0
-		}
-		if len(regapp.SendIds) != 0 {
-			onReply(0, appid, request.Pkg, len(regapp.SendIds))
-			return 0
-		}
+	if ok := delSendid(client, regid, regapp, request.SendId); !ok {
+		onReply(6, appid, request.Pkg, 0)
+		return 0
 	}
-	//log.Debugf("%s: uid is (%s)", client.devId, uid)
+	if len(regapp.SendIds) != 0 {
+		onReply(0, appid, request.Pkg, len(regapp.SendIds))
+		return 0
+	}
+
+	// remove it from memory when regapp.SendIds is empty
 	AMInstance.UnregisterApp(client.devId, regid, appid, request.Uid)
 	delete(client.RegApps, regid)
 	onReply(0, appid, request.Pkg, 0)
@@ -1001,13 +990,9 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 	topics := append(regapp.Topics, request.Topic)
-	info := &AppInfo{
-		AppId:     regapp.AppId,
-		UserId:    regapp.UserId,
-		Topics:    topics,
-		LastMsgId: regapp.LastMsgId,
-	}
-	if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, info); !ok {
+	info := regapp.AppInfo
+	info.Topics = topics
+	if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, &info); !ok {
 		onReply(6, request.AppId)
 		return 0
 	}
@@ -1065,13 +1050,9 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 	}
 	if index >= 0 {
 		topics := append(regapp.Topics[:index], regapp.Topics[index+1:]...)
-		info := &AppInfo{
-			AppId:     regapp.AppId,
-			UserId:    regapp.UserId,
-			Topics:    topics,
-			LastMsgId: regapp.LastMsgId,
-		}
-		if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, info); !ok {
+		info := regapp.AppInfo
+		info.Topics = topics
+		if ok := AMInstance.UpdateAppInfo(client.devId, request.RegId, &info); !ok {
 			onReply(4, request.AppId)
 			return 0
 		}
