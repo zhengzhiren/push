@@ -23,19 +23,19 @@ type Notice struct {
     MsgType int         `json:"msg_type"`
     Platform string     `json:"platform,omitempty"`
     Content string      `json:"content,omitempty"`
-	Notification struct {
-		Title     string `json:"title"`
-		Desc      string `json:"desc,omitempty"`
-		Type      int    `json:"type,omitempty"`
-		SoundUri  string `json:"sound_uri,omitempty"`
-		Action    int    `json:"action,omitempty"`
-		IntentUri string `json:"intent_uri,omitempty"`
+    Notification struct {
+        Title     string `json:"title"`
+        Desc      string `json:"desc,omitempty"`
+        Type      int    `json:"type,omitempty"`
+        SoundUri  string `json:"sound_uri,omitempty"`
+        Action    int    `json:"action,omitempty"`
+        IntentUri string `json:"intent_uri,omitempty"`
         WebUri    string `json:"web_uri,omitempty"`
-	} `json:"notification,omitempty"`
-	Options struct {
-		TTL int64 `json:"ttl,omitempty"`
-		TTS int64 `json:"tts,omitempty"`
-	} `json:"options"`
+    } `json:"notification,omitempty"`
+    Options struct {
+        TTL int64 `json:"ttl,omitempty"`
+        TTS int64 `json:"tts,omitempty"`
+    } `json:"options"`
 }
 
 type PostNotifyData struct {
@@ -82,6 +82,10 @@ func callThirdPartyIf(method string, url string, body io.Reader, header *map[str
         }
     }
     resp, err := client.Do(req)
+
+    if err != nil {
+        return err, nil
+    }
 
     r := ThirdPartyResponse{}
     err = json.NewDecoder(resp.Body).Decode(&r)
@@ -207,13 +211,13 @@ func main() {
 
     flag.Parse()
 
-	logger, err := log.LoggerFromConfigAsFile(*logConfigFile)
-	if err != nil {
-		fmt.Printf("Load log config failed: (%s)\n", err)
-		os.Exit(1)
-	}
+    logger, err := log.LoggerFromConfigAsFile(*logConfigFile)
+    if err != nil {
+        fmt.Printf("Load log config failed: (%s)\n", err)
+        os.Exit(1)
+    }
 
-	log.ReplaceLogger(logger)
+    log.ReplaceLogger(logger)
 
     err = conf.LoadConfig(*configFile)
     if err != nil {
@@ -225,6 +229,6 @@ func main() {
     err = http.ListenAndServe(conf.Config.Notify.Addr, nil)
     if err != nil {
         log.Warnf("failed to ListenAndServe: ", err)
-		os.Exit(1)
+        os.Exit(1)
     }
 }
