@@ -438,6 +438,13 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	}
 }
 
+func inBlacklist(devId string) bool {
+	if n, _ := storage.Instance.SetIsMember("db_black_devices", devId); n == 0 {
+		return true
+	}
+	return false
+}
+
 func waitInit(server *Server, conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
 	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
@@ -479,9 +486,13 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	devid := request.DeviceId
+	devid := request.DevId
 	if devid == "" {
 		log.Warnf("%p: invalid device id", conn)
+		conn.Close()
+		return nil
+	}
+	if inBlacklist(devid) {
 		conn.Close()
 		return nil
 	}

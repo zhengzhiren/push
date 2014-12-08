@@ -114,15 +114,14 @@ func (c *Consumer) Shutdown() error {
 func handle(deliveries <-chan amqp.Delivery, done chan error) {
 	for d := range deliveries {
 		log.Infof(
-			"got %dB delivery: [%v] %q",
-			len(d.Body),
+			"MQ: got message: tag(%v) body(%q)",
 			d.DeliveryTag,
 			d.Body,
 		)
 		d.Ack(false)
 		m := make(map[string]interface{})
 		if err := json.Unmarshal(d.Body, &m); err != nil {
-			log.Infof("failed to decode raw msg:", err)
+			log.Warnf("MQ: failed to decode raw msg:", err)
 			continue
 		}
 		rmsg := storage.Instance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))

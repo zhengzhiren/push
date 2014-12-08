@@ -15,7 +15,7 @@ import (
 
 func sendInit(conn *net.TCPConn, devid string) {
 	init_msg := comet.InitMessage{
-		DeviceId: devid,
+		DevId: devid,
 	}
 
 	b2, _ := json.Marshal(init_msg)

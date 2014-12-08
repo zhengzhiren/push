@@ -144,6 +144,7 @@ func (r *RedisStorage) GetRawMsg(appId string, msgId int64) *RawMessage {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
 	}
+	log.Infof("RAW message: (%s)", string(ret))
 	rmsg := &RawMessage{}
 	if err := json.Unmarshal(ret, rmsg); err != nil {
 		log.Warnf("failed to decode raw msg:", err)
