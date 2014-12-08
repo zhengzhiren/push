@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"sort"
 	//"strings"
 	"encoding/json"
 	"github.com/chenyf/push/auth"
@@ -38,6 +39,7 @@ type Server struct {
 	exitCh        chan bool
 	wg            *sync.WaitGroup
 	funcMap       map[uint8]MsgHandler
+	blackDevices  []string
 	acceptTimeout time.Duration
 	readTimeout   time.Duration
 	writeTimeout  time.Duration
@@ -174,6 +176,10 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	if err := storage.Instance.InitDevices(this.Name); err != nil {
 		log.Errorf("failed to InitDevices: %s", err.Error())
 		return nil, err
+	}
+
+	if this.blackDevices, err = storage.Instance.SetMembers("db_black_devices"); err != nil {
+		sort.Strings(this.blackDevices)
 	}
 
 	// keep the data of this node not expired on redis
@@ -442,9 +448,9 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	}
 }
 
-func inBlacklist(devId string) bool {
-	n, err := storage.Instance.SetIsMember("db_black_devices", devId)
-	if err != nil || n == 0 {
+func inBlacklist(server *Server, devId string) bool {
+	index := sort.SearchStrings(server.blackDevices, devId)
+	if index >= len(server.blackDevices) {
 		return false
 	}
 	return true
@@ -477,6 +483,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
+	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 	if header.Type != MSG_INIT {
 		log.Warnf("%p: not register message, %d", conn, header.Type)
 		conn.Close()
@@ -496,11 +503,10 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		conn.Close()
 		return nil
 	}
-	if inBlacklist(devid) {
+	if inBlacklist(server, devid) {
 		conn.Close()
 		return nil
 	}
-	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)

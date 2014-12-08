@@ -110,7 +110,7 @@ func main() {
 	if conf.Config.WriteTimeout > 0 {
 		wto = conf.Config.WriteTimeout
 	}
-	var hto uint32 = 200
+	var hto uint32 = 240
 	if conf.Config.HeartbeatTimeout > 0 {
 		hto = conf.Config.HeartbeatTimeout
 	}
