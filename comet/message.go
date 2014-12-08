@@ -89,8 +89,8 @@ type RegisterMessage struct {
 type RegisterReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg"`
-	RegId  string `json:"regid"`
+	Pkg    string `json:"pkg,omitempty"`
+	RegId  string `json:"regid,omitempty"`
 }
 type UnregisterMessage struct {
 	AppId  string `json:"appid"`

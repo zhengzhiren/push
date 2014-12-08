@@ -551,6 +551,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	} else {
 		// 客户端要求同步服务端的数据
 		// 看存储系统中是否有此设备的数据
+		reply.Apps = []Base2{}
 		infos := AMInstance.LoadAppInfosByDevice(devid)
 		for regid, info := range infos {
 			log.Debugf("%s: load app (%s) (%s)", devid, info.AppId, regid)
