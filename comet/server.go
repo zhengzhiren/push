@@ -250,7 +250,7 @@ func myread(conn *net.TCPConn, buf []byte) int {
 
 // handle a TCP connection
 func (this *Server) handleConnection(conn *net.TCPConn) {
-	log.Debugf("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
+	//log.Debugf("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
 	// handle register first
 	if this.clientCount >= 10000 {
 		log.Warnf("too more client, refuse")
@@ -277,14 +277,14 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	for {
 		select {
 		case <-this.exitCh:
-			log.Debugf("ask me quit\n")
+			log.Debugf("%s: ask me quit", client.devId)
 			break
 		default:
 		}
 
 		now := time.Now()
 		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
-			log.Debugf("%p: heartbeat timeout", conn)
+			log.Debugf("%s: heartbeat timeout", client.devId)
 			break
 		}
 
@@ -318,12 +318,12 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				continue
 			}
 			if err := header.Deserialize(headBuf[0:HEADER_SIZE]); err != nil {
-				log.Warnf("%p: header deserialize failed", conn)
+				log.Warnf("%s: header deserialize failed", client.devId)
 				break
 			}
 
 			if header.Len > this.maxBodyLen {
-				log.Warnf("%p: header len too big %d", conn, header.Len)
+				log.Warnf("%s: header len too big %d", client.devId, header.Len)
 				break
 			}
 			if header.Len > 0 {
@@ -348,12 +348,12 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			nRead += n
 			if uint32(nRead) < header.Len {
 				if now.After(startTime.Add(60 * time.Second)) {
-					log.Infof("%p: read body timeout", conn)
+					log.Infof("%s: read body timeout", client.devId)
 					break
 				}
 				continue
 			}
-			log.Debugf("%p: body (%s)", conn, dataBuf)
+			//log.Debugf("%s: body (%s)", client.devId, dataBuf)
 		}
 
 		if handler, ok := this.funcMap[header.Type]; ok {
@@ -361,7 +361,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				break
 			}
 		} else {
-			log.Warnf("%p: unknown message type %d", conn, header.Type)
+			log.Warnf("%s: unknown message type %d", client.devId, header.Type)
 		}
 		readflag = 0
 		nRead = 0
@@ -379,6 +379,9 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	msgs := storage.Instance.GetOfflineMsgs(regapp.AppId, regapp.RegId, regapp.LastMsgId)
+	if len(msgs) == 0 {
+		return
+	}
 	log.Debugf("%s: get %d offline messages: (%s) (>%d)", regapp.DevId, len(msgs), regapp.AppId, regapp.LastMsgId)
 	for _, rawMsg := range msgs {
 		ok := false
@@ -439,10 +442,11 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 }
 
 func inBlacklist(devId string) bool {
-	if n, _ := storage.Instance.SetIsMember("db_black_devices", devId); n == 0 {
-		return true
+	n, err := storage.Instance.SetIsMember("db_black_devices", devId)
+	if err != nil || n == 0 {
+		return false
 	}
-	return false
+	return true
 }
 
 func waitInit(server *Server, conn *net.TCPConn) *Client {
@@ -478,7 +482,6 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 	var request InitMessage
 	if err := json.Unmarshal(data, &request); err != nil {
 		log.Warnf("%p: decode INIT body failed: (%v)", conn, err)
@@ -496,6 +499,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		conn.Close()
 		return nil
 	}
+	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)
