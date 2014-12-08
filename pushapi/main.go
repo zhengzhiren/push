@@ -19,6 +19,7 @@ import (
 	"github.com/chenyf/push/conf"
 	"github.com/chenyf/push/mq"
 	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
 )
 
@@ -33,6 +34,12 @@ func main() {
 	err := conf.LoadConfig(*configFile)
 	if err != nil {
 		fmt.Printf("LoadConfig (%s) failed: (%s)\n", *configFile, err)
+		os.Exit(1)
+	}
+
+	err = log.RegisterCustomFormatter("Ms", utils.CreateMsFormatter)
+	if err != nil {
+		fmt.Printf("Failed to create custom formatter: (%s)\n", err)
 		os.Exit(1)
 	}
 
@@ -154,8 +161,8 @@ func startHttp(addr string, cmdTimeout int) {
 		EnableResponseStackTrace: true,
 	}
 	err := handler.SetRoutes(
-		&rest.Route{"GET", "/devices", AuthMiddlewareFunc(getDeviceList)},
-		&rest.Route{"GET", "/devices/:devid", AuthMiddlewareFunc(getDevice)},
+		&rest.Route{"GET", "/devices", getDeviceList},
+		&rest.Route{"GET", "/devices/:devid", getDevice},
 		&rest.Route{"POST", "/devices/:devid", AuthMiddlewareFunc(controlDevice)},
 		&rest.Route{"GET", "/.status",
 			func(w rest.ResponseWriter, r *rest.Request) {
@@ -168,8 +175,18 @@ func startHttp(addr string, cmdTimeout int) {
 		os.Exit(1)
 	}
 
+	err = initPermutation()
+	if err != nil {
+		log.Criticalf("init permutation: ", err)
+		os.Exit(1)
+	}
+
 	// control API
 	http.Handle("/api/v1/", http.StripPrefix("/api/v1", &handler))
+
+	// the adapter API for old system
+	http.HandleFunc("/router/command", postRouterCommand)
+	http.HandleFunc("/router/list", getRouterList)
 
 	// push API
 	http.HandleFunc("/api/v1/message", messageHandler)

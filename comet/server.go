@@ -181,7 +181,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		for {
 			select {
 			case <-this.exitCh:
-				log.Infof("existing storage refreshing routine")
+				log.Infof("Exiting storage refreshing routine")
 				return
 			case <-time.After(10 * time.Second):
 				storage.Instance.RefreshDevices(this.Name, 30)
@@ -198,7 +198,8 @@ func (this *Server) Run(listener *net.TCPListener) {
 	}()
 
 	//go this.dealSpamConn()
-	log.Debugf("comet server start\n")
+	log.Infof("Starting comet server on: %s", listener.Addr().String())
+
 	for {
 		select {
 		case <-this.exitCh:

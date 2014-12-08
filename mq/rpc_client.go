@@ -3,6 +3,7 @@ package mq
 import (
 	"encoding/json"
 	"strconv"
+	"sync"
 	"time"
 	//	"sync"
 	"sync/atomic"
@@ -56,6 +57,7 @@ type RpcClient struct {
 	callbackQueue string
 	requestId     uint32
 	requestTable  map[uint32]chan []byte
+	lock          *sync.RWMutex
 	rpcTimeout    int
 }
 
@@ -73,6 +75,7 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		requestId:    0,
 		rpcTimeout:   10,
 		requestTable: make(map[uint32]chan []byte),
+		lock:         new(sync.RWMutex),
 	}
 
 	var err error
@@ -82,14 +85,14 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 		return nil, err
 	}
 
-	log.Infof("got Connection, getting Channel")
+	log.Infof("Got Connection to %s, getting Channel", amqpURI)
 	client.channel, err = client.conn.Channel()
 	if err != nil {
 		log.Errorf("Channel: %s", err)
 		return nil, err
 	}
 
-	log.Infof("got Channel, declaring %q Exchange (%q)", rpcExchangeType, exchange)
+	log.Infof("Got Channel, declaring %q Exchange (%q)", rpcExchangeType, exchange)
 
 	if err := client.channel.ExchangeDeclare(
 		exchange,        // name
@@ -118,35 +121,34 @@ func NewRpcClient(amqpURI, exchange string) (*RpcClient, error) {
 	}
 	client.callbackQueue = callbackQueue.Name
 	log.Infof("declared callback queue [%s]", client.callbackQueue)
-	log.Infof("MQ RPC succesfully inited")
 
-	go handleResponse(client)
+	go client.handleResponse()
 
 	return client, nil
 }
 
-func handleResponse(client *RpcClient) {
-	deliveries, err := client.channel.Consume(
-		client.callbackQueue, // name
-		"",                   // consumerTag,
-		false,                // noAck
-		false,                // exclusive
-		false,                // noLocal
-		false,                // noWait
-		nil,                  // arguments
+func (this *RpcClient) handleResponse() {
+	deliveries, err := this.channel.Consume(
+		this.callbackQueue, // name
+		"",                 // consumerTag,
+		false,              // noAck
+		false,              // exclusive
+		false,              // noLocal
+		false,              // noWait
+		nil,                // arguments
 	)
 	if err != nil {
 		log.Errorf("consume error: %s", err)
 		//return "", err
 	}
 
+	log.Infof("MQ RPC succesfully inited")
+
 	for d := range deliveries {
 		log.Debugf(
-			"got %dB response [%s]: [%v] %q",
+			"Got %dB RPC response. RequestId: %s",
 			len(d.Body),
 			d.CorrelationId,
-			d.DeliveryTag,
-			d.Body,
 		)
 		d.Ack(false)
 		requestId, err := strconv.Atoi(d.CorrelationId)
@@ -154,7 +156,9 @@ func handleResponse(client *RpcClient) {
 			log.Errorf("Invalid RPC response Id: %s", d.CorrelationId)
 			continue
 		}
-		replyCh, ok := client.requestTable[uint32(requestId)]
+		this.lock.RLock()
+		replyCh, ok := this.requestTable[uint32(requestId)]
+		this.lock.RUnlock()
 		if ok {
 			replyCh <- d.Body
 		} else {
@@ -166,12 +170,13 @@ func handleResponse(client *RpcClient) {
 func (this *RpcClient) Control(deviceId string, service string, cmd string) (string, error) {
 	serverName, err := storage.Instance.CheckDevice(deviceId)
 	if err != nil {
-		log.Errorf("failed to check device existence:", err)
+		log.Errorf("Failed to check device existence:", err)
 		return "", err
 	}
 	if serverName == "" {
 		return "", &NoDeviceError{"No device"}
 	}
+	routingKey := serverName
 
 	requestId := this.nextReqeustId()
 	msg := MQ_Msg_Crtl{
@@ -182,17 +187,18 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 
 	msgData, _ := json.Marshal(&msg)
 
-	log.Infof("publishing %dB cmd (%q)", len(cmd), cmd)
+	log.Infof("publishing %dB cmd. RoutingKey: %s. RequestId: %d",
+		len(cmd), routingKey, requestId)
 	if err := this.channel.Publish(
 		this.exchange, // publish to an exchange
-		serverName,    // routing to 0 or more queues
+		routingKey,    // routing to 0 or more queues
 		false,         // mandatory
 		false,         // immediate
 		amqp.Publishing{
 			Headers:         amqp.Table{},
 			ContentType:     "text/plain",
 			ContentEncoding: "",
-			DeliveryMode:    amqp.Transient, // 1=non-persistent, 2=persistent
+			DeliveryMode:    amqp.Transient, // non-persistent
 			Priority:        0,              // 0-9
 			ReplyTo:         this.callbackQueue,
 			CorrelationId:   strconv.Itoa(int(requestId)),
@@ -203,18 +209,24 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 		return "", err
 	}
 
-	//TODO: lock
 	replyCh := make(chan []byte)
+	this.lock.Lock()
 	this.requestTable[requestId] = replyCh
-	defer delete(this.requestTable, requestId)
-	defer close(replyCh)
+	this.lock.Unlock()
+
+	defer func() {
+		this.lock.Lock()
+		delete(this.requestTable, requestId)
+		this.lock.Unlock()
+		close(replyCh)
+	}()
 
 	select {
 	case replyData := <-replyCh:
-		log.Infof("RPC response [%d]: %s", requestId, replyData)
+		log.Infof("RPC response [%d]", requestId)
 		var reply MQ_Msg_CtrlReply
 		if err := json.Unmarshal(replyData, &reply); err != nil {
-			log.Errorf("failed to unmarshal RPC reply: %s", err)
+			log.Errorf("Failed to unmarshal RPC reply: %s", err)
 			return "", err
 		}
 		switch reply.Status {
