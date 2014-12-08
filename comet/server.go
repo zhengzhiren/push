@@ -449,11 +449,12 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 }
 
 func inBlacklist(server *Server, devId string) bool {
-	index := sort.SearchStrings(server.blackDevices, devId)
-	if index >= len(server.blackDevices) {
-		return false
+	for _, s := range(server.blackDevices) {
+		if s == devId {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
 func waitInit(server *Server, conn *net.TCPConn) *Client {
@@ -483,7 +484,6 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
-	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 	if header.Type != MSG_INIT {
 		log.Warnf("%p: not register message, %d", conn, header.Type)
 		conn.Close()
@@ -507,6 +507,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		conn.Close()
 		return nil
 	}
+	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 
 	if DevicesMap.Check(devid) {
 		log.Warnf("%p: device (%s) init in this server already", conn, devid)
