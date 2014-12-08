@@ -622,12 +622,16 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 	var reguid string = ""
 	var ok bool
-	if request.Token != "" {
-		ok, reguid = auth.Instance.Auth(request.Token)
-		if !ok {
-			log.Warnf("%s: auth failed", client.devId)
-			onReply(3, request.AppId, "", "")
-			return 0
+	if request.Uid != "" {
+		reguid = request.Uid
+	} else {
+		if request.Token != "" {
+			ok, reguid = auth.Instance.Auth(request.Token)
+			if !ok {
+				log.Warnf("%s: auth failed", client.devId)
+				onReply(3, request.AppId, "", "")
+				return 0
+			}
 		}
 	}
 
@@ -741,6 +745,68 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	return 0
 }
 
+func addSendids(client *Client, regId string, regapp *RegApp, ids []string) bool {
+	var added []string
+	for _, s1 := range(ids) {
+		if s1 == "" {
+			continue
+		}
+		found := false
+		for _, s2 := range(regapp.SendIds) {
+			if s1 == s2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			added = append(added, s1)
+		}
+	}
+
+	// update 'sendids'
+	if len(added) != 0 {
+		newids := append(regapp.SendIds, added...)
+		info := &AppInfo{
+			AppId:     regapp.AppId,
+			UserId:    regapp.UserId,
+			SendIds:   newids,
+			LastMsgId: regapp.LastMsgId,
+		}
+		if ok := AMInstance.UpdateAppInfo(client.devId, regId, info); !ok {
+			return false
+		}
+		regapp.SendIds = newids
+	}
+	return true
+}
+
+func delSendid (client *Client, regId string, regapp *RegApp, sendid string) bool {
+	index := -1
+	for n, item := range regapp.SendIds {
+		if item == sendid {
+			index = n
+			break
+		}
+	}
+	if index < 0 {
+		// not found
+		return true
+	}
+	// delete it
+	sendids := append(regapp.SendIds[:index], regapp.SendIds[index+1:]...)
+	info := &AppInfo{
+		AppId:     regapp.AppId,
+		UserId:    regapp.UserId,
+		SendIds:   sendids,
+		LastMsgId: regapp.LastMsgId,
+	}
+	if ok := AMInstance.UpdateAppInfo(client.devId, regId, info); !ok {
+		return false
+	}
+	regapp.SendIds = sendids
+	return true
+}
+
 // app注册后，才可以接收消息
 func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: REGISTER2 body(%s)", client.devId, body)
@@ -773,9 +839,10 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 
+	// got appid by pkg
 	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
 	if val == nil {
-		log.Warnf("%s: no pkg '%s'", client.devId, request.Pkg)
+		log.Warnf("%s: no such pkg '%s'", client.devId, request.Pkg)
 		onReply(4, "", request.Pkg, "")
 		return 0
 	}
@@ -784,34 +851,9 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 
 	if regapp, ok := client.RegApps[regid]; ok {
 		// 已经在内存中，修改sendids后返回
-		var added []string
-		for _, s1 := range(request.SendIds) {
-			found := false
-			for _, s2 := range(regapp.SendIds) {
-				if s1 == s2 {
-					found = true
-					break
-				}
-			}
-			if !found {
-				added = append(added, s1)
-			}
-		}
-
-		// update 'sendids'
-		if len(added) != 0 {
-			sendids := append(regapp.SendIds, added...)
-			info := &AppInfo{
-				AppId:     regapp.AppId,
-				UserId:    regapp.UserId,
-				SendIds:   sendids,
-				LastMsgId: regapp.LastMsgId,
-			}
-			if ok := AMInstance.UpdateAppInfo(client.devId, regid, info); !ok {
-				onReply(6, appid, request.Pkg, regid)
-				return 0
-			}
-			regapp.SendIds = sendids
+		if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
+			onReply(6, appid, request.Pkg, regid)
+			return 0
 		}
 		onReply(0, appid, request.Pkg, regid)
 		return 0
@@ -827,32 +869,9 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 	// 记录到client管理的hash table中
 	client.RegApps[regid] = regapp
 
-	var added []string
-	for _, s1 := range(request.SendIds) {
-		found := false
-		for _, s2 := range(regapp.SendIds) {
-			if s1 == s2 {
-				found = true
-				break
-			}
-		}
-		if !found {
-			added = append(added, s1)
-		}
-	}
-	if len(added) != 0 {
-		sendids := append(regapp.SendIds, added...)
-		info := &AppInfo{
-			AppId:     regapp.AppId,
-			UserId:    regapp.UserId,
-			SendIds:   sendids,
-			LastMsgId: regapp.LastMsgId,
-		}
-		if ok := AMInstance.UpdateAppInfo(client.devId, regid, info); !ok {
-			onReply(6, appid, request.Pkg, regid)
-			return 0
-		}
-		regapp.SendIds = sendids
+	if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
+		onReply(6, appid, request.Pkg, regid)
+		return 0
 	}
 	onReply(0, appid, request.Pkg, regid)
 
@@ -866,35 +885,36 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	var request Unregister2Message
 	var reply Unregister2ReplyMessage
 
-	onReply := func(result int, appId string, senderCnt int) {
+	onReply := func(result int, appId string, pkg string, senderCnt int) {
 		reply.Result = result
 		reply.AppId = appId
+		reply.Pkg = pkg
 		reply.SenderCnt = senderCnt
 		sendReply(client, MSG_UNREGISTER2_REPLY, header.Seq, &reply)
 	}
 
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		onReply(1, "", 0)
+		onReply(1, "", "", 0)
 		return 0
 	}
 
 	if request.Pkg == "" {
 		log.Warnf("%s: 'pkg' is empty", client.devId)
-		onReply(2, "", 0)
+		onReply(2, "", "", 0)
 		return 0
 	}
 	if request.SendId == "" {
 		log.Warnf("%s: 'sendid' is empty", client.devId)
-		onReply(3, "", 0)
+		onReply(3, "", request.Pkg, 0)
 		return 0
 	}
 
 	// FUCK: no 'appid', no 'regid'; got them by request.Pkg
 	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
 	if val == nil {
-		log.Warnf("%s: no pkg '%s'", client.devId, request.Pkg)
-		onReply(4, "", 0)
+		log.Warnf("%s: no such pkg '%s'", client.devId, request.Pkg)
+		onReply(4, "", request.Pkg, 0)
 		return 0
 	}
 	appid := string(val)
@@ -902,45 +922,23 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	regapp, ok := client.RegApps[regid]
 	if !ok {
 		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
-		onReply(5, "", 0)
+		onReply(5, appid, request.Pkg, 0)
 		return 0
 	}
-
 	if request.SendId != "[all]" {
-		index := -1
-		for n, item := range regapp.SendIds {
-			if item == request.SendId {
-				index = n
-				break
-			}
-		}
-		if index < 0 {
-			// not found
-			onReply(0, appid, len(regapp.SendIds))
+		if ok := delSendid(client, regid, regapp, request.SendId); !ok {
+			onReply(6, appid, request.Pkg, 0)
 			return 0
 		}
-		// delete it
-		sendids := append(regapp.SendIds[:index], regapp.SendIds[index+1:]...)
-		info := &AppInfo{
-			AppId:     regapp.AppId,
-			UserId:    regapp.UserId,
-			SendIds:   sendids,
-			LastMsgId: regapp.LastMsgId,
-		}
-		if ok := AMInstance.UpdateAppInfo(client.devId, regid, info); !ok {
-			onReply(4, appid, 0)
-			return 0
-		}
-		regapp.SendIds = sendids
 		if len(regapp.SendIds) != 0 {
-			onReply(0, appid, len(regapp.SendIds))
+			onReply(0, appid, request.Pkg, len(regapp.SendIds))
 			return 0
 		}
 	}
 	//log.Debugf("%s: uid is (%s)", client.devId, uid)
 	AMInstance.UnregisterApp(client.devId, regid, appid, request.Uid)
 	delete(client.RegApps, regid)
-	onReply(0, appid, 0)
+	onReply(0, appid, request.Pkg, 0)
 	return 0
 }
 

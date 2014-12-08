@@ -83,19 +83,19 @@ type RegisterMessage struct {
 	AppId  string `json:"appid"`
 	AppKey string `json:"appkey"`
 	RegId  string `json:"regid"`
-	Token  string `json:"token"`
+	Uid    string `json:"uid,omitempty"`
+	Token  string `json:"token,omitempty"`
 }
 type RegisterReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg,omitempty"`
-	RegId  string `json:"regid,omitempty"`
+	Pkg    string `json:"pkg"`
+	RegId  string `json:"regid"`
 }
 type UnregisterMessage struct {
 	AppId  string `json:"appid"`
 	AppKey string `json:"appkey"`
 	RegId  string `json:"regid"`
-	//Token  string `json:"token"`
 }
 type UnregisterReplyMessage struct {
 	Result int    `json:"result"`
@@ -120,7 +120,7 @@ type SubscribeMessage struct {
 type SubscribeReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	RegId  string `json:"regid,omitempty"`
+	RegId  string `json:"regid"`
 }
 type UnsubscribeMessage struct {
 	AppId string `json:"appid"`
@@ -130,7 +130,7 @@ type UnsubscribeMessage struct {
 type UnsubscribeReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	RegId  string `json:"regid,omitempty"`
+	RegId  string `json:"regid"`
 }
 type GetTopicsMessage struct {
 	AppId string `json:"appid"`
@@ -159,8 +159,8 @@ type Register2Message struct {
 type Register2ReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg,omitempty"`
-	RegId  string `json:"regid,omitempty"`
+	Pkg    string `json:"pkg"`
+	RegId  string `json:"regid"`
 }
 type Unregister2Message struct {
 	Pkg     string `json:"pkg"`
@@ -170,6 +170,7 @@ type Unregister2Message struct {
 type Unregister2ReplyMessage struct {
 	Result int    `json:"result"`
 	AppId  string `json:"appid"`
+	Pkg    string `json:"pkg"`
 	SenderCnt int `json:"sendercnt"`
 }
 
