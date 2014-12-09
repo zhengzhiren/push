@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/chenyf/push/auth"
+	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
-	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
 	uuid "github.com/codeskyblue/go-uuid"
 	"io/ioutil"
@@ -350,6 +350,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	msgBox <- msg
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
+	Stats.pushMsg()
 }
 
 /*
@@ -447,7 +448,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 	response.ErrNo = 0
 	response.Data = map[string]string{
 		"target": strconv.Itoa(target_cnt),
-		"send": send_cnt,
+		"send":   send_cnt,
 	}
 	b, err = json.Marshal(response)
 	if err != nil {
