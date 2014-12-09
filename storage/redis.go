@@ -254,6 +254,14 @@ func (r *RedisStorage) HashExists(db string, key string) (int, error) {
 	return ret, err
 }
 
+func (r *RedisStorage) HashLen(db string) (int, error) {
+	ret, err := redis.Int(r.Do("HLEN", db))
+	if err != nil {
+		log.Warnf("redis: HLEN failed (%s)", err)
+	}
+	return ret, err
+}
+
 func (r *RedisStorage) HashSetNotExist(db string, key string, val []byte) (int, error) {
 	ret, err := redis.Int(r.Do("HSETNX", db, key, val))
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
+	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
 	uuid "github.com/codeskyblue/go-uuid"
 	"io/ioutil"
@@ -403,19 +404,51 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 */
 
 func getMessage(w http.ResponseWriter, r *http.Request) {
+	appid := r.FormValue("appid")
 	msgid := r.FormValue("msgid")
-	if msgid == "" {
-		errResponse(w, ERR_INVALID_PARAMS, "missing 'msgid'", 400)
+	if appid == "" || msgid == "" {
+		errResponse(w, ERR_INVALID_PARAMS, "missing 'appid' or 'msgid'", 400)
 		return
 	}
-	b, err := storage.Instance.HashGet("db_msg_stat", msgid)
+	b, err := storage.Instance.HashGet(fmt.Sprintf("db_msg_%s", appid), msgid)
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
 		return
 	}
+	if b == nil {
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		return
+	}
+
+	var rawmsg storage.RawMessage
+	err = json.Unmarshal(b, &rawmsg)
+	target_cnt := 0
+	switch rawmsg.PushType {
+	case comet.PUSH_TYPE_ALL: // broadcast
+		target_cnt, _ = storage.Instance.HashLen(fmt.Sprintf("db_app_%s", appid))
+	case comet.PUSH_TYPE_REGID: // regid list
+		target_cnt = len(rawmsg.PushParams.RegId)
+	case comet.PUSH_TYPE_USERID: // userid list
+	case comet.PUSH_TYPE_DEVID: // devid list
+		target_cnt = len(rawmsg.PushParams.DevId)
+	default:
+		target_cnt = 0
+	}
+	send_cnt := "0"
+	b, err = storage.Instance.HashGet("db_msg_stat", msgid)
+	if err != nil {
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		return
+	}
+	if b != nil {
+		send_cnt = string(b)
+	}
 	var response Response
 	response.ErrNo = 0
-	response.Data = map[string]string{"send": string(b)}
+	response.Data = map[string]string{
+		"target": strconv.Itoa(target_cnt),
+		"send": send_cnt,
+	}
 	b, err = json.Marshal(response)
 	if err != nil {
 		log.Warnf("error (%s)", err)
