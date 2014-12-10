@@ -343,6 +343,12 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg.MsgId = msgid
+	if msg.Options.TTL < 0 { // send immediatly
+		msg.Options.TTL = 0
+	} else if msg.Options.TTL == 0 {
+		msg.Options.TTL = 86400 // default
+	}
+
 	var response Response
 	response.ErrNo = 0
 	response.Data = map[string]int64{"msgid": msgid}

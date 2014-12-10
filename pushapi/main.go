@@ -108,12 +108,6 @@ func main() {
 				continue
 			}
 
-			if m.Options.TTL < 0 { // send immediatly
-				m.Options.TTL = 0
-			} else if m.Options.TTL == 0 {
-				m.Options.TTL = 86400 // default
-			}
-
 			if _, err := storage.Instance.HashSet(
 				"db_msg_"+m.AppId,
 				strconv.FormatInt(m.MsgId, 10), v); err != nil {
