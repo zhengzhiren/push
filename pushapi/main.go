@@ -152,6 +152,7 @@ func main() {
 
 func startHttp(addr string, cmdTimeout int) {
 	log.Infof("Starting HTTP server on %s, command timeout: %ds", addr, cmdTimeout)
+	newStats()
 	commandTimeout = cmdTimeout
 
 	handler := rest.ResourceHandler{
@@ -177,18 +178,40 @@ func startHttp(addr string, cmdTimeout int) {
 		os.Exit(1)
 	}
 
+	// control API
+	http.Handle("/api/v1/", http.StripPrefix("/api/v1", &handler))
+
+	// the adapter API for old system
 	err = initPermutation()
 	if err != nil {
 		log.Criticalf("init permutation: ", err)
 		os.Exit(1)
 	}
 
-	// control API
-	http.Handle("/api/v1/", http.StripPrefix("/api/v1", &handler))
-
-	// the adapter API for old system
-	http.HandleFunc("/router/command", postRouterCommand)
-	http.HandleFunc("/router/list", getRouterList)
+	routerHandler := rest.ResourceHandler{
+		DisableXPoweredBy:        true,
+		DisableJsonIndent:        true,
+		EnableStatusService:      true,
+		EnableResponseStackTrace: true,
+		EnableRelaxedContentType: true,
+		PreRoutingMiddlewares: []rest.Middleware{
+			&SignMiddleware{},
+		},
+	}
+	err = routerHandler.SetRoutes(
+		&rest.Route{"GET", "/list", getRouterList},
+		&rest.Route{"POST", "/command", postRouterCommand},
+		&rest.Route{"GET", "/.status",
+			func(w rest.ResponseWriter, r *rest.Request) {
+				w.WriteJson(routerHandler.GetStatus())
+			},
+		},
+	)
+	if err != nil {
+		log.Criticalf("http SetRoutes: ", err)
+		os.Exit(1)
+	}
+	http.Handle("/router/", http.StripPrefix("/router", &routerHandler))
 
 	// push API
 	http.HandleFunc("/api/v1/message", messageHandler)
