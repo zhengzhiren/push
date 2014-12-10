@@ -122,11 +122,9 @@ func (this *RpcServer) SendRpcResponse(callbackQueue, correlationId string, resp
 func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 	for d := range deliveries {
 		log.Debugf(
-			"got %dB RPC request [%s]: [%v] %q",
+			"got %dB RPC request [%s]",
 			len(d.Body),
 			d.CorrelationId,
-			d.DeliveryTag,
-			d.Body,
 		)
 		d.Ack(false)
 
@@ -145,6 +143,8 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 			c := comet.DevicesMap.Get(msg.DeviceId)
 			if c == nil {
 				log.Warnf("RPC: no device %s on this server.", msg.DeviceId)
+				rpcReply.Status = STATUS_NO_DEVICE
+				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, rpcReply)
 				return
 			}
 			client := c.(*comet.Client)
@@ -155,6 +155,8 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 			seq, ok := client.SendMessage(comet.MSG_CMD, 0, bCmd, replyChannel)
 			if !ok {
 				log.Warnf("RPC: failed to SendMessage to %s.", msg.DeviceId)
+				rpcReply.Status = STATUS_SEND_FAILED
+				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, rpcReply)
 				return
 			}
 			select {
@@ -169,7 +171,10 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, rpcReply)
 				return
 			case <-time.After(time.Duration(wait) * time.Second):
+				log.Warnf("MSG timeout. RequestId: %s, seq: %d", d.CorrelationId, seq)
 				client.MsgTimeout(seq)
+				rpcReply.Status = STATUS_SEND_TIMEOUT
+				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, rpcReply)
 				return
 			}
 		}()
