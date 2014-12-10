@@ -226,6 +226,73 @@ func addApp(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 }
 
+func addApp2(w http.ResponseWriter, r *http.Request) {
+	var response Response
+	var data map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		response.ErrNo = ERR_BAD_REQUEST
+		response.ErrMsg = "Bad request"
+		b, _ := json.Marshal(response)
+		http.Error(w, string(b), 400)
+		return
+	}
+	pkg, ok1    := data["pkg"]
+	name, ok2   := data["name"]
+	mobile, ok3 := data["mobile"]
+	email, ok4  := data["email"]
+	desc, ok5   := data["desc"]
+	if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 {
+		errResponse(w, ERR_INVALID_PARAMS, "missing parameters", 400)
+		return
+	}
+	tprefix := getPappID()
+	if tprefix == 0 {
+		errResponse(w, ERR_INTERNAL, "no avaiable appid", 500)
+		return
+	}
+	n, err := storage.Instance.HashExists("db_packages", pkg)
+	if err != nil {
+		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		return
+	}
+	if n > 0 {
+		errResponse(w, ERR_EXIST, "package exist", 400)
+		return
+	}
+
+	prefix := strconv.FormatInt(tprefix, 10)
+	tappid := strings.Replace(uuid.New(), "-", "", -1)
+	appId  := "id_" + tappid[0:(len(tappid)-len(prefix))] + prefix
+	appKey := "ak_" + utils.RandomAlphabetic(20)
+	appSec := "sk_" + utils.RandomAlphabetic(20)
+	rawapp := storage.RawApp{
+		Pkg:    pkg,
+		Name:   name,
+		Mobile: mobile,
+		Email:  email,
+		Desc:   desc,
+		AppKey: appKey,
+		AppSec: appSec,
+	}
+	b, _ := json.Marshal(rawapp)
+	if _, err := storage.Instance.HashSet("db_apps", appId, b); err != nil {
+		errResponse(w, ERR_INTERNAL, "set 'db_apps' failed", 500)
+		return
+	}
+	if _, err := storage.Instance.HashSet("db_packages", pkg, []byte(appId)); err != nil {
+		errResponse(w, ERR_INTERNAL, "set 'db_packages' failed", 500)
+		return
+	}
+	response.ErrNo = 0
+	response.Data = map[string]string{
+		"appid":  appId,
+		"appkey": appKey,
+		"appsec": appSec,
+	}
+	b, _ = json.Marshal(response)
+	fmt.Fprintf(w, string(b))
+}
+
 func delApp(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
 	date := r.Header.Get("Date")
@@ -291,6 +358,22 @@ func appHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+func app2Handler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	var response Response
+	switch r.Method {
+	case "POST":
+		addApp2(w, r)
+		return
+	default:
+	}
+	response.ErrNo = ERR_METHOD_NOT_ALLOWED
+	response.ErrMsg = "Method not allowed"
+	b, _ := json.Marshal(response)
+	http.Error(w, string(b), 405)
+	return
+}
+
 func addMessage(w http.ResponseWriter, r *http.Request) {
 	authstr := r.Header.Get("Authorization")
 	date := r.Header.Get("Date")
@@ -343,6 +426,12 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg.MsgId = msgid
+	if msg.Options.TTL < 0 { // send immediatly
+		msg.Options.TTL = 0
+	} else if msg.Options.TTL == 0 {
+		msg.Options.TTL = 86400 // default
+	}
+
 	var response Response
 	response.ErrNo = 0
 	response.Data = map[string]int64{"msgid": msgid}

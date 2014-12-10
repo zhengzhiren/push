@@ -40,6 +40,10 @@ type RawMessage struct {
 type RawApp struct {
 	Pkg    string `json:"pkg"`
 	UserId string `json:"userid"`
+	Name string `json:"name"`
+	Mobile string `json:"mobile"`
+	Email string `json:"email"`
+	Desc string `json:"desc"`
 	AppKey string `json:"appkey,omitempty"`
 	AppSec string `json:"appsec,omitempty"`
 }

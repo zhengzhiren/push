@@ -108,12 +108,6 @@ func main() {
 				continue
 			}
 
-			if m.Options.TTL < 0 { // send immediatly
-				m.Options.TTL = 0
-			} else if m.Options.TTL == 0 {
-				m.Options.TTL = 86400 // default
-			}
-
 			if _, err := storage.Instance.HashSet(
 				"db_msg_"+m.AppId,
 				strconv.FormatInt(m.MsgId, 10), v); err != nil {
@@ -217,6 +211,7 @@ func startHttp(addr string, cmdTimeout int) {
 	http.HandleFunc("/api/v1/message", messageHandler)
 	http.HandleFunc("/api/v1/server", serverHandler)
 	http.HandleFunc("/api/v1/app", appHandler)
+	http.HandleFunc("/api/v1/app2", app2Handler)
 	http.HandleFunc("/test/message/confirm", testHandler)
 
 	err = http.ListenAndServe(addr, nil)

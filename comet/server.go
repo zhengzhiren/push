@@ -510,7 +510,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 
 	if DevicesMap.Check(devid) {
-		log.Warnf("%p: device (%s) init in this server already", conn, devid)
+		log.Infof("%p: device (%s) init in this server already", conn, devid)
 		conn.Close()
 		return nil
 	}
