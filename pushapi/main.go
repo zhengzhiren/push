@@ -186,6 +186,7 @@ func startHttp(addr string, cmdTimeout int) {
 	http.HandleFunc("/api/v1/message", messageHandler)
 	http.HandleFunc("/api/v1/server", serverHandler)
 	http.HandleFunc("/api/v1/app", appHandler)
+	http.HandleFunc("/api/v1/app2", app2Handler)
 	http.HandleFunc("/test/message/confirm", testHandler)
 
 	err = http.ListenAndServe(addr, nil)
