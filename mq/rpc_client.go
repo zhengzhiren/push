@@ -2,6 +2,8 @@ package mq
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -230,12 +232,15 @@ func (this *RpcClient) Control(deviceId string, service string, cmd string) (str
 			return "", err
 		}
 		switch reply.Status {
-		case 1:
+		case STATUS_SUCCESS:
+			return reply.Result, nil
+		case STATUS_INVALID_SERVICE:
 			return "", &InvalidServiceError{"Invalid service name"}
-		case 2:
+		case STATUS_EXCEPTION:
 			return "", &SdkError{"Exception on calling service"}
+		default:
+			return "", errors.New(fmt.Sprintf("MQ RPC error %d", reply.Status))
 		}
-		return reply.Result, nil
 	case <-time.After(time.Duration(this.rpcTimeout) * time.Second):
 		log.Warnf("RPC request [%d] timeout", requestId)
 		return "", &TimeoutError{"RPC timeout"}

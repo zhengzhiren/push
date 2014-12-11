@@ -97,6 +97,8 @@ func AuthMiddlewareFunc(h rest.HandlerFunc) rest.HandlerFunc {
 }
 
 func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
+	Stats.queryOnlineDevices()
+
 	devInfoList := []devInfo{}
 	r.ParseForm()
 	dev_ids := r.FormValue("dev_ids")
@@ -136,6 +138,8 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 		rest.Error(w, "Authorization failed", http.StatusForbidden)
 		return
 	}
+
+	Stats.queryDeviceInfo()
 
 	if serverName, err := storage.Instance.CheckDevice(devId); err == nil && serverName != "" {
 		resp := cloud.ApiResponse{}
@@ -177,30 +181,53 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 		return
 	}
 
+	Stats.cmd(param.Service)
 	resp := cloud.ApiResponse{}
 	result, err := rpcClient.Control(devId, param.Service, param.Cmd)
 	if err != nil {
 		if _, ok := err.(*mq.NoDeviceError); ok {
+			Stats.cmdOffline(param.Service)
 			rest.NotFound(w, r)
 			return
 		} else if _, ok := err.(*mq.TimeoutError); ok {
+			Stats.cmdTimeout(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_TIMEOUT
 			resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
 		} else if _, ok := err.(*mq.InvalidServiceError); ok {
+			Stats.cmdInvalidService(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_INVALID_SERVICE
 			resp.ErrMsg = fmt.Sprintf("Device [%s] has no service [%s]", devId, param.Service)
 		} else if _, ok := err.(*mq.SdkError); ok {
+			Stats.cmdOtherError(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_SDK_ERROR
 			resp.ErrMsg = fmt.Sprintf("Error when calling service [%s] on [%s]", param.Service, devId)
 		} else {
+			Stats.cmdOtherError(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_OTHER
 			resp.ErrMsg = err.Error()
 		}
 	} else {
+		Stats.cmdSuccess(param.Service)
 		resp.ErrNo = cloud.ERR_NOERROR
 		resp.Data = result
 	}
 
+	w.WriteJson(resp)
+}
+
+func getStats(w rest.ResponseWriter, r *rest.Request) {
+	resp := cloud.ApiResponse{
+		ErrNo: cloud.ERR_NOERROR,
+		Data:  Stats,
+	}
+	w.WriteJson(resp)
+}
+
+func deleteStats(w rest.ResponseWriter, r *rest.Request) {
+	newStats()
+	resp := cloud.ApiResponse{
+		ErrNo: cloud.ERR_NOERROR,
+	}
 	w.WriteJson(resp)
 }
 
@@ -271,6 +298,86 @@ func sign_calc(path string, query map[string]string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+type SignMiddleware struct{}
+
+func (this *SignMiddleware) MiddlewareFunc(handler rest.HandlerFunc) rest.HandlerFunc {
+	return func(w rest.ResponseWriter, r *rest.Request) {
+		if r.URL.Path == "/list" || r.URL.Path == "/command" {
+			resp := CommandResponse{}
+			r.ParseForm()
+
+			uid := r.FormValue("uid")
+			if uid == "" {
+				resp.Status = STATUS_INVALID_PARAM
+				resp.Error = "missing 'uid'"
+				w.WriteJson(resp)
+				return
+			}
+
+			sign := r.FormValue("sign")
+			if sign == "" {
+				resp.Status = STATUS_INVALID_PARAM
+				resp.Error = "missing 'sign'"
+				w.WriteJson(resp)
+				return
+			}
+
+			tm := r.FormValue("tm")
+			if tm == "" {
+				resp.Status = STATUS_INVALID_PARAM
+				resp.Error = "missing 'tm'"
+				w.WriteJson(resp)
+				return
+			}
+
+			pmtt := r.FormValue("pmtt")
+			if pmtt == "" {
+				resp.Status = STATUS_INVALID_PARAM
+				resp.Error = "missing 'pmtt'"
+				w.WriteJson(resp)
+				return
+			}
+
+			src := r.FormValue("src")
+			if src == "" {
+				src = "src"
+			}
+
+			rid := r.FormValue("rid")
+			if rid == "" {
+				rid = "rid"
+			}
+
+			tid := r.FormValue("tid")
+			if tid == "" {
+				tid = "tid"
+			}
+
+			query := map[string]string{
+				"uid":  uid,
+				"rid":  rid,
+				"tid":  tid,
+				"src":  src,
+				"tm":   tm,
+				"pmtt": pmtt,
+			}
+
+			if sign != "supersign" {
+				mysign := sign_calc("/router"+r.URL.Path, query)
+				if mysign != sign {
+					log.Warnf("sign valication failed: %s %s", mysign, sign)
+					resp.Error = "sign valication failed"
+					resp.Status = STATUS_INVALID_PARAM
+					w.WriteJson(resp)
+					return
+				}
+			}
+		}
+
+		handler(w, r)
+	}
+}
+
 func checkAuthzUid(uid string, devid string) bool {
 	// TODO: remove this is for test
 	if uid == "000000000" {
@@ -291,123 +398,58 @@ func checkAuthzUid(uid string, devid string) bool {
 	return false
 }
 
-func postRouterCommand(w http.ResponseWriter, r *http.Request) {
+func postRouterCommand(w rest.ResponseWriter, r *rest.Request) {
 	log.Debugf("Request from RemoterAddr: %s", r.RemoteAddr)
-	var (
-		uid         string
-		rid         string
-		tid         string
-		sign        string
-		tm          string
-		src         string
-		pmtt        string
-		mysign      string
-		query       map[string]string
-		response    CommandResponse
-		serviceName string = "com.letv.letvroutersettingservice"
-		cmd         string
-		result      string
-		body        []byte
-		err         error
-		bCmd        []byte
-	)
-	response.Status = STATUS_OK
-	if r.Method != "POST" {
-		response.Status = STATUS_OTHER_ERR
-		response.Error = "must use 'POST' method\n"
-		goto resp
-	}
 
-	r.ParseForm()
-	rid = r.FormValue("rid")
-	if rid == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing 'rid'"
-		goto resp
-	}
+	resp := CommandResponse{}
+	resp.Status = STATUS_OK
 
-	uid = r.FormValue("uid")
+	uid := r.FormValue("uid")
 	if uid == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing 'uid'"
-		goto resp
+		resp.Status = STATUS_INVALID_PARAM
+		resp.Error = "missing 'uid'"
+		w.WriteJson(resp)
+		return
 	}
 
-	tid = r.FormValue("tid")
-	if tid == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing 'tid'"
-		goto resp
-	}
-
-	sign = r.FormValue("sign")
-	if sign == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing 'sign'"
-		goto resp
-	}
-
-	tm = r.FormValue("tm")
-	if tm == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing 'tm'"
-		goto resp
-	}
-
-	pmtt = r.FormValue("pmtt")
-	if pmtt == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing 'pmtt'"
-		goto resp
-	}
-
-	src = r.FormValue("src")
-	if src == "" {
-		src = "src"
-	}
-
-	query = map[string]string{
-		"uid":  uid,
-		"rid":  rid,
-		"tid":  tid,
-		"src":  src,
-		"tm":   tm,
-		"pmtt": pmtt,
-	}
-
-	if sign != "supersign" {
-		mysign = sign_calc(r.URL.Path, query)
-		if mysign != sign {
-			log.Warnf("sign valication failed: %s %s", mysign, sign)
-			response.Error = "sign valication failed"
-			response.Status = STATUS_INVALID_PARAM
-			goto resp
-		}
+	rid := r.FormValue("rid")
+	if rid == "" {
+		resp.Status = STATUS_INVALID_PARAM
+		resp.Error = "missing 'rid'"
+		w.WriteJson(resp)
+		return
 	}
 
 	if !checkAuthzUid(uid, rid) {
 		log.Warnf("auth failed. uid: %s, rid: %s", uid, rid)
-		response.Status = STATUS_OTHER_ERR
-		response.Error = "authorization failed"
-		goto resp
+		resp.Status = STATUS_OTHER_ERR
+		resp.Error = "authorization failed"
+		w.WriteJson(resp)
+		return
 	}
 
 	if r.Body == nil {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "missing POST data"
-		goto resp
+		resp.Status = STATUS_INVALID_PARAM
+		resp.Error = "missing POST data"
+		w.WriteJson(resp)
+		return
 	}
 
-	body, err = ioutil.ReadAll(r.Body)
+	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		response.Status = STATUS_INVALID_PARAM
-		response.Error = "invalid POST body"
-		goto resp
+		resp.Status = STATUS_INVALID_PARAM
+		resp.Error = "invalid POST body"
+		w.WriteJson(resp)
+		return
 	}
+
+	var cmd string
+	var serviceName string
 
 	if len(rid) == len("c80e774a1e78") {
 		// To old agent
+		serviceName = "gibbon_agent"
 		type CommandRequest struct {
 			//Uid string `json:"uid"`
 			Cmd string `json:"cmd"`
@@ -416,47 +458,57 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 			//Uid: uid,
 			Cmd: string(body),
 		}
-		bCmd, _ = json.Marshal(cmdRequest)
+		bCmd, _ := json.Marshal(cmdRequest)
 		cmd = string(bCmd)
 	} else {
 		// To new android service
+		serviceName = "com.letv.letvroutersettingservice"
 		type RouterCommand struct {
 			Forward string `json:"forward"`
 		}
 		var rc RouterCommand
 		if err := json.Unmarshal([]byte(body), &rc); err != nil {
-			response.Status = -2000
-			response.Error = "Request body is not JSON"
-			goto resp
+			resp.Status = -2000
+			resp.Error = "Request body is not JSON"
+			w.WriteJson(resp)
+			return
 		}
 		cmd = rc.Forward
 		if cmd == "" {
-			response.Status = -2001
-			response.Error = "'forward' is empty"
-			goto resp
+			resp.Status = -2001
+			resp.Error = "'forward' is empty"
+			w.WriteJson(resp)
+			return
 		}
 	}
 
-	result, err = rpcClient.Control(rid, serviceName, cmd)
+	Stats.cmd(serviceName)
+	result, err := rpcClient.Control(rid, serviceName, cmd)
 	if err != nil {
 		if _, ok := err.(*mq.NoDeviceError); ok {
-			response.Status = STATUS_ROUTER_OFFLINE
-			response.Error = fmt.Sprintf("device (%s) offline", rid)
+			Stats.cmdOffline(serviceName)
+			resp.Status = STATUS_ROUTER_OFFLINE
+			resp.Error = fmt.Sprintf("device (%s) offline", rid)
 		} else if _, ok := err.(*mq.TimeoutError); ok {
-			response.Status = STATUS_OTHER_ERR
-			response.Error = fmt.Sprintf("recv response timeout [%s]", rid)
+			Stats.cmdTimeout(serviceName)
+			resp.Status = STATUS_OTHER_ERR
+			resp.Error = fmt.Sprintf("recv response timeout [%s]", rid)
 		} else if _, ok := err.(*mq.InvalidServiceError); ok {
-			response.Status = STATUS_OTHER_ERR
-			response.Error = fmt.Sprintf("Device [%s] has no service [%s]", rid, serviceName)
+			Stats.cmdInvalidService(serviceName)
+			resp.Status = STATUS_OTHER_ERR
+			resp.Error = fmt.Sprintf("Device [%s] has no service [%s]", rid, serviceName)
 		} else {
-			response.Status = STATUS_OTHER_ERR
-			response.Error = err.Error()
+			Stats.cmdOtherError(serviceName)
+			resp.Status = STATUS_OTHER_ERR
+			resp.Error = err.Error()
 		}
+		w.WriteJson(resp)
+		return
 	} else {
+		Stats.cmdSuccess(serviceName)
 		if len(rid) == len("c80e774a1e78") {
 			// reply from gibbon agent
-			w.Write([]byte(result))
-			log.Infof("postRouterCommand write: %s", result)
+			w.(http.ResponseWriter).Write([]byte(result))
 		} else {
 			// reply from android service
 			type RouterCommandReply struct {
@@ -468,20 +520,12 @@ func postRouterCommand(w http.ResponseWriter, r *http.Request) {
 			reply.Status = 0
 			reply.Descr = "OK"
 			reply.Result = result
-			bReply, _ := json.Marshal(&reply)
-			w.Write(bReply)
-			log.Infof("postRouterCommand write: %s", string(bReply))
+			w.WriteJson(reply)
 		}
-		return
 	}
-
-resp:
-	b, _ := json.Marshal(response)
-	log.Debugf("postRouterCommand write: %s", string(b))
-	w.Write(b)
 }
 
-func getRouterList(w http.ResponseWriter, r *http.Request) {
+func getRouterList(w rest.ResponseWriter, r *rest.Request) {
 	type RouterInfo struct {
 		Rid   string `json:"rid"`
 		Rname string `json:"rname"`
@@ -493,113 +537,35 @@ func getRouterList(w http.ResponseWriter, r *http.Request) {
 		List   []RouterInfo `json:"list"`
 	}
 
-	var (
-		uid      string
-		tid      string
-		sign     string
-		rid      string
-		src      string
-		tm       string
-		pmtt     string
-		query    map[string]string
-		mysign   string
-		response ResponseRouterList
-		router   RouterInfo
-		devices  []devcenter.Device
-		err      error
-	)
-
-	response.Status = STATUS_OTHER_ERR
-	if r.Method != "GET" {
-		response.Descr = "must using 'GET' method\n"
-		goto resp
-	}
+	resp := ResponseRouterList{}
+	resp.Status = STATUS_OTHER_ERR
 	r.ParseForm()
 
-	uid = r.FormValue("uid")
+	uid := r.FormValue("uid")
 	if uid == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Descr = "missing 'uid'"
-		goto resp
+		resp.Status = STATUS_INVALID_PARAM
+		resp.Descr = "missing 'uid'"
+		w.WriteJson(resp)
+		return
 	}
 
-	tid = r.FormValue("tid")
-	if tid == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Descr = "missing 'tid'"
-		goto resp
-	}
-
-	sign = r.FormValue("sign")
-	if sign == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Descr = "missing 'sign'"
-		goto resp
-	}
-
-	tm = r.FormValue("tm")
-	if tm == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Descr = "missing 'tm'"
-		goto resp
-	}
-
-	pmtt = r.FormValue("pmtt")
-	if pmtt == "" {
-		response.Status = STATUS_INVALID_PARAM
-		response.Descr = "missing 'pmtt'"
-		goto resp
-	}
-
-	rid = r.FormValue("rid")
-	if rid == "" {
-		rid = "rid"
-	}
-
-	src = r.FormValue("src")
-	if src == "" {
-		src = "src"
-	}
-
-	query = map[string]string{
-		"uid":  uid,
-		"rid":  rid,
-		"tid":  tid,
-		"src":  src,
-		"tm":   tm,
-		"pmtt": pmtt,
-	}
-
-	if sign != "supersign" {
-		mysign = sign_calc(r.URL.Path, query)
-		if mysign != sign {
-			log.Warnf("sign valication failed: %s %s", mysign, sign)
-			response.Descr = "sign valication failed"
-			response.Status = STATUS_INVALID_PARAM
-			goto resp
-		}
-	}
-
-	devices, err = devcenter.GetDevices(uid, devcenter.DEV_ROUTER)
+	devices, err := devcenter.GetDevices(uid, devcenter.DEV_ROUTER)
 	if err != nil {
 		log.Errorf("GetDevices failed: %s", err.Error())
-		response.Descr = err.Error()
-		goto resp
+		resp.Descr = err.Error()
+		w.WriteJson(resp)
+		return
 	}
 
 	for _, dev := range devices {
-		router = RouterInfo{
+		router := RouterInfo{
 			Rid:   dev.Id,
 			Rname: dev.Title,
 		}
-		response.List = append(response.List, router)
+		resp.List = append(resp.List, router)
 	}
 
-	response.Status = 0
-	response.Descr = "OK"
-
-resp:
-	b, _ := json.Marshal(response)
-	log.Debugf("getRoutelist write: %s", string(b))
-	w.Write(b)
+	resp.Status = 0
+	resp.Descr = "OK"
+	w.WriteJson(resp)
 }

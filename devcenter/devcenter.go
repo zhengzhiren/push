@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
+	//	log "github.com/cihub/seelog"
 	"io/ioutil"
 	"net/http"
 
@@ -98,7 +98,7 @@ func GetDevices(uid string, devType int) ([]Device, error) {
 		return nil, err
 	}
 
-	log.Debugf("Got response from device center: %s", body)
+	//log.Debugf("Got response from device center: %s", body)
 
 	var result devicesResult
 	err = json.Unmarshal(body, &result)

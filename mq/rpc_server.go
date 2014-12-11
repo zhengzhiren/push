@@ -88,7 +88,7 @@ func NewRpcServer(amqpURI, exchange, bindingKey string) (*RpcServer, error) {
 		return nil, err
 	}
 
-	go server.handleRpcRequest(deliveries)
+	go server.handleDeliveries(deliveries)
 
 	return server, nil
 }
@@ -98,6 +98,7 @@ func (this *RpcServer) Stop() {
 }
 
 func (this *RpcServer) SendRpcResponse(callbackQueue, correlationId string, resp interface{}) {
+	log.Infof("Sending RPC reply. RequestId: %s", correlationId)
 	data, _ := json.Marshal(resp)
 	if err := this.channel.Publish(
 		"",            // publish to an exchange
@@ -119,15 +120,9 @@ func (this *RpcServer) SendRpcResponse(callbackQueue, correlationId string, resp
 	}
 }
 
-func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
+func (this *RpcServer) handleDeliveries(deliveries <-chan amqp.Delivery) {
 	for d := range deliveries {
-		log.Debugf(
-			"got %dB RPC request [%s]: [%v] %q",
-			len(d.Body),
-			d.CorrelationId,
-			d.DeliveryTag,
-			d.Body,
-		)
+		log.Debugf("got %dB RPC request [%s]", len(d.Body), d.CorrelationId)
 		d.Ack(false)
 
 		var msg MQ_Msg_Crtl
@@ -136,45 +131,54 @@ func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 			continue
 		}
 
-		cmdMsg := comet.CommandMessage{
-			Service: msg.Service,
-			Cmd:     msg.Cmd,
-		}
-		go func() {
-			rpcReply := MQ_Msg_CtrlReply{}
-			c := comet.DevicesMap.Get(msg.DeviceId)
-			if c == nil {
-				log.Warnf("RPC: no device %s on this server.", msg.DeviceId)
-				return
-			}
-			client := c.(*comet.Client)
-			var replyChannel chan *comet.Message = nil
-			wait := 10
-			replyChannel = make(chan *comet.Message)
-			bCmd, _ := json.Marshal(cmdMsg)
-			seq, ok := client.SendMessage(comet.MSG_CMD, 0, bCmd, replyChannel)
-			if !ok {
-				log.Warnf("RPC: failed to SendMessage to %s.", msg.DeviceId)
-				return
-			}
-			select {
-			case reply := <-replyChannel:
-				var resp comet.CommandReplyMessage
-				err := json.Unmarshal(reply.Data, &resp)
-				if err != nil {
-					log.Errorf("Bad command reply message: %s", err)
-				}
-				rpcReply.Status = resp.Status
-				rpcReply.Result = resp.Result
-				this.SendRpcResponse(d.ReplyTo, d.CorrelationId, rpcReply)
-				return
-			case <-time.After(time.Duration(wait) * time.Second):
-				client.MsgTimeout(seq)
-				return
-			}
-		}()
+		go this.handleRpcRequest(&msg, d.ReplyTo, d.CorrelationId)
 	}
 
 	log.Infof("handle: deliveries channel closed")
 	//done <- nil
+}
+
+func (this *RpcServer) handleRpcRequest(msg *MQ_Msg_Crtl, replyTo, correlationId string) {
+	cmdMsg := comet.CommandMessage{
+		Service: msg.Service,
+		Cmd:     msg.Cmd,
+	}
+	rpcReply := MQ_Msg_CtrlReply{}
+	c := comet.DevicesMap.Get(msg.DeviceId)
+	if c == nil {
+		log.Warnf("RPC: no device %s on this server.", msg.DeviceId)
+		rpcReply.Status = STATUS_NO_DEVICE
+		this.SendRpcResponse(replyTo, correlationId, rpcReply)
+		return
+	}
+	client := c.(*comet.Client)
+	var replyChannel chan *comet.Message = nil
+	wait := 10
+	replyChannel = make(chan *comet.Message)
+	bCmd, _ := json.Marshal(cmdMsg)
+	seq, ok := client.SendMessage(comet.MSG_CMD, 0, bCmd, replyChannel)
+	if !ok {
+		log.Warnf("RPC: failed to SendMessage to %s.", msg.DeviceId)
+		rpcReply.Status = STATUS_SEND_FAILED
+		this.SendRpcResponse(replyTo, correlationId, rpcReply)
+		return
+	}
+	select {
+	case reply := <-replyChannel:
+		var resp comet.CommandReplyMessage
+		err := json.Unmarshal(reply.Data, &resp)
+		if err != nil {
+			log.Errorf("Bad command reply message: %s", err)
+		}
+		rpcReply.Status = resp.Status
+		rpcReply.Result = resp.Result
+		this.SendRpcResponse(replyTo, correlationId, rpcReply)
+		return
+	case <-time.After(time.Duration(wait) * time.Second):
+		log.Warnf("MSG timeout. RequestId: %s, seq: %d", correlationId, seq)
+		client.MsgTimeout(seq)
+		rpcReply.Status = STATUS_SEND_TIMEOUT
+		this.SendRpcResponse(replyTo, correlationId, rpcReply)
+		return
+	}
 }
