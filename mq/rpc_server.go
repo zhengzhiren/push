@@ -98,6 +98,7 @@ func (this *RpcServer) Stop() {
 }
 
 func (this *RpcServer) SendRpcResponse(callbackQueue, correlationId string, resp interface{}) {
+	log.Infof("Sending RPC reply. RequestId: %s", correlationId)
 	data, _ := json.Marshal(resp)
 	if err := this.channel.Publish(
 		"",            // publish to an exchange
@@ -121,11 +122,7 @@ func (this *RpcServer) SendRpcResponse(callbackQueue, correlationId string, resp
 
 func (this *RpcServer) handleRpcRequest(deliveries <-chan amqp.Delivery) {
 	for d := range deliveries {
-		log.Debugf(
-			"got %dB RPC request [%s]",
-			len(d.Body),
-			d.CorrelationId,
-		)
+		log.Debugf("got %dB RPC request [%s]", len(d.Body), d.CorrelationId)
 		d.Ack(false)
 
 		var msg MQ_Msg_Crtl

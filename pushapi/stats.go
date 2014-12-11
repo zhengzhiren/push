@@ -3,6 +3,7 @@ package main
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type CtrlStats struct {
@@ -15,7 +16,8 @@ type CtrlStats struct {
 }
 
 type Statistics struct {
-	lock *sync.RWMutex
+	lock      *sync.RWMutex
+	StartTime time.Time
 
 	PushMsg uint32
 
@@ -32,6 +34,7 @@ func newStats() {
 	Stats = &Statistics{
 		lock:           new(sync.RWMutex),
 		CtrlStatistics: make(map[string]*CtrlStats),
+		StartTime:      time.Now(),
 	}
 }
 
