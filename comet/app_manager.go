@@ -180,7 +180,7 @@ func (this *AppManager)GetApps(appId string) ([]*RegApp) {
 		}
 	}
 	this.lock.RUnlock()
-	log.Infof("get %d apps", len(regapps))
+	log.Infof("get %d apps for appid(%s)", len(regapps), appId)
 	return regapps
 }
 
@@ -202,7 +202,7 @@ func (this *AppManager)GetAppsByUser(appId string, userId string) []*RegApp {
 		}
 	}
 	this.lock.RUnlock()
-	log.Infof("get %d apps", len(regapps))
+	log.Infof("get %d apps for appid(%s) userid(%s)", len(regapps), appId, userId)
 	return regapps
 }
 
@@ -219,7 +219,7 @@ func (this *AppManager)GetAppsByTopic(appId string, topic string) ([]*RegApp) {
 		}
 	}
 	this.lock.RUnlock()
-	log.Infof("get %d apps", len(regapps))
+	log.Infof("get %d apps for appid(%s) topic(%s)", len(regapps), appId, topic)
 	return regapps
 }
 

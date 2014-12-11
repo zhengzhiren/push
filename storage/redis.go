@@ -94,7 +94,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, msgId int64) [
 			expire int64
 		)
 		if _, err := fmt.Sscanf(ret[i], "%v_%v", &idx, &expire); err != nil {
-			log.Infof("invaild redis hash field:", err)
+			log.Warnf("invaild redis hash field:", err)
 			continue
 		}
 
@@ -119,7 +119,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, msgId int64) [
 
 	rmsgs, err := redis.Strings(r.Do("HMGET", args...))
 	if err != nil {
-		log.Infof("failed to get offline rmsg:", err)
+		log.Warnf("failed to get offline rmsg:", err)
 		return nil
 	}
 
@@ -128,7 +128,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, msgId int64) [
 		t := []byte(rmsgs[i])
 		msg := &RawMessage{}
 		if err := json.Unmarshal(t, msg); err != nil {
-			log.Infof("failed to decode raw msg:", err)
+			log.Warnf("failed to decode raw msg:", err)
 			continue
 		}
 		msgs = append(msgs, msg)
