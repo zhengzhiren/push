@@ -134,7 +134,11 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 				if pack.reply != nil {
 					client.WaitingChannels[pack.msg.Header.Seq] = pack.reply
 				}
-				log.Infof("%s: send msg: (%d) (%s)", client.devId, pack.msg.Header.Type, pack.msg.Data)
+				log.Infof("%s: send msg: (%d) (%d) (%s)",
+					client.devId,
+					pack.msg.Header.Type,
+					pack.msg.Header.Seq,
+					pack.msg.Data)
 				time.Sleep(10 * time.Millisecond)
 			//case seq := <-client.seqCh:
 			//	delete(WaitingChannels, seq)
@@ -376,8 +380,8 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 	// don't use defer to improve performance
 	log.Debugf("%s: close connection", client.devId)
-	for regid, _ := range client.RegApps {
-		AMInstance.DelApp(regid)
+	for _, regapp := range client.RegApps {
+		AMInstance.DelApp(regapp.RegId)
 	}
 	this.CloseClient(client)
 	conn.Close()
@@ -436,7 +440,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 				AppId: rawMsg.AppId,
 				Type:  rawMsg.MsgType,
 			}
-			if rawMsg.MsgType == 2 {
+			if rawMsg.MsgType == MSG_TYPE_MESSAGE {
 				msg.Content = rawMsg.Content
 			} else {
 				b, _ := json.Marshal(rawMsg.Notification)
@@ -545,7 +549,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 			}
 			regapp := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
 			if regapp != nil {
-				client.RegApps[info.RegId] = regapp
+				client.RegApps[info.AppId] = regapp
 			}
 		}
 	} else {
@@ -564,7 +568,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 				continue
 			}
 			regapp := AMInstance.AddApp(client.devId, regid, info)
-			client.RegApps[regid] = regapp
+			client.RegApps[info.AppId] = regapp
 			reply.Apps = append(reply.Apps, Base2{AppId: info.AppId, RegId: regid, Pkg: rawapp.Pkg})
 		}
 	}
@@ -646,10 +650,15 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 	regid := RegId(client.devId, request.AppId, reguid)
 	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, reguid, regid)
-	if _, ok := client.RegApps[regid]; ok {
+	if regapp, ok := client.RegApps[request.AppId]; ok {
 		// 已经在内存中，直接返回
-		onReply(0, request.AppId, rawapp.Pkg, regid)
-		return 0
+		if regapp.RegId == regid {
+			onReply(0, request.AppId, rawapp.Pkg, regid)
+			return 0
+		} else {
+			onReply(10, request.AppId, rawapp.Pkg, regid)
+			return 0
+		}
 	}
 
 	regapp := AMInstance.RegisterApp(client.devId, regid, request.AppId, reguid)
@@ -659,7 +668,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		return 0
 	}
 	// 记录到client自己的hash table中
-	client.RegApps[regid] = regapp
+	client.RegApps[request.AppId] = regapp
 	onReply(0, request.AppId, rawapp.Pkg, regid)
 
 	// 处理离线消息
@@ -692,14 +701,19 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[request.RegId]
+	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		log.Warnf("%s: unknown 'appid' %s", client.devId, request.AppId)
 		onReply(3, request.AppId)
 		return 0
 	}
+	if regapp.RegId != request.RegId {
+		log.Warnf("%s: unmatch 'appid' & 'regid' %s %s", client.devId, request.AppId, request.RegId)
+		onReply(10, request.AppId)
+		return 0
+	}
 	AMInstance.UnregisterApp(client.devId, request.RegId, request.AppId, regapp.UserId)
-	delete(client.RegApps, request.RegId)
+	delete(client.RegApps, request.AppId)
 	onReply(0, request.AppId)
 	return 0
 }
@@ -717,9 +731,12 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		return -1
 	}
 	// unknown regid
-	regapp, ok := client.RegApps[request.RegId]
+	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		return 0
+	}
+	if regapp.RegId != request.RegId {
 		return 0
 	}
 
@@ -848,14 +865,20 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 	appid := string(val)
 	regid := RegId(client.devId, appid, request.Uid)
 
-	if regapp, ok := client.RegApps[regid]; ok {
+	if regapp, ok := client.RegApps[appid]; ok {
 		// 已经在内存中，修改sendids后返回
-		if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
-			onReply(6, appid, request.Pkg, regid)
+		if regapp.RegId == regid {
+			if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
+				onReply(6, appid, request.Pkg, regid)
+				return 0
+			}
+			onReply(0, appid, request.Pkg, regid)
+			return 0
+		} else {
+			log.Warnf("%s: AMInstance register app failed", client.devId)
+			onReply(10, appid, request.Pkg, regid)
 			return 0
 		}
-		onReply(0, appid, request.Pkg, regid)
-		return 0
 	}
 
 	// 内存中没有，先到app管理中心去注册
@@ -866,7 +889,7 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 	// 记录到client管理的hash table中
-	client.RegApps[regid] = regapp
+	client.RegApps[appid] = regapp
 
 	if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
 		onReply(6, appid, request.Pkg, regid)
@@ -918,10 +941,15 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	}
 	appid := string(val)
 	regid := RegId(client.devId, appid, request.Uid)
-	regapp, ok := client.RegApps[regid]
+	regapp, ok := client.RegApps[appid]
 	if !ok {
 		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
 		onReply(5, appid, request.Pkg, 0)
+		return 0
+	}
+	if regapp.RegId != regid {
+		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
+		onReply(10, appid, request.Pkg, 0)
 		return 0
 	}
 	if ok := delSendid(client, regid, regapp, request.SendId); !ok {
@@ -935,7 +963,7 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 
 	// remove it from memory when regapp.SendIds is empty
 	AMInstance.UnregisterApp(client.devId, regid, appid, request.Uid)
-	delete(client.RegApps, regid)
+	delete(client.RegApps, appid)
 	onReply(0, appid, request.Pkg, 0)
 	return 0
 }
@@ -979,10 +1007,15 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[request.RegId]
+	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		onReply(4, request.AppId)
+		return 0
+	}
+	if regapp.RegId != request.RegId {
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(10, request.AppId)
 		return 0
 	}
 	for _, item := range regapp.Topics {
@@ -1045,10 +1078,15 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[request.RegId]
+	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		onReply(3, request.AppId)
+		return 0
+	}
+	if regapp.RegId != request.RegId {
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(10, request.AppId)
 		return 0
 	}
 	index := -1
@@ -1099,10 +1137,15 @@ func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []b
 
 	// unknown regid
 	var ok bool
-	regapp, ok := client.RegApps[request.RegId]
+	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		onReply(3, request.AppId)
+		return 0
+	}
+	if regapp.RegId != request.RegId {
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(10, request.AppId)
 		return 0
 	}
 	reply.Result = 0

@@ -14,6 +14,9 @@ const (
 	PUSH_TYPE_DEVID     = 4
 	PUSH_TYPE_TOPIC     = 5
 	PUSH_TYPE_ALIAS     = 6
+
+	MSG_TYPE_NOTIFICATION = 1
+	MSG_TYPE_MESSAGE      = 2
 )
 
 //func SendCommand(devId string, cmd *CommandMessage, correlationId, callbackQueue string) bool {
@@ -88,7 +91,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		AppId:   appId,
 		Type:    rawMsg.MsgType,
 	}
-	if rawMsg.MsgType == 2 {
+	if rawMsg.MsgType == MSG_TYPE_MESSAGE {
 		msg.Content = rawMsg.Content
 	} else {
 		b, _ := json.Marshal(rawMsg.Notification)
