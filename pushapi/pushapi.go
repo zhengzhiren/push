@@ -236,11 +236,11 @@ func addApp2(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, string(b), 400)
 		return
 	}
-	pkg, ok1    := data["pkg"]
-	name, ok2   := data["name"]
+	pkg, ok1 := data["pkg"]
+	name, ok2 := data["name"]
 	mobile, ok3 := data["mobile"]
-	email, ok4  := data["email"]
-	desc, ok5   := data["desc"]
+	email, ok4 := data["email"]
+	desc, ok5 := data["desc"]
 	if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 {
 		errResponse(w, ERR_INVALID_PARAMS, "missing parameters", 400)
 		return
@@ -262,7 +262,7 @@ func addApp2(w http.ResponseWriter, r *http.Request) {
 
 	prefix := strconv.FormatInt(tprefix, 10)
 	tappid := strings.Replace(uuid.New(), "-", "", -1)
-	appId  := "id_" + tappid[0:(len(tappid)-len(prefix))] + prefix
+	appId := "id_" + tappid[0:(len(tappid)-len(prefix))] + prefix
 	appKey := "ak_" + utils.RandomAlphabetic(20)
 	appSec := "sk_" + utils.RandomAlphabetic(20)
 	rawapp := storage.RawApp{
@@ -439,7 +439,6 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	msgBox <- msg
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
-	Stats.pushMsg()
 }
 
 /*
