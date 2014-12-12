@@ -31,7 +31,8 @@ type Client struct {
 	nextSeq         uint32
 	lastActive      time.Time
 	WaitingChannels map[uint32]chan *Message
-	ctrl            chan bool
+	ctrl            chan bool // notify sendout routing to quit when close connection
+	broken			bool
 }
 
 type Server struct {
@@ -72,11 +73,15 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply 
 	if seq == 0 {
 		seq = client.NextSeq()
 	}
+	bodylen := 0
+	if body != nil {
+		bodylen = len(body)
+	}
 	header := Header{
 		Type: msgType,
 		Ver:  0,
 		Seq:  seq,
-		Len:  uint32(len(body)),
+		Len:  uint32(bodylen),
 	}
 	msg := &Message{
 		Header: header,
@@ -107,18 +112,19 @@ func (this *Client) NextSeq() uint32 {
 func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	// save the client device Id to storage
 	if err := storage.Instance.AddDevice(this.Name, devid); err != nil {
-		log.Infof("failed to put device %s into redis:", devid, err)
+		log.Warnf("failed to put device %s into redis:", devid, err)
 		return nil
 	}
 
 	client := &Client{
 		devId:           devid,
 		RegApps:         make(map[string]*RegApp),
-		nextSeq:         100,
+		nextSeq:         100,  //sequence number begin from 100 each time
 		lastActive:      time.Now(),
 		outMsgs:         make(chan *Pack, 100),
-		WaitingChannels: make(map[uint32]chan *Message, 10),
+		WaitingChannels: make(map[uint32]chan *Message, 10), //TODO
 		ctrl:            make(chan bool),
+		broken:          false,
 	}
 	DevicesMap.Set(devid, client)
 
@@ -128,8 +134,18 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 			select {
 			case pack := <-client.outMsgs:
 				b, _ := pack.msg.Header.Serialize()
-				conn.Write(b)
-				conn.Write(pack.msg.Data)
+				if _, err := conn.Write(b); err != nil {
+					log.Infof("sendout header failed, %s", err)
+					client.broken = true
+					return
+				}
+				if pack.msg.Data != nil {
+					if _, err := conn.Write(pack.msg.Data); err != nil {
+						log.Infof("sendout body failed, %s", err)
+						client.broken = true
+						return
+					}
+				}
 				// add reply channel
 				if pack.reply != nil {
 					client.WaitingChannels[pack.msg.Header.Seq] = pack.reply
@@ -292,15 +308,21 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			break
 		default:
 		}
+		if client.broken {
+			log.Debugf("%s: client broken", client.devId)
+			break
+		}
 
 		now := time.Now()
 		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
 			log.Debugf("%s: heartbeat timeout", client.devId)
-			break
+			client.SendMessage(MSG_CHECK, 0, nil, nil)
+			client.lastActive = now
+			//break
 		}
 
 		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
-		conn.SetReadDeadline(now.Add(10 * time.Second))
+		conn.SetReadDeadline(now.Add(5 * time.Second))
 		if readflag == 0 {
 			// read first byte
 			n := myread(conn, headBuf[0:1])
