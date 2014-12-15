@@ -40,6 +40,7 @@ const (
 	MSG_REGISTER2_REPLY   = uint8(24)
 	MSG_UNREGISTER2       = uint8(25)
 	MSG_UNREGISTER2_REPLY = uint8(26)
+	MSG_CHECK             = uint8(100)
 )
 
 // msg to byte
