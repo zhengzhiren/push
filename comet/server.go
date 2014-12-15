@@ -33,7 +33,7 @@ type Client struct {
 	lastActive      time.Time
 	WaitingChannels map[uint32]chan *Message
 	ctrl            chan bool // notify sendout routing to quit when close connection
-	broken			bool
+	broken          bool
 }
 
 type Server struct {
@@ -120,7 +120,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
 		devId:           devid,
 		RegApps:         make(map[string]*RegApp),
-		nextSeq:         100,  //sequence number begin from 100 each time
+		nextSeq:         100, //sequence number begin from 100 each time
 		lastActive:      time.Now(),
 		outMsgs:         make(chan *Pack, 100),
 		WaitingChannels: make(map[uint32]chan *Message, 10), //TODO
@@ -318,8 +318,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
 			log.Debugf("%s: heartbeat timeout", client.devId)
 			client.SendMessage(MSG_CHECK, 0, nil, nil)
-			client.lastActive = now
-			//break
+			break
 		}
 
 		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
