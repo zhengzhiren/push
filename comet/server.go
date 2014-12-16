@@ -390,6 +390,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		}
 
 		if handler, ok := this.funcMap[header.Type]; ok {
+			client.lastActive = time.Now()
 			if ret := handler(conn, client, &header, dataBuf); ret < 0 {
 				break
 			}
