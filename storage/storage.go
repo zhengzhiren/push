@@ -54,6 +54,10 @@ type Storage interface {
 
 	AddDevice(serverName, devId string) error
 	RemoveDevice(serverName, devId string) error
+	// Get all comet server names
+	GetServerNames() ([]string, error)
+	// Get all device Ids on a server
+	GetDeviceIds(serverName string) ([]string, error)
 
 	//
 	// check if the device Id exists, return the server name

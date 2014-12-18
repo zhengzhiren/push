@@ -1,16 +1,14 @@
 package comet
 
 import (
+	"encoding/json"
 	"io"
 	"net"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
-	//"strings"
-	"encoding/json"
-	"github.com/chenyf/push/auth"
-	"github.com/chenyf/push/stats"
+
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/utils/safemap"
@@ -617,6 +615,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	return client
 }
+<<<<<<< HEAD
 
 func sendReply(client *Client, msgType uint8, seq uint32, v interface{}) {
 	b, _ := json.Marshal(v)
@@ -978,12 +977,12 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	regid := RegId(client.devId, appid, request.Uid)
 	regapp, ok := client.RegApps[appid]
 	if !ok {
-		log.Warnf("%s: 'pkg' %s hasn't register", client.devId, request.Pkg)
+		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
 		onReply(5, appid, request.Pkg, 0)
 		return 0
 	}
 	if regapp.RegId != regid {
-		log.Warnf("%s: 'pkg' %s hasn't register", client.devId, request.Pkg)
+		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
 		onReply(10, appid, request.Pkg, 0)
 		return 0
 	}
@@ -1196,3 +1195,5 @@ func handleHeartbeat(conn *net.TCPConn, client *Client, header *Header, body []b
 	client.lastActive = time.Now()
 	return 0
 }
+=======
+>>>>>>> dfe08f8a932801aee1a139b3e821d1215bd81bdb

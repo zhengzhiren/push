@@ -13,8 +13,8 @@
 	},
 
 	"redis" : {
-		"server"		: "10.154.156.122:6380",
-		"pass"			: "rpasswd",
+		"server"		: "10.154.156.122:6379",
+		"pass"			: "",
 		"poolsize"		: 50,
 		"retry"			: 3
 	},
