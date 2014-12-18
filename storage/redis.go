@@ -36,10 +36,13 @@ func newRedisStorage(server string, pass string, poolsize int, retry int) *Redis
 					log.Infof("failed to connect Redis (%s), (%s)", server, err)
 					return nil, err
 				}
-				if _, err := c.Do("AUTH", pass); err != nil {
-					log.Infof("failed to auth Redis (%s), (%s)", server, err)
-					return nil, err
-
+				if pass != "" {
+					if _, err := c.Do("AUTH", pass); err != nil {
+						log.Infof("failed to auth Redis (%s), (%s)", server, err)
+						return nil, err
+					}
+				} else {
+					log.Infof("Skipped AUTH with Redis")
 				}
 				log.Infof("connected with Redis (%s)", server)
 				return c, err
@@ -169,6 +172,28 @@ func (r *RedisStorage) RemoveDevice(serverName, devId string) error {
 		return err
 	}
 	return nil
+}
+
+func (r *RedisStorage) GetServerNames() ([]string, error) {
+	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
+	if err != nil {
+		log.Errorf("failed to get comet nodes KEYS:", err)
+		return nil, err
+	}
+	var names []string
+	for _, key := range keys {
+		names = append(names, strings.TrimPrefix(key, "db_comet_"))
+	}
+	return names, nil
+}
+
+func (r *RedisStorage) GetDeviceIds(serverName string) ([]string, error) {
+	fields, err := redis.Strings(r.Do("HKEYS", "db_comet_"+serverName))
+	if err != nil {
+		log.Errorf("failed to get comet nodes KEYS:", err)
+		return nil, err
+	}
+	return fields, nil
 }
 
 func (r *RedisStorage) CheckDevice(devId string) (string, error) {

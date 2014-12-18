@@ -1,6 +1,8 @@
 package stats
 
 import (
+	"strings"
+
 	"github.com/chenyf/push/storage"
 )
 
@@ -18,11 +20,15 @@ type Stats struct {
 	ReplyTooLate       int
 	QueryOnlineDevices int
 	QueryDeviceInfo    int
+	Devices            map[string]int
+	Comets             map[string]int
 }
 
 func GetStats() (*Stats, error) {
 	stats := Stats{
 		CtrlStatistics: make(map[string]*CtrlStats),
+		Devices:        make(map[string]int),
+		Comets:         make(map[string]int),
 	}
 	services, err := storage.Instance.GetStatsServices()
 	if err != nil {
@@ -42,6 +48,17 @@ func GetStats() (*Stats, error) {
 	stats.QueryOnlineDevices, _ = GetStatsQueryOnlineDevices()
 	stats.QueryDeviceInfo, _ = GetStatsQueryDeviceInfo()
 	stats.ReplyTooLate, _ = GetStatsReplyTooLate()
+
+	servers, _ := storage.Instance.GetServerNames()
+	for _, server := range servers {
+		ids, _ := storage.Instance.GetDeviceIds(server)
+		stats.Comets[server] = len(ids)
+		for _, id := range ids {
+			devType := strings.Split(id, "-")[0]
+			stats.Devices[devType]++
+		}
+	}
+
 	return &stats, nil
 }
 
