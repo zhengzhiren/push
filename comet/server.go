@@ -978,12 +978,12 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	regid := RegId(client.devId, appid, request.Uid)
 	regapp, ok := client.RegApps[appid]
 	if !ok {
-		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
+		log.Warnf("%s: 'pkg' %s hasn't register", client.devId, request.Pkg)
 		onReply(5, appid, request.Pkg, 0)
 		return 0
 	}
 	if regapp.RegId != regid {
-		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
+		log.Warnf("%s: 'pkg' %s hasn't register", client.devId, request.Pkg)
 		onReply(10, appid, request.Pkg, 0)
 		return 0
 	}
