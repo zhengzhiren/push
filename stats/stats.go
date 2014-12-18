@@ -54,7 +54,13 @@ func GetStats() (*Stats, error) {
 		ids, _ := storage.Instance.GetDeviceIds(server)
 		stats.Comets[server] = len(ids)
 		for _, id := range ids {
-			devType := strings.Split(id, "-")[0]
+			const sep string = "-"
+			var devType string
+			if strings.Index(id, sep) >= 0 {
+				devType = strings.Split(id, sep)[0]
+			} else {
+				devType = "Unknown"
+			}
 			stats.Devices[devType]++
 		}
 	}
