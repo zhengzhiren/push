@@ -3,13 +3,14 @@ package comet
 import (
 	"io"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
-	"sort"
 	//"strings"
 	"encoding/json"
 	"github.com/chenyf/push/auth"
+	"github.com/chenyf/push/stats"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/utils/safemap"
@@ -32,7 +33,7 @@ type Client struct {
 	lastActive      time.Time
 	WaitingChannels map[uint32]chan *Message
 	ctrl            chan bool // notify sendout routing to quit when close connection
-	broken			bool
+	broken          bool
 }
 
 type Server struct {
@@ -119,7 +120,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 	client := &Client{
 		devId:           devid,
 		RegApps:         make(map[string]*RegApp),
-		nextSeq:         100,  //sequence number begin from 100 each time
+		nextSeq:         100, //sequence number begin from 100 each time
 		lastActive:      time.Now(),
 		outMsgs:         make(chan *Pack, 100),
 		WaitingChannels: make(map[uint32]chan *Message, 10), //TODO
@@ -317,8 +318,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
 			log.Debugf("%s: heartbeat timeout", client.devId)
 			client.SendMessage(MSG_CHECK, 0, nil, nil)
-			client.lastActive = now
-			//break
+			break
 		}
 
 		//conn.SetReadDeadline(time.Now().Add(this.readTimeout))
@@ -390,6 +390,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		}
 
 		if handler, ok := this.funcMap[header.Type]; ok {
+			client.lastActive = time.Now()
 			if ret := handler(conn, client, &header, dataBuf); ret < 0 {
 				break
 			}
@@ -475,7 +476,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 }
 
 func inBlacklist(server *Server, devId string) bool {
-	for _, s := range(server.blackDevices) {
+	for _, s := range server.blackDevices {
 		if s == devId {
 			return true
 		}
@@ -784,18 +785,19 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 		ch <- &Message{Header: *header, Data: body}
 	} else {
 		log.Warnf("no waiting channel for seq: %d, device: %s", header.Seq, client.devId)
+		stats.ReplyTooLate()
 	}
 	return 0
 }
 
 func addSendids(client *Client, regId string, regapp *RegApp, sendids []string) bool {
 	var added []string
-	for _, s1 := range(sendids) {
+	for _, s1 := range sendids {
 		if s1 == "" {
 			continue
 		}
 		found := false
-		for _, s2 := range(regapp.SendIds) {
+		for _, s2 := range regapp.SendIds {
 			if s1 == s2 {
 				found = true
 				break

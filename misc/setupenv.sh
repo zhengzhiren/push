@@ -5,8 +5,8 @@ WORK_ROOT=/letv
 
 THIS_DIR=$(dirname $(readlink -f $0) )
 
-mkdir -p $WORK_ROOT/log/push/{pushd,pushapi,notifyapi}
-chown -R $USER:$USER $WORK_ROOT/log/push/{pushd,pushapi,notifyapi}
+mkdir -p $WORK_ROOT/logs/push/{pushd,pushapi,notifyapi}
+chown -R $USER:$USER $WORK_ROOT/logs/push/{pushd,pushapi,notifyapi}
 
 mkdir -p $WORK_ROOT/run/push/{pushd,pushapi,notifyapi}
 chown -R $USER:$USER $WORK_ROOT/run/push/{pushd,pushapi,notifyapi}

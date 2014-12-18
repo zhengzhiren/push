@@ -146,7 +146,6 @@ func main() {
 
 func startHttp(addr string, cmdTimeout int) {
 	log.Infof("Starting HTTP server on %s, command timeout: %ds", addr, cmdTimeout)
-	newStats()
 	commandTimeout = cmdTimeout
 
 	handler := rest.ResourceHandler{

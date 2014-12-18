@@ -19,6 +19,7 @@ import (
 	"github.com/chenyf/push/cloud"
 	"github.com/chenyf/push/devcenter"
 	"github.com/chenyf/push/mq"
+	"github.com/chenyf/push/stats"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 )
@@ -97,7 +98,7 @@ func AuthMiddlewareFunc(h rest.HandlerFunc) rest.HandlerFunc {
 }
 
 func getDeviceList(w rest.ResponseWriter, r *rest.Request) {
-	Stats.queryOnlineDevices()
+	stats.QueryOnlineDevices()
 
 	devInfoList := []devInfo{}
 	r.ParseForm()
@@ -139,7 +140,7 @@ func getDevice(w rest.ResponseWriter, r *rest.Request) {
 		return
 	}
 
-	Stats.queryDeviceInfo()
+	stats.QueryDeviceInfo()
 
 	if serverName, err := storage.Instance.CheckDevice(devId); err == nil && serverName != "" {
 		resp := cloud.ApiResponse{}
@@ -181,33 +182,33 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 		return
 	}
 
-	Stats.cmd(param.Service)
+	stats.Cmd(param.Service)
 	resp := cloud.ApiResponse{}
 	result, err := rpcClient.Control(devId, param.Service, param.Cmd)
 	if err != nil {
 		if _, ok := err.(*mq.NoDeviceError); ok {
-			Stats.cmdOffline(param.Service)
+			stats.CmdOffline(param.Service)
 			rest.NotFound(w, r)
 			return
 		} else if _, ok := err.(*mq.TimeoutError); ok {
-			Stats.cmdTimeout(param.Service)
+			stats.CmdTimeout(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_TIMEOUT
 			resp.ErrMsg = fmt.Sprintf("recv response timeout [%s]", devId)
 		} else if _, ok := err.(*mq.InvalidServiceError); ok {
-			Stats.cmdInvalidService(param.Service)
+			stats.CmdInvalidService(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_INVALID_SERVICE
 			resp.ErrMsg = fmt.Sprintf("Device [%s] has no service [%s]", devId, param.Service)
 		} else if _, ok := err.(*mq.SdkError); ok {
-			Stats.cmdOtherError(param.Service)
+			stats.CmdOtherError(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_SDK_ERROR
 			resp.ErrMsg = fmt.Sprintf("Error when calling service [%s] on [%s]", param.Service, devId)
 		} else {
-			Stats.cmdOtherError(param.Service)
+			stats.CmdOtherError(param.Service)
 			resp.ErrNo = cloud.ERR_CMD_OTHER
 			resp.ErrMsg = err.Error()
 		}
 	} else {
-		Stats.cmdSuccess(param.Service)
+		stats.CmdSuccess(param.Service)
 		resp.ErrNo = cloud.ERR_NOERROR
 		resp.Data = result
 	}
@@ -218,16 +219,19 @@ func controlDevice(w rest.ResponseWriter, r *rest.Request) {
 func getStats(w rest.ResponseWriter, r *rest.Request) {
 	resp := cloud.ApiResponse{
 		ErrNo: cloud.ERR_NOERROR,
-		Data:  Stats,
 	}
+	resp.Data, _ = stats.GetStats()
 	w.WriteJson(resp)
 }
 
 func deleteStats(w rest.ResponseWriter, r *rest.Request) {
-	newStats()
-	resp := cloud.ApiResponse{
-		ErrNo: cloud.ERR_NOERROR,
+	if err := stats.ClearStats(); err != nil {
+		rest.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	resp := cloud.ApiResponse{}
+	resp.ErrNo = cloud.ERR_NOERROR
+
 	w.WriteJson(resp)
 }
 
@@ -482,30 +486,30 @@ func postRouterCommand(w rest.ResponseWriter, r *rest.Request) {
 		}
 	}
 
-	Stats.cmd(serviceName)
+	stats.Cmd(serviceName)
 	result, err := rpcClient.Control(rid, serviceName, cmd)
 	if err != nil {
 		if _, ok := err.(*mq.NoDeviceError); ok {
-			Stats.cmdOffline(serviceName)
+			stats.CmdOffline(serviceName)
 			resp.Status = STATUS_ROUTER_OFFLINE
 			resp.Error = fmt.Sprintf("device (%s) offline", rid)
 		} else if _, ok := err.(*mq.TimeoutError); ok {
-			Stats.cmdTimeout(serviceName)
+			stats.CmdTimeout(serviceName)
 			resp.Status = STATUS_OTHER_ERR
 			resp.Error = fmt.Sprintf("recv response timeout [%s]", rid)
 		} else if _, ok := err.(*mq.InvalidServiceError); ok {
-			Stats.cmdInvalidService(serviceName)
+			stats.CmdInvalidService(serviceName)
 			resp.Status = STATUS_OTHER_ERR
 			resp.Error = fmt.Sprintf("Device [%s] has no service [%s]", rid, serviceName)
 		} else {
-			Stats.cmdOtherError(serviceName)
+			stats.CmdOtherError(serviceName)
 			resp.Status = STATUS_OTHER_ERR
 			resp.Error = err.Error()
 		}
 		w.WriteJson(resp)
 		return
 	} else {
-		Stats.cmdSuccess(serviceName)
+		stats.CmdSuccess(serviceName)
 		if len(rid) == len("c80e774a1e78") {
 			// reply from gibbon agent
 			w.(http.ResponseWriter).Write([]byte(result))

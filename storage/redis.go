@@ -206,6 +206,208 @@ func (r *RedisStorage) InitDevices(serverName string) error {
 	return err
 }
 
+func (r *RedisStorage) initStatsService(service string) error {
+	_, err := redis.Int(r.Do("SADD", "stats_service", service))
+	if err != nil {
+		log.Warnf("redis: SADD failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsServices() ([]string, error) {
+	v, err := redis.Strings(r.Do("SMEMBERS", "stats_service"))
+	if err != nil {
+		log.Warnf("redis: SMEMBERS failed, (%s)", err)
+		return nil, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncCmd(service string) error {
+	if err := r.initStatsService(service); err != nil {
+		return err
+	}
+	_, err := redis.Int(r.Do("INCR", "stats_cmd_"+service))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsCmd(service string) (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_cmd_"+service))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncCmdSuccess(service string) error {
+	if err := r.initStatsService(service); err != nil {
+		return err
+	}
+	_, err := redis.Int(r.Do("INCR", "stats_cmd_success_"+service))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsCmdSuccess(service string) (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_cmd_success_"+service))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncCmdTimeout(service string) error {
+	if err := r.initStatsService(service); err != nil {
+		return err
+	}
+	_, err := redis.Int(r.Do("INCR", "stats_cmd_timeout_"+service))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsCmdTimeout(service string) (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_cmd_timeout_"+service))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncCmdOffline(service string) error {
+	if err := r.initStatsService(service); err != nil {
+		return err
+	}
+	_, err := redis.Int(r.Do("INCR", "stats_cmd_offline_"+service))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsCmdOffline(service string) (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_cmd_offline_"+service))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncCmdInvalidService(service string) error {
+	if err := r.initStatsService(service); err != nil {
+		return err
+	}
+	_, err := redis.Int(r.Do("INCR", "stats_cmd_invalid_service_"+service))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsCmdInvalidService(service string) (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_cmd_invalid_service_"+service))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncCmdOtherError(service string) error {
+	if err := r.initStatsService(service); err != nil {
+		return err
+	}
+	_, err := redis.Int(r.Do("INCR", "stats_cmd_other_error_"+service))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsCmdOtherError(service string) (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_cmd_other_error_"+service))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncQueryOnlineDevices() error {
+	_, err := redis.Int(r.Do("INCR", "stats_query_online_devices"))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsQueryOnlineDevices() (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_query_online_devices"))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncQueryDeviceInfo() error {
+	_, err := redis.Int(r.Do("INCR", "stats_query_device_info"))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsQueryDeviceInfo() (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_query_device_info"))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) IncReplyTooLate() error {
+	_, err := redis.Int(r.Do("INCR", "stats_reply_too_late"))
+	if err != nil {
+		log.Warnf("redis: INCR failed, (%s)", err)
+	}
+	return err
+}
+
+func (r *RedisStorage) GetStatsReplyTooLate() (int, error) {
+	v, err := redis.Int(r.Do("GET", "stats_reply_too_late"))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (r *RedisStorage) ClearStats() error {
+	services, err := r.GetStatsServices()
+	for _, service := range services {
+		_, err := redis.Int(r.Do("DEL",
+			"stats_cmd_"+service,
+			"stats_cmd_success_"+service,
+			"stats_cmd_timeout_"+service,
+			"stats_cmd_offline_"+service,
+			"stats_cmd_invalid_service_"+service,
+			"stats_cmd_other_error_"+service,
+		))
+		if err != nil {
+			return err
+		}
+	}
+	_, err = redis.Int(r.Do("DEL",
+		"stats_query_online_devices",
+		"stats_query_device_info",
+		"stats_reply_too_late",
+		"stats_service"))
+	return err
+}
+
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
 	ret, err := r.Do("HGETALL", db)
 	if err != nil {

@@ -1,10 +1,12 @@
 <seelog minlevel="trace">
 	<outputs formatid="common">
 		<console />
-		<rollingfile type="size" filename="/letv/log/push/pushd/pushd.log" maxsize="102400000" maxrolls="5"/>
+		<rollingfile type="date" filename="/letv/logs/push/pushd/pushd.log" datepattern="02.01.2006" maxrolls="10"/>
+		<filter levels="warn,error,critical">
+			<rollingfile type="date" filename="/letv/logs/push/pushd/errors.log" datepattern="02.01.2006" maxrolls="10"/>
+		</filter>
 	</outputs>
 	<formats>
 		<format id="common" format="%Date/%Time.%Ms [%LEV] %Msg%n" />
 	</formats>
 </seelog>
-

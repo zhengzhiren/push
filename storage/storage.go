@@ -34,16 +34,16 @@ type RawMessage struct {
 		TTL int64 `json:"ttl,omitempty"`
 		TTS int64 `json:"tts,omitempty"`
 	} `json:"options"`
-	SendId        string `json:"sendid,omitempty"`
+	SendId string `json:"sendid,omitempty"`
 }
 
 type RawApp struct {
 	Pkg    string `json:"pkg"`
 	UserId string `json:"userid"`
-	Name string `json:"name"`
+	Name   string `json:"name"`
 	Mobile string `json:"mobile"`
-	Email string `json:"email"`
-	Desc string `json:"desc"`
+	Email  string `json:"email"`
+	Desc   string `json:"desc"`
 	AppKey string `json:"appkey,omitempty"`
 	AppSec string `json:"appsec,omitempty"`
 }
@@ -55,10 +55,46 @@ type Storage interface {
 	AddDevice(serverName, devId string) error
 	RemoveDevice(serverName, devId string) error
 
+	//
 	// check if the device Id exists, return the server name
+	//
 	CheckDevice(devId string) (string, error)
 	RefreshDevices(serverName string, timeout int) error
 	InitDevices(serverName string) error
+
+	//
+	// statistics
+	//
+	GetStatsServices() ([]string, error)
+
+	IncCmd(service string) error
+	GetStatsCmd(service string) (int, error)
+
+	IncCmdSuccess(service string) error
+	GetStatsCmdSuccess(service string) (int, error)
+
+	IncCmdTimeout(service string) error
+	GetStatsCmdTimeout(service string) (int, error)
+
+	IncCmdOffline(service string) error
+	GetStatsCmdOffline(service string) (int, error)
+
+	IncCmdInvalidService(service string) error
+	GetStatsCmdInvalidService(service string) (int, error)
+
+	IncCmdOtherError(service string) error
+	GetStatsCmdOtherError(service string) (int, error)
+
+	IncQueryOnlineDevices() error
+	GetStatsQueryOnlineDevices() (int, error)
+
+	IncQueryDeviceInfo() error
+	GetStatsQueryDeviceInfo() (int, error)
+
+	IncReplyTooLate() error
+	GetStatsReplyTooLate() (int, error)
+
+	ClearStats() error
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
