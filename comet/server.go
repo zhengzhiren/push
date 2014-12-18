@@ -33,7 +33,7 @@ type Client struct {
 	lastActive      time.Time
 	WaitingChannels map[uint32]chan *Message
 	ctrl            chan bool // notify sendout routing to quit when close connection
-	broken          bool
+	Broken          bool
 }
 
 type Server struct {
@@ -125,7 +125,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 		outMsgs:         make(chan *Pack, 100),
 		WaitingChannels: make(map[uint32]chan *Message, 10), //TODO
 		ctrl:            make(chan bool),
-		broken:          false,
+		Broken:          false,
 	}
 	DevicesMap.Set(devid, client)
 
@@ -137,13 +137,13 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 				b, _ := pack.msg.Header.Serialize()
 				if _, err := conn.Write(b); err != nil {
 					log.Infof("sendout header failed, %s", err)
-					client.broken = true
+					client.Broken = true
 					return
 				}
 				if pack.msg.Data != nil {
 					if _, err := conn.Write(pack.msg.Data); err != nil {
 						log.Infof("sendout body failed, %s", err)
-						client.broken = true
+						client.Broken = true
 						return
 					}
 				}
@@ -309,8 +309,8 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			break
 		default:
 		}
-		if client.broken {
-			log.Debugf("%s: client broken", client.devId)
+		if client.Broken {
+			log.Debugf("%s: client Broken", client.devId)
 			break
 		}
 
@@ -536,11 +536,22 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
 
-	if DevicesMap.Check(devid) {
+	for {
+		x := DevicesMap.Get(devid)
+		if x != nil {
+			client := x.(*Client)
+			client.Broken = true
+			time.Sleep(1 * time.Second)
+			log.Infof("%s (%p): wait old connection close", devid, conn)
+		} else {
+			break
+		}
+	}
+	/*if DevicesMap.Check(devid) {
 		log.Infof("%p: device (%s) init in this server already", conn, devid)
 		conn.Close()
 		return nil
-	}
+	}*/
 
 	// check if the device Id has connected to other servers
 	serverName, err := storage.Instance.CheckDevice(devid)
