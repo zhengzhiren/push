@@ -571,6 +571,8 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	reply := InitReplyMessage{
 		Result: 0,
+		HB: 30,
+		Reconn: 60,
 	}
 
 	if request.Sync == 0 {

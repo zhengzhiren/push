@@ -79,6 +79,8 @@ type Base2 struct {
 type InitReplyMessage struct {
 	Result int     `json:"result"`
 	Apps   []Base2 `json:"apps,omitempty"`
+	HB     int32   `json:"hb,omitempty"`
+	Reconn int32   `json:"reconn,omitempty"`
 }
 type RegisterMessage struct {
 	AppId  string `json:"appid"`
