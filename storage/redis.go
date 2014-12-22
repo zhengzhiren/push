@@ -79,7 +79,7 @@ func (r *RedisStorage) Do(commandName string, args ...interface{}) (interface{},
 }
 
 // 从存储后端获取 > 指定时间的所有消息
-func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, msgId int64) []*RawMessage {
+func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64, msgId int64) []*RawMessage {
 	key := "db_offline_msg_" + appId
 	ret, err := redis.Strings(r.Do("HKEYS", key))
 	if err != nil {

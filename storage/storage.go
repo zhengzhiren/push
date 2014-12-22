@@ -49,7 +49,7 @@ type RawApp struct {
 }
 
 type Storage interface {
-	GetOfflineMsgs(appId string, regId string, ctime int64) []*RawMessage
+	GetOfflineMsgs(appId string, regId string, regTime int64, msgId int64) []*RawMessage
 	GetRawMsg(appId string, msgId int64) *RawMessage
 
 	AddDevice(serverName, devId string) error

@@ -3,6 +3,7 @@ package comet
 import (
 	"fmt"
 	"sync"
+	"time"
 	"encoding/json"
 	"crypto/sha1"
 	log "github.com/cihub/seelog"
@@ -12,6 +13,7 @@ import (
 // register app in storage
 type AppInfo struct {
 	AppId		string		`json:"app_id"`
+	RegTime		int64		`json:"regtime"`
 	UserId		string		`json:"uid,omitempty"`
 	LastMsgId	int64		`json:"last_msgid"`
 	Topics		[]string	`json:"topics"`
@@ -104,6 +106,7 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 	} else {
 	// not found from storage
 		info.AppId = appId
+		info.RegTime = time.Now().Unix()
 		info.UserId = userId
 		info.LastMsgId = -1
 	}
@@ -125,7 +128,7 @@ func (this *AppManager)UnregisterApp(devId string, regId string, appId string, u
 		return
 	}
 	// the regapp is still there
-	//storage.Instance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
+	storage.Instance.HashDel(fmt.Sprintf("db_app_%s", appId), regId)
 	storage.Instance.HashDel(fmt.Sprintf("db_device_%s", devId), appId)
 	if userId != "" {
 		storage.Instance.HashDel(fmt.Sprintf("db_user_%s", userId), regId)

@@ -156,7 +156,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	onReply(0, request.AppId, rawapp.Pkg, regid)
 
 	// 处理离线消息
-	handleOfflineMsgs(client, regapp)
+	//handleOfflineMsgs(client, regapp)
 	return 0
 }
 
@@ -326,7 +326,7 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 	onReply(0, appid, request.Pkg, regid)
 
 	// 处理离线消息
-	handleOfflineMsgs(client, regapp)
+	//handleOfflineMsgs(client, regapp)
 	return 0
 }
 

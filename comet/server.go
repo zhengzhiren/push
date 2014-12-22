@@ -410,7 +410,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 }
 
 func handleOfflineMsgs(client *Client, regapp *RegApp) {
-	msgs := storage.Instance.GetOfflineMsgs(regapp.AppId, regapp.RegId, regapp.LastMsgId)
+	msgs := storage.Instance.GetOfflineMsgs(regapp.AppId, regapp.RegId, regapp.RegTime, regapp.LastMsgId)
 	if len(msgs) == 0 {
 		return
 	}
