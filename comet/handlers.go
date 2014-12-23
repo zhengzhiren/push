@@ -318,8 +318,13 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 			}
 		}
 	}*/
-	if request.Token != "" {
-		ok, reguid = auth.Instance.Auth(request.Token)
+
+	token := request.Token
+	if token == "" {
+		token = request.Uid
+	}
+	if token != "" {
+		ok, reguid = auth.Instance.Auth(token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
 			onReply(3, appid, request.Pkg, "")

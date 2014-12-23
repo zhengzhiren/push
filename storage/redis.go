@@ -564,3 +564,12 @@ func (r *RedisStorage) SetMembers(key string) ([]string, error) {
 	}
 	return ret, err
 }
+
+func (r *RedisStorage) KeyExpire(key string, ttl int32) (int, error) {
+	ret, err := redis.Int(r.Do("EXPIRE", key, ttl))
+	if err != nil {
+		log.Warnf("redis: EXPIRE failed, (%s)", err)
+	}
+	return ret, err
+}
+

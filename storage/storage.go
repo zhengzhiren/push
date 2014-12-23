@@ -116,6 +116,7 @@ type Storage interface {
 	SetDel(key string, val string) (int, error)
 	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
+	KeyExpire(key string, ttl int32) (int, error)
 }
 
 var (
