@@ -84,7 +84,37 @@ func (this *AppManager)DelApp(regId string) {
 func (this *AppManager)RegisterApp(devId string, regId string, appId string, userId string) (*RegApp) {
 	this.lock.RLock()
 	if _, ok := this.appMap[regId]; ok {
-		log.Warnf("%s: regid %s in memory already", devId, regId)
+		log.Errorf("%s: regid %s in memory already", devId, regId)
+		this.lock.RUnlock()
+		return nil
+	}
+	this.lock.RUnlock()
+
+	var info AppInfo
+	info.AppId = appId
+	info.RegTime = time.Now().Unix()
+	info.UserId = userId
+	info.LastMsgId = -1
+	b, _ := json.Marshal(&info)
+
+	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
+		return nil
+	}
+	// 记录这个设备上有哪些app
+	storage.Instance.HashSet(fmt.Sprintf("db_device_%s", devId), appId, []byte(regId))
+	// 记录这个用户有哪些app
+	if userId != "" {
+		storage.Instance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
+	}
+
+	regapp := this.AddApp(devId, regId, &info)
+	return regapp
+}
+
+func (this *AppManager)RegisterApp2(devId string, regId string, appId string, userId string) (*RegApp) {
+	this.lock.RLock()
+	if _, ok := this.appMap[regId]; ok {
+		log.Errorf("%s: regid %s in memory already", devId, regId)
 		this.lock.RUnlock()
 		return nil
 	}
@@ -96,27 +126,15 @@ func (this *AppManager)RegisterApp(devId string, regId string, appId string, use
 	if err != nil {
 		return nil
 	}
-	if val != nil {
-	// found in storage
-		if err := json.Unmarshal(val, &info); err != nil {
-			log.Warnf("invalid app info from storage")
-			//TODO need replace it
-			return nil
-		}
-	} else {
-	// not found from storage
-		info.AppId = appId
-		info.RegTime = time.Now().Unix()
-		info.UserId = userId
-		info.LastMsgId = -1
+	if val == nil {
+		return nil
+	}
+	if err := json.Unmarshal(val, &info); err != nil {
+		log.Warnf("invalid app info from storage")
+		//TODO need replace it
+		return nil
 	}
 	regapp := this.AddApp(devId, regId, &info)
-	// 记录这个设备上有哪些app
-	storage.Instance.HashSet(fmt.Sprintf("db_device_%s", devId), info.AppId, []byte(regId))
-	// 记录这个用户有哪些app
-	if userId != "" {
-		storage.Instance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
-	}
 	return regapp
 }
 

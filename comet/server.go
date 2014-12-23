@@ -308,14 +308,14 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		default:
 		}
 		if client.Broken {
-			log.Debugf("%s: client Broken", client.devId)
+			log.Debugf("%s: client broken", client.devId)
 			break
 		}
 
 		now := time.Now()
 		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
 			log.Debugf("%s: heartbeat timeout", client.devId)
-			client.SendMessage(MSG_CHECK, 0, nil, nil)
+			//client.SendMessage(MSG_CHECK, 0, nil, nil)
 			break
 		}
 
@@ -554,12 +554,12 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	// check if the device Id has connected to other servers
 	serverName, err := storage.Instance.CheckDevice(devid)
 	if err != nil {
-		log.Errorf("failed to check device existence:", err)
+		log.Errorf("%s: failed to check device existence: (%s)", devid, err)
 		conn.Close()
 		return nil
 	}
 	if serverName != "" {
-		log.Warnf("device %s has connected with server [%s]", devid, serverName)
+		log.Warnf("%s: has connected with server (%s)", devid, serverName)
 		conn.Close()
 		return nil
 	}
@@ -575,13 +575,16 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		Reconn: 60,
 	}
 
+	// TODO: below code should check carefully
 	if request.Sync == 0 {
+	// client give me regapp infos
 		for _, info := range request.Apps {
 			if info.AppId == "" || info.RegId == "" {
 				log.Warnf("appid or regid is empty")
 				continue
 			}
-			regapp := AMInstance.RegisterApp(client.devId, info.RegId, info.AppId, "")
+			// these regapps should in storage already
+			regapp := AMInstance.RegisterApp2(client.devId, info.RegId, info.AppId, "")
 			if regapp != nil {
 				client.RegApps[info.AppId] = regapp
 			}
@@ -601,6 +604,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 			if err := json.Unmarshal(b, &rawapp); err != nil {
 				continue
 			}
+			// add into memory
 			regapp := AMInstance.AddApp(client.devId, regid, info)
 			client.RegApps[info.AppId] = regapp
 			reply.Apps = append(reply.Apps, Base2{AppId: info.AppId, RegId: regid, Pkg: rawapp.Pkg})

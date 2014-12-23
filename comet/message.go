@@ -86,8 +86,8 @@ type RegisterMessage struct {
 	AppId  string `json:"appid"`
 	AppKey string `json:"appkey"`
 	RegId  string `json:"regid"`
-	Uid    string `json:"uid,omitempty"`
 	Token  string `json:"token,omitempty"`
+	Uid    string `json:"uid,omitempty"`
 }
 type RegisterReplyMessage struct {
 	Result int    `json:"result"`
@@ -153,9 +153,9 @@ type CommandReplyMessage struct {
 	Status int    `json:"status"`
 	Result string `json:"result"`
 }
-
 type Register2Message struct {
 	Pkg     string   `json:"pkg"`
+	Token   string   `json:"token,omitempty"`
 	Uid     string   `json:"uid,omitempty"`
 	SendIds []string `json:"sendids"`
 }

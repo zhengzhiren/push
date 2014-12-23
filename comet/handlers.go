@@ -74,6 +74,7 @@ func delSendid(client *Client, regId string, regapp *RegApp, sendid string) bool
 }
 
 // app注册后，才可以接收消息
+// 允许重复注册
 func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s: REGISTER body(%s)", client.devId, body)
 	var request RegisterMessage
@@ -119,6 +120,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 	var reguid string = ""
 	var ok bool
+	/*
 	if request.Uid != "" {
 		reguid = request.Uid
 	} else {
@@ -130,21 +132,31 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 				return 0
 			}
 		}
+	}*/
+	if request.Token != "" {
+		ok, reguid = auth.Instance.Auth(request.Token)
+		if !ok {
+			log.Warnf("%s: auth failed", client.devId)
+			onReply(3, request.AppId, "", "")
+			return 0
+		}
 	}
-
 	regid := RegId(client.devId, request.AppId, reguid)
 	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, reguid, regid)
 	if regapp, ok := client.RegApps[request.AppId]; ok {
-		// 已经在内存中，直接返回
+	// 已经在内存中
 		if regapp.RegId == regid {
+		// regid一致，直接返回注册成功
 			onReply(0, request.AppId, rawapp.Pkg, regid)
 			return 0
 		} else {
+		// regid不一致，不允许注册
 			onReply(10, request.AppId, rawapp.Pkg, regid)
 			return 0
 		}
 	}
 
+	// 首次注册
 	regapp := AMInstance.RegisterApp(client.devId, regid, request.AppId, reguid)
 	if regapp == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
@@ -291,8 +303,30 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 	appid := string(val)
-	regid := RegId(client.devId, appid, request.Uid)
 
+	var reguid string = ""
+	var ok bool
+	/*if request.Uid != "" {
+		reguid = request.Uid
+	} else {
+		if request.Token != "" {
+			ok, reguid = auth.Instance.Auth(request.Token)
+			if !ok {
+				log.Warnf("%s: auth failed", client.devId)
+				onReply(3, appid, request.Pkg, "")
+				return 0
+			}
+		}
+	}*/
+	if request.Token != "" {
+		ok, reguid = auth.Instance.Auth(request.Token)
+		if !ok {
+			log.Warnf("%s: auth failed", client.devId)
+			onReply(3, appid, request.Pkg, "")
+			return 0
+		}
+	}
+	regid := RegId(client.devId, appid, reguid)
 	if regapp, ok := client.RegApps[appid]; ok {
 		// 已经在内存中，修改sendids后返回
 		if regapp.RegId == regid {
@@ -309,8 +343,8 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 		}
 	}
 
-	// 内存中没有，先到app管理中心去注册
-	regapp := AMInstance.RegisterApp(client.devId, regid, appid, request.Uid)
+	// 首次注册
+	regapp := AMInstance.RegisterApp(client.devId, regid, appid, reguid)
 	if regapp == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
 		onReply(7, appid, request.Pkg, regid)

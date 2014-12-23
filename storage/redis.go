@@ -94,13 +94,16 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 	for i := range ret {
 		var (
 			idx    int64
+			ctime  int64
 			expire int64
 		)
-		if _, err := fmt.Sscanf(ret[i], "%v_%v", &idx, &expire); err != nil {
+		if _, err := fmt.Sscanf(ret[i], "%v_%v_%v", &idx, &ctime, &expire); err != nil {
 			log.Warnf("invaild redis hash field:", err)
 			continue
 		}
-
+		if ctime <= regTime { // the message created before app register
+			continue
+		}
 		if idx <= msgId || expire <= now {
 			continue
 		} else {

@@ -118,7 +118,7 @@ func main() {
 			if m.Options.TTL > 0 {
 				_, err = storage.Instance.HashSet(
 					"db_offline_msg_"+m.AppId,
-					fmt.Sprintf("%v_%v", m.MsgId, m.Options.TTL+m.CTime), v)
+					fmt.Sprintf("%v_%v_%v", m.MsgId, m.CTime, m.Options.TTL+m.CTime), v)
 				if err != nil {
 					log.Infof("failed to put offline Msg into redis:", err)
 					continue
