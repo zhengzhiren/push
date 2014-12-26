@@ -43,6 +43,19 @@ const (
 	MSG_CHECK             = uint8(100)
 )
 
+const (
+	ERR_INTERNAL          = 1000
+	ERR_INVALID_REQ       = 1001
+	ERR_INVALID_PARAMS    = 1002
+	ERR_INVALID_APPID     = 1003
+	ERR_INVALID_PKG       = 1004
+	ERR_AUTH              = 1005
+	ERR_REG_CONFLICT      = 1006
+	ERR_NOT_REG           = 1007
+	ERR_INVALID_REGID     = 1008
+
+)
+
 // msg to byte
 func (header *Header) Serialize() ([]byte, error) {
 	buf := new(bytes.Buffer)
@@ -78,6 +91,7 @@ type Base2 struct {
 }
 type InitReplyMessage struct {
 	Result int     `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
 	Apps   []Base2 `json:"apps,omitempty"`
 	HB     int32   `json:"hb,omitempty"`
 	Reconn int32   `json:"reconn,omitempty"`
@@ -91,6 +105,7 @@ type RegisterMessage struct {
 }
 type RegisterReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId  string `json:"appid"`
 	Pkg    string `json:"pkg,omitempty"`
 	RegId  string `json:"regid,omitempty"`
@@ -102,6 +117,7 @@ type UnregisterMessage struct {
 }
 type UnregisterReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId  string `json:"appid"`
 }
 type PushMessage struct {
@@ -122,6 +138,7 @@ type SubscribeMessage struct {
 }
 type SubscribeReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId  string `json:"appid"`
 	RegId  string `json:"regid"`
 }
@@ -132,6 +149,7 @@ type UnsubscribeMessage struct {
 }
 type UnsubscribeReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId  string `json:"appid"`
 	RegId  string `json:"regid"`
 }
@@ -141,6 +159,7 @@ type GetTopicsMessage struct {
 }
 type GetTopicsReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId string `json:"appid"`
 	RegId string `json:"regid"`
 	Topics []string `json:"topics"`
@@ -161,6 +180,7 @@ type Register2Message struct {
 }
 type Register2ReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId  string `json:"appid"`
 	Pkg    string `json:"pkg"`
 	RegId  string `json:"regid"`
@@ -172,6 +192,7 @@ type Unregister2Message struct {
 }
 type Unregister2ReplyMessage struct {
 	Result int    `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
 	AppId  string `json:"appid"`
 	Pkg    string `json:"pkg"`
 	SenderCnt int `json:"sendercnt"`

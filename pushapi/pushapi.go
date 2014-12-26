@@ -397,7 +397,12 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	var rawapp storage.RawApp
 	json.Unmarshal(b, &rawapp)
 
-	body, _ := ioutil.ReadAll(r.Body)
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Errorf("read request body failed: (%s) (%s)", r.Body, err)
+		errResponse(w, ERR_BAD_REQUEST, "failed read request body", 400)
+		return
+	}
 	// check sign
 	if sign != ADMIN_SIGN {
 		if utils.Sign(rawapp.AppSec, r.Method, r.URL.Path, body, date, r.Form) != sign {
@@ -409,7 +414,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	// decode JSON body
 	msg := storage.RawMessage{}
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Error(err)
+		log.Errorf("JSON decode failed: (%s) (%s)", body, err)
 		errResponse(w, ERR_BAD_REQUEST, "json decode body failed", 400)
 		return
 	}

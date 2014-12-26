@@ -80,8 +80,11 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	var request RegisterMessage
 	var reply RegisterReplyMessage
 
-	onReply := func(result int, appId string, pkg string, regId string) {
+	onReply := func(result int, msg string, appId string, pkg string, regId string) {
 		reply.Result = result
+		if result != 0 {
+			reply.ErrInfo = msg
+		}
 		reply.AppId = appId
 		reply.Pkg = pkg
 		reply.RegId = regId
@@ -90,12 +93,11 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		onReply(1, "", "", "")
+		onReply(ERR_INVALID_REQ, "invalid body", "", "", "")
 		return 0
 	}
 	if request.AppId == "" {
-		log.Warnf("%s: appid is empty", client.devId)
-		onReply(2, request.AppId, "", "")
+		onReply(ERR_INVALID_PARAMS, "'appid' is empty", request.AppId, "", "")
 		return 0
 	}
 
@@ -103,18 +105,17 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	b, err := storage.Instance.HashGet("db_apps", request.AppId)
 	if err != nil {
 		log.Warnf("%s: hashget 'db_apps' failed, (%s). appid (%s)", client.devId, request.AppId)
-		onReply(4, request.AppId, "", "")
+		onReply(ERR_INTERNAL, "server error", request.AppId, "", "")
 		return 0
 	}
 	if b == nil {
-		log.Warnf("%s: unknow appid (%s)", client.devId, request.AppId)
-		onReply(5, request.AppId, "", "")
+		onReply(ERR_INVALID_APPID, "unknown appid", request.AppId, "", "")
 		return 0
 	}
 
 	if err := json.Unmarshal(b, &rawapp); err != nil {
 		log.Warnf("%s: invalid data from storage. appid (%s)", client.devId, request.AppId)
-		onReply(6, request.AppId, "", "")
+		onReply(ERR_INTERNAL, "server error", request.AppId, "", "")
 		return 0
 	}
 
@@ -137,7 +138,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 		ok, reguid = auth.Instance.Auth(request.Token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			onReply(3, request.AppId, "", "")
+			onReply(ERR_AUTH, "auth failed", request.AppId, "", "")
 			return 0
 		}
 	}
@@ -147,11 +148,11 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	// 已经在内存中
 		if regapp.RegId == regid {
 		// regid一致，直接返回注册成功
-			onReply(0, request.AppId, rawapp.Pkg, regid)
+			onReply(0, "", request.AppId, rawapp.Pkg, regid)
 			return 0
 		} else {
 		// regid不一致，不允许注册
-			onReply(10, request.AppId, rawapp.Pkg, regid)
+			onReply(ERR_REG_CONFLICT, "reg conflict", request.AppId, rawapp.Pkg, regid)
 			return 0
 		}
 	}
@@ -160,12 +161,12 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	regapp := AMInstance.RegisterApp(client.devId, regid, request.AppId, reguid)
 	if regapp == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
-		onReply(5, request.AppId, "", "")
+		onReply(ERR_INTERNAL, "server error", request.AppId, "", "")
 		return 0
 	}
 	// 记录到client自己的hash table中
 	client.RegApps[request.AppId] = regapp
-	onReply(0, request.AppId, rawapp.Pkg, regid)
+	onReply(0, "", request.AppId, rawapp.Pkg, regid)
 
 	// 处理离线消息
 	//handleOfflineMsgs(client, regapp)
@@ -177,40 +178,43 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	var request UnregisterMessage
 	var reply UnregisterReplyMessage
 
-	onReply := func(result int, appId string) {
+	onReply := func(result int, msg string, appId string) {
 		reply.Result = result
+		if result != 0 {
+			reply.ErrInfo = msg
+		}
 		reply.AppId = appId
 		sendReply(client, MSG_UNREGISTER_REPLY, header.Seq, &reply)
 	}
 
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		onReply(1, "")
+		onReply(ERR_INVALID_REQ, "invalid body", "")
 		return 0
 	}
 
-	if request.AppId == "" || request.RegId == "" {
-		log.Warnf("%s: appid or regid is empty", client.devId)
-		onReply(2, request.AppId)
+	if request.AppId == "" {
+		onReply(ERR_INVALID_PARAMS, "'appid' is empty", request.AppId)
+		return 0
+	}
+	if request.RegId == "" {
+		onReply(ERR_INVALID_PARAMS, "'regid' is empty", request.AppId)
 		return 0
 	}
 
-	// unknown regid
 	var ok bool
 	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
-		log.Warnf("%s: unknown 'appid' %s", client.devId, request.AppId)
-		onReply(3, request.AppId)
+		onReply(ERR_NOT_REG, "hasn't register", request.AppId)
 		return 0
 	}
 	if regapp.RegId != request.RegId {
-		log.Warnf("%s: unmatch 'appid' & 'regid' %s %s", client.devId, request.AppId, request.RegId)
-		onReply(10, request.AppId)
+		onReply(ERR_INVALID_REGID, "registered with another regid", request.AppId)
 		return 0
 	}
 	AMInstance.UnregisterApp(client.devId, request.RegId, request.AppId, regapp.UserId)
 	delete(client.RegApps, request.AppId)
-	onReply(0, request.AppId)
+	onReply(0, "", request.AppId)
 	return 0
 }
 
@@ -269,8 +273,11 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 	var request Register2Message
 	var reply Register2ReplyMessage
 
-	onReply := func(result int, appId string, pkg string, regId string) {
+	onReply := func(result int, msg string, appId string, pkg string, regId string) {
 		reply.Result = result
+		if result != 0 {
+			reply.ErrInfo = msg
+		}
 		reply.AppId = appId
 		reply.Pkg = pkg
 		reply.RegId = regId
@@ -279,19 +286,19 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		onReply(1, "", "", "")
+		onReply(ERR_INVALID_REQ, "invalid body", "", "", "")
 		return 0
 	}
 	// check 'pkg'
 	if request.Pkg == "" {
 		log.Warnf("%s: 'pkg' is empty", client.devId)
-		onReply(2, "", "", "")
+		onReply(ERR_INVALID_PARAMS, "'pkg' is empty", "", "", "")
 		return 0
 	}
 	// check 'sendids'
 	if len(request.SendIds) == 0 {
 		log.Warnf("%s: 'sendids' is empty", client.devId)
-		onReply(3, "", request.Pkg, "")
+		onReply(ERR_INVALID_PARAMS, "'sendids' is empty", "", request.Pkg, "")
 		return 0
 	}
 
@@ -299,7 +306,7 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
 	if val == nil {
 		log.Warnf("%s: no such pkg '%s'", client.devId, request.Pkg)
-		onReply(4, "", request.Pkg, "")
+		onReply(ERR_INVALID_PKG, "unknown pkg", "", request.Pkg, "")
 		return 0
 	}
 	appid := string(val)
@@ -327,7 +334,7 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 		ok, reguid = auth.Instance.Auth(token)
 		if !ok {
 			log.Warnf("%s: auth failed", client.devId)
-			onReply(3, appid, request.Pkg, "")
+			onReply(ERR_AUTH, "auth failed", appid, request.Pkg, "")
 			return 0
 		}
 	}
@@ -336,14 +343,13 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 		// 已经在内存中，修改sendids后返回
 		if regapp.RegId == regid {
 			if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
-				onReply(6, appid, request.Pkg, regid)
+				onReply(ERR_INTERNAL, "server error", appid, request.Pkg, regid)
 				return 0
 			}
-			onReply(0, appid, request.Pkg, regid)
+			onReply(0, "", appid, request.Pkg, regid)
 			return 0
 		} else {
-			log.Warnf("%s: AMInstance register app failed", client.devId)
-			onReply(10, appid, request.Pkg, regid)
+			onReply(ERR_REG_CONFLICT, "registered with another regid", appid, request.Pkg, regid)
 			return 0
 		}
 	}
@@ -352,17 +358,17 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 	regapp := AMInstance.RegisterApp(client.devId, regid, appid, reguid)
 	if regapp == nil {
 		log.Warnf("%s: AMInstance register app failed", client.devId)
-		onReply(7, appid, request.Pkg, regid)
+		onReply(ERR_INTERNAL, "server error", appid, request.Pkg, regid)
 		return 0
 	}
 	// 记录到client管理的hash table中
 	client.RegApps[appid] = regapp
 
 	if ok := addSendids(client, regid, regapp, request.SendIds); !ok {
-		onReply(6, appid, request.Pkg, regid)
+		onReply(ERR_INTERNAL, "server error", appid, request.Pkg, regid)
 		return 0
 	}
-	onReply(0, appid, request.Pkg, regid)
+	onReply(0, "", appid, request.Pkg, regid)
 
 	// 处理离线消息
 	//handleOfflineMsgs(client, regapp)
@@ -374,8 +380,11 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	var request Unregister2Message
 	var reply Unregister2ReplyMessage
 
-	onReply := func(result int, appId string, pkg string, senderCnt int) {
+	onReply := func(result int, msg string, appId string, pkg string, senderCnt int) {
 		reply.Result = result
+		if result != 0 {
+			reply.ErrInfo = msg
+		}
 		reply.AppId = appId
 		reply.Pkg = pkg
 		reply.SenderCnt = senderCnt
@@ -384,18 +393,18 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
-		onReply(1, "", "", 0)
+		onReply(ERR_INVALID_REQ, "invalid body", "", "", 0)
 		return 0
 	}
 
 	if request.Pkg == "" {
 		log.Warnf("%s: 'pkg' is empty", client.devId)
-		onReply(2, "", "", 0)
+		onReply(ERR_INVALID_PARAMS, "'pkg' is empty", "", "", 0)
 		return 0
 	}
 	if request.SendId == "" {
 		log.Warnf("%s: 'sendid' is empty", client.devId)
-		onReply(3, "", request.Pkg, 0)
+		onReply(ERR_INVALID_PARAMS, "'sendid' is empty", "", request.Pkg, 0)
 		return 0
 	}
 
@@ -403,7 +412,7 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
 	if val == nil {
 		log.Warnf("%s: no such pkg '%s'", client.devId, request.Pkg)
-		onReply(4, "", request.Pkg, 0)
+		onReply(ERR_INVALID_PKG, "unknown pkg", "", request.Pkg, 0)
 		return 0
 	}
 	appid := string(val)
@@ -411,27 +420,26 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	regapp, ok := client.RegApps[appid]
 	if !ok {
 		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
-		onReply(5, appid, request.Pkg, 0)
+		onReply(ERR_NOT_REG, "hasn't register", appid, request.Pkg, 0)
 		return 0
 	}
 	if regapp.RegId != regid {
-		log.Warnf("%s: 'pkg' %s hasn't register %s", client.devId, request.Pkg)
-		onReply(10, appid, request.Pkg, 0)
+		onReply(ERR_INVALID_REGID, "registered with another regid", appid, request.Pkg, 0)
 		return 0
 	}
 	if ok := delSendid(client, regid, regapp, request.SendId); !ok {
-		onReply(6, appid, request.Pkg, 0)
+		onReply(ERR_INTERNAL, "server error", appid, request.Pkg, 0)
 		return 0
 	}
 	if len(regapp.SendIds) != 0 {
-		onReply(0, appid, request.Pkg, len(regapp.SendIds))
+		onReply(0, "", appid, request.Pkg, len(regapp.SendIds))
 		return 0
 	}
 
 	// remove it from memory when regapp.SendIds is empty
 	AMInstance.UnregisterApp(client.devId, regid, appid, request.Uid)
 	delete(client.RegApps, appid)
-	onReply(0, appid, request.Pkg, 0)
+	onReply(0, "", appid, request.Pkg, 0)
 	return 0
 }
 
