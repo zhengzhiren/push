@@ -1,4 +1,4 @@
-all: clean init pushd pushapi pushtest notifyapi tarball
+all: clean init pushd pushapi pushtest tarball
 
 init:
 	mkdir -p output
@@ -17,7 +17,7 @@ pushtest: init
 notifyapi: init
 	cd notifyapi && go build -o ../output/notifyapi/notifyapi
 
-tarball: init pushd pushapi pushtest notifyapi
+tarball: init pushd pushapi pushtest 
 	cp misc/* output/
 	cp -aR pushd/conf output/pushd/
 	cp -aR pushd/control.sh output/pushd/
