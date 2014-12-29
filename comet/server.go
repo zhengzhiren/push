@@ -149,11 +149,11 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 				if pack.reply != nil {
 					client.WaitingChannels[pack.msg.Header.Seq] = pack.reply
 				}
-				log.Infof("%s: send msg: (%d) (%d) (%s)",
+				log.Infof("%s: SEND (%d) (%s) seq(%d)",
 					client.devId,
 					pack.msg.Header.Type,
-					pack.msg.Header.Seq,
-					pack.msg.Data)
+					pack.msg.Data,
+					pack.msg.Header.Seq)
 				time.Sleep(10 * time.Millisecond)
 			//case seq := <-client.seqCh:
 			//	delete(WaitingChannels, seq)
@@ -539,7 +539,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		conn.Close()
 		return nil
 	}
-	log.Debugf("%p: INIT seq (%d) body(%s)", conn, header.Seq, data)
+	log.Debugf("%p: RECV INIT (%s) seq(%d)", conn, data, header.Seq)
 
 	for {
 		x := DevicesMap.Get(devid)
@@ -578,8 +578,8 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	reply := InitReplyMessage{
 		Result: 0,
-		HB:     30,
-		Reconn: 60,
+		//HB:     30,
+		//Reconn: 60,
 	}
 
 	// TODO: below code should check carefully

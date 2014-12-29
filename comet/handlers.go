@@ -76,7 +76,7 @@ func delSendid(client *Client, regId string, regapp *RegApp, sendid string) bool
 // app注册后，才可以接收消息
 // 允许重复注册
 func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: REGISTER body(%s)", client.devId, body)
+	log.Debugf("%s: RECV Register (%s)", client.devId, body)
 	var request RegisterMessage
 	var reply RegisterReplyMessage
 
@@ -174,7 +174,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 }
 
 func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: UNREGISTER body(%s)", client.devId, body)
+	log.Debugf("%s: RECV Unregister (%s)", client.devId, body)
 	var request UnregisterMessage
 	var reply UnregisterReplyMessage
 
@@ -219,7 +219,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 }
 
 func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: PUSH_REPLY body(%s)", client.devId, body)
+	log.Debugf("%s: RECV PushReply (%s)", client.devId, body)
 	var request PushReplyMessage
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
@@ -253,7 +253,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 }
 
 func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: CMD_REPLY body(%s)", client.devId, body)
+	log.Debugf("%s: RECV CmdReply (%s)", client.devId, body)
 
 	ch, ok := client.WaitingChannels[header.Seq]
 	if ok {
@@ -269,7 +269,7 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 
 // app注册后，才可以接收消息
 func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: REGISTER2 body(%s)", client.devId, body)
+	log.Debugf("%s: RECV Register2 (%s)", client.devId, body)
 	var request Register2Message
 	var reply Register2ReplyMessage
 
@@ -376,7 +376,7 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 }
 
 func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: UNREGISTER2 body(%s)", client.devId, body)
+	log.Debugf("%s: RECV Unregister2 (%s)", client.devId, body)
 	var request Unregister2Message
 	var reply Unregister2ReplyMessage
 
@@ -453,7 +453,7 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 **   6: storage I/O failed
  */
 func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: SUBSCRIBE body(%s)", client.devId, body)
+	log.Debugf("%s: RECV Subscribe (%s)", client.devId, body)
 	var request SubscribeMessage
 	var reply SubscribeReplyMessage
 
@@ -529,7 +529,7 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 **   4: storage I/O failed
  */
 func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: UNSUBSCRIBE body(%s)", client.devId, body)
+	log.Debugf("%s: RECV Unsubscribe (%s)", client.devId, body)
 	var request UnsubscribeMessage
 	var reply UnsubscribeReplyMessage
 
@@ -588,7 +588,7 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 }
 
 func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
-	log.Debugf("%s: GETTOPICS body(%s)", client.devId, body)
+	log.Debugf("%s: RECV GetTopics (%s)", client.devId, body)
 	var request GetTopicsMessage
 	var reply GetTopicsReplyMessage
 
