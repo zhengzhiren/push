@@ -181,6 +181,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Errorf("failed to listen, (%v)", err)
 		return nil, err
 	}
+	log.Infof("start comet server at (%s)", addr)
 	this.funcMap[MSG_HEARTBEAT] = handleHeartbeat
 	this.funcMap[MSG_REGISTER] = handleRegister
 	this.funcMap[MSG_UNREGISTER] = handleUnregister

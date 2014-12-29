@@ -24,11 +24,12 @@ import (
 
 func deviceHandler(w http.ResponseWriter, r *http.Request) {
 	devid := r.FormValue("devid")
-	client := comet.DevicesMap.Get(devid).(*comet.Client)
-	if client == nil {
+	x := comet.DevicesMap.Get(devid)
+	if x == nil {
 		http.Error(w, "offline", 404)
 		return
 	}
+	client := x.(*comet.Client)
 	fmt.Fprintf(w, "devid: %s\n", devid)
 	for _, regapp := range client.RegApps {
 		fmt.Fprintf(w,
@@ -130,7 +131,7 @@ func main() {
 		mc = conf.Config.Comet.MaxClients
 	}
 	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc)
-	listener, err := cometServer.Init("0.0.0.0" + conf.Config.Comet.Port)
+	listener, err := cometServer.Init("0.0.0.0:" + conf.Config.Comet.Port)
 	if err != nil {
 		log.Critical(err)
 		os.Exit(1)

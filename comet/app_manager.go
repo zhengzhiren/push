@@ -180,10 +180,11 @@ func (this *AppManager)GetApp(appId string, regId string) *RegApp {
 }
 
 func (this *AppManager)GetAppByDevice(appId string, devId string) *RegApp {
-	client := DevicesMap.Get(devId).(*Client)
-	if client == nil {
+	x := DevicesMap.Get(devId)
+	if x == nil {
 		return nil
 	}
+	client := x.(*Client)
 	for _, regapp := range(client.RegApps) {
 		if regapp.AppId == appId {
 			return regapp
