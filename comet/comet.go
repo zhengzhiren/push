@@ -71,10 +71,11 @@ func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *Pus
 		}
 	}
 
-	client := DevicesMap.Get(app.DevId).(*Client)
-	if client == nil {
+	x := DevicesMap.Get(app.DevId)
+	if x == nil {
 		return false
 	}
+	client := x.(*Client)
 	log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
 	b, err := json.Marshal(msg)
 	if err != nil {
