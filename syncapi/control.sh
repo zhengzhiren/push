@@ -13,7 +13,7 @@ function start()
 	[ $? -ne 0 ] && { echo "start supervisord failed"; exit 1; }
 	retry=0
 	while [ $retry -lt 5 ]; do
-		supervisorctl -c $THIS_DIR/conf/supervisord.conf status pushapi |grep RUNNING >/dev/null
+		supervisorctl -c $THIS_DIR/conf/supervisord.conf status syncapi |grep RUNNING >/dev/null
 		[ $? -eq 0 ] && { break; }
 		retry=$(($retry+1))
 		sleep 1
@@ -24,14 +24,14 @@ function start()
 
 function stop()
 {
-	supervisorctl -c $THIS_DIR/conf/supervisord.conf stop pushapi >/dev/null 2>&1
+	supervisorctl -c $THIS_DIR/conf/supervisord.conf stop syncapi >/dev/null 2>&1
 	sleep 2
 	supervisorctl -c $THIS_DIR/conf/supervisord.conf shutdown >/dev/null 2>&1
 	sleep 2
-	pid=$(ps axf|grep supervisord |grep pushapi|awk '{print $1}')
+	pid=$(ps axf|grep supervisord |grep syncapi|awk '{print $1}')
 	[ $? -eq 0 ] && { kill -9 $pid; }
 	
-	pid=$(ps axf|grep pushapi |grep -v 'ps axf'|awk '{print $1}')
+	pid=$(ps axf|grep syncapi |grep -v 'ps axf'|awk '{print $1}')
 	[ $? -eq 0 ] && { kill -9 $pid; }
 	return 0	
 }
