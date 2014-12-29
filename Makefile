@@ -1,4 +1,4 @@
-all: clean init pushd pushapi pushtest notifyapi tarball
+all: clean init pushd pushapi pushtest notifyapi syncapi tarball
 
 init:
 	mkdir -p output
@@ -17,7 +17,10 @@ pushtest: init
 notifyapi: init
 	cd notifyapi && go build -o ../output/notifyapi/notifyapi
 
-tarball: init pushd pushapi pushtest notifyapi
+syncapi: init
+	cd syncapi && go build -o ../output/syncapi/syncapi
+
+tarball: init pushd pushapi pushtest notifyapi syncapi
 	cp misc/* output/
 	cp -aR pushd/conf output/pushd/
 	cp -aR pushd/control.sh output/pushd/
@@ -25,6 +28,8 @@ tarball: init pushd pushapi pushtest notifyapi
 	cp -aR pushapi/control.sh output/pushapi/
 	cp -aR notifyapi/conf output/notifyapi/
 	cp -aR notifyapi/control.sh output/notifyapi/
+	cp -aR syncapi/conf output/syncapi/
+	cp -aR syncapi/control.sh output/syncapi/
 	tar -czf push.tgz output
 
 clean:

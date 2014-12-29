@@ -1,0 +1,13 @@
+<seelog minlevel="trace">
+	<outputs formatid="common">
+		<console />
+		<rollingfile type="date" filename="/letv/logs/push/syncapi/syncapi.log" datepattern="02.01.2006" maxrolls="10"/>
+		<filter levels="warn,error,critical">
+			<rollingfile type="date" filename="/letv/logs/push/syncapi/errors.log" datepattern="02.01.2006" maxrolls="10"/>
+		</filter>
+	</outputs>
+	<formats>
+		<format id="common" format="%Date/%Time.%Ms [%LEV] %Msg%n" />
+	</formats>
+</seelog>
+
