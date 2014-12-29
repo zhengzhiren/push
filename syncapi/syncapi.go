@@ -15,6 +15,7 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/chenyf/push/utils"
+	"github.com/chenyf/push/conf"
 )
 
 const (
@@ -39,8 +40,8 @@ type SyncMsg struct {
 	AppId	string		`json:"appid"`
 	UserId	string		`json:"uid"`
 	SendId	string		`json:"sendid"`
-	//RegId	string		`json:"regid"`
-	DevId	string		`json:"devid"`
+	RegId	string		`json:"regid"`
+	//DevId	string		`json:"devid"`
 }
 
 type PushMsg struct {
@@ -73,22 +74,21 @@ func push(syncmsg *SyncMsg) (*http.Response, error) {
 		AppId : syncmsg.AppId,
 		MsgType : 2,
 		PushType : 3,
-		Content : "lala",
+		Content : fmt.Sprintf("{\"sendid\":\"%s\"}", syncmsg.SendId),
 		SendId : syncmsg.SendId,
 	}
 	pushmsg.PushParams.UserId = []string{syncmsg.UserId}
 	pushmsg.Options.TTL = 60
 	b, _ := json.Marshal(pushmsg)
-	//client := &http.Client{}
+	client := &http.Client{}
 	req, err := http.NewRequest("POST", pushurl, bytes.NewBuffer(b))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("LETV %s pushtest", syncmsg.AppId))
 	log.Infof("push msg...")
-	return nil, nil
-	//resp, err := client.Do(req)
-	//return resp, err
+	resp, err := client.Do(req)
+	return resp, err
 }
 
 func addMessage(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +127,7 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func startHttp(addr string) {
-	log.Infof("Starting HTTP server on %s", addr)
+	log.Infof("web server routine start")
 	// push API
 	http.HandleFunc("/api/v1/message", messageHandler)
 	err := http.ListenAndServe(addr, nil)
@@ -135,15 +135,23 @@ func startHttp(addr string) {
 		log.Criticalf("http listen: ", err)
 		os.Exit(1)
 	}
+	log.Infof("web server routine stop")
 }
 
 func main() {
 	var (
+		configFile    = flag.String("c", "./conf/conf.json", "Config file")
 		logConfigFile = flag.String("l", "./conf/log.xml", "Log config file")
 	)
 	flag.Parse()
 
-	err := log.RegisterCustomFormatter("Ms", utils.CreateMsFormatter)
+	err := conf.LoadConfig(*configFile)
+	if err != nil {
+		fmt.Printf("LoadConfig (%s) failed: (%s)\n", *configFile, err)
+		os.Exit(1)
+	}
+
+	err = log.RegisterCustomFormatter("Ms", utils.CreateMsFormatter)
 	if err != nil {
 		fmt.Printf("Failed to create custom formatter: (%s)\n", err)
 		os.Exit(1)
@@ -161,6 +169,8 @@ func main() {
 	c := make(chan os.Signal, 1)
 	ctrl := make(chan bool, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+
+	wg.Add(1)
 	go func() {
 		sig := <-c
 		log.Infof("Received signal '%v', exiting\n", sig)
@@ -168,20 +178,20 @@ func main() {
 		wg.Done()
 	}()
 
-	wg.Add(1)
-	go startHttp("0.0.0.0:7777")
+	go startHttp("0.0.0.0:17777")
 	waitingMsgs := make(map[string]*SyncMsg)
 	go func() {
+		log.Infof("message handler routine start")
 		wg.Add(1)
 		for {
 			select {
-			case _ := <-ctrl:
-				log.Infof()
+			case _ = <-ctrl:
+				log.Infof("message handler routine stop")
 				wg.Done()
-				break
+				return
 			//case msg, ok := <-msgBox:
 			case msg := <-msgBox:
-				key := fmt.Sprintf("%s_%s_%s_%s", msg.AppId, msg.UserId, msg.SendId, msg.DevId)
+				key := fmt.Sprintf("%s_%s_%s_%s", msg.AppId, msg.UserId, msg.SendId, msg.RegId)
 				if _, ok := waitingMsgs[key]; !ok {
 					waitingMsgs[key] = msg
 				}
@@ -195,5 +205,4 @@ func main() {
 	}()
 	wg.Wait()
 }
-
 

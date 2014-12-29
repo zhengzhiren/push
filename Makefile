@@ -3,7 +3,7 @@ all: clean init pushd pushapi pushtest notifyapi syncapi tarball
 init:
 	mkdir -p output
 	rm -rf output/*
-	mkdir -p output/{pushd,pushapi,pushtest,notifyapi}
+	mkdir -p output/{pushd,pushapi,pushtest,notifyapi,syncapi}
 
 pushd: init
 	cd pushd && go build -o ../output/pushd/pushd 
