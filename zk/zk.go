@@ -83,7 +83,13 @@ func InitZk(config *conf.ConfigStruct) error {
 	if err != nil && err != zk.ErrNodeExists {
 		return err
 	}
-	data, _ := json.Marshal(utils.GetLocalIP())
+	ip := utils.GetLocalIP()
+	port := config.Comet.Port
+	addr := ip + ":" + port
+	if port == "20000" {
+		addr = ip
+	}
+	data, _ := json.Marshal(addr)
 	err = Register(conn, config.ZooKeeper.Path, data)
 	if err != nil {
 		return err
