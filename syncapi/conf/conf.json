@@ -1,11 +1,6 @@
 {
-	"syncapi"			: "0.0.0.0:17777",
-	"push_interval"	    : 60,
-
-	"redis" : {
-		"server"		: "10.135.28.70:6379",
-		"pass"			: "rpasswd",
-		"poolsize"		: 50,
-		"retry"			: 3
+	"sync" {
+		"url"			: "0.0.0.0:17777",
+		"interval"	    : 60
 	}
 }
