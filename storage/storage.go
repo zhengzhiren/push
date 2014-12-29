@@ -29,6 +29,7 @@ type RawMessage struct {
 		Action    int    `json:"action,omitempty"`
 		IntentUri string `json:"intent_uri,omitempty"`
 		WebUri    string `json:"web_uri,omitempty"`
+		IconUri   string `json:"icon_uri,omitempty"`
 	} `json:"notification,omitempty"`
 	Options struct {
 		TTL int64 `json:"ttl,omitempty"`

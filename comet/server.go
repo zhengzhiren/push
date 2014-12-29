@@ -276,7 +276,7 @@ func myread(conn *net.TCPConn, buf []byte) int {
 
 // handle a TCP connection
 func (this *Server) handleConnection(conn *net.TCPConn) {
-	//log.Debugf("accept connection from (%s) (%p)", conn.RemoteAddr(), conn)
+	log.Debugf("New connection (%p) from (%s)", conn, conn.RemoteAddr())
 	// handle register first
 	if this.clientCount >= 10000 {
 		log.Warnf("too more client, refuse")
@@ -482,6 +482,13 @@ func inBlacklist(server *Server, devId string) bool {
 	return false
 }
 
+func checkDevIdFormat(devId string) bool {
+	if devId == "" {
+		return false
+	}
+	return true
+}
+
 func waitInit(server *Server, conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
 	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
@@ -498,6 +505,12 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		return nil
 	}
 
+	if header.Type != MSG_INIT {
+		log.Warnf("%p: not INIT message, %d", conn, header.Type)
+		conn.Close()
+		return nil
+	}
+
 	if header.Len > server.maxBodyLen {
 		log.Warnf("%p: header len too big: %d", conn, header.Len)
 		conn.Close()
@@ -505,12 +518,6 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	data := make([]byte, header.Len)
 	if n := myread(conn, data); n <= 0 {
-		conn.Close()
-		return nil
-	}
-
-	if header.Type != MSG_INIT {
-		log.Warnf("%p: not register message, %d", conn, header.Type)
 		conn.Close()
 		return nil
 	}
@@ -523,8 +530,8 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 
 	devid := request.DevId
-	if devid == "" {
-		log.Warnf("%p: invalid device id", conn)
+	if !checkDevIdFormat(devid) {
+		log.Warnf("%p: invalid device id (%s)", conn, devid)
 		conn.Close()
 		return nil
 	}
@@ -571,13 +578,13 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	reply := InitReplyMessage{
 		Result: 0,
-		HB: 30,
+		HB:     30,
 		Reconn: 60,
 	}
 
 	// TODO: below code should check carefully
 	if request.Sync == 0 {
-	// client give me regapp infos
+		// client give me regapp infos
 		for _, info := range request.Apps {
 			if info.AppId == "" || info.RegId == "" {
 				log.Warnf("appid or regid is empty")
