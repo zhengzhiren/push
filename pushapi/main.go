@@ -93,7 +93,7 @@ func main() {
 	}()
 
 	wg.Add(1)
-	go startHttp(conf.Config.PushAPI, conf.Config.CommandTimeout)
+	go startHttp(conf.Config.PushAPI, conf.Config.Control.CommandTimeout)
 
 	for {
 		select {

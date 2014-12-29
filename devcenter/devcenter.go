@@ -38,7 +38,7 @@ func IsBinding(sso_tk, devId string) (bool, error) {
 			BindStatus bool `json:"bindStatus"`
 		} `json:"data"`
 	}
-	url := fmt.Sprintf("http://%s/api/v1/device/bind/%s/status?sso_tk=%s", conf.Config.DevCenter, devId, sso_tk)
+	url := fmt.Sprintf("http://%s/api/v1/device/bind/%s/status?sso_tk=%s", conf.Config.Control.DevCenter, devId, sso_tk)
 	res, err := http.Get(url)
 	if err != nil {
 		return false, err
@@ -62,7 +62,7 @@ func IsBinding(sso_tk, devId string) (bool, error) {
 }
 
 func GetDeviceList(sso_tk string, devType int) ([]Device, error) {
-	url := fmt.Sprintf("http://%s/api/v1/device/bind/?sso_tk=%s&type=%d", conf.Config.DevCenter, sso_tk, devType)
+	url := fmt.Sprintf("http://%s/api/v1/device/bind/?sso_tk=%s&type=%d", conf.Config.Control.DevCenter, sso_tk, devType)
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func GetDeviceList(sso_tk string, devType int) ([]Device, error) {
 }
 
 func GetDevices(uid string, devType int) ([]Device, error) {
-	url := fmt.Sprintf("http://%s/api/v1/device/bind/?user_id=%s&type=%d", conf.Config.DevCenter, uid, devType)
+	url := fmt.Sprintf("http://%s/api/v1/device/bind/?user_id=%s&type=%d", conf.Config.Control.DevCenter, uid, devType)
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err

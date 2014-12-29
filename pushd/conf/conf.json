@@ -1,1 +1,35 @@
-conf_rdtest.json
+{
+	"comet" : {
+		"max_bodylen"       : 4096,
+		"max_clients"       : 5000,
+		"port" 			    : "20000"
+	},
+
+	"web"				: "0.0.0.0:19999",
+	"rabbit" : {
+		"enable"		: true,
+		"uri" 			: "amqp://guest:guest@10.135.28.70:5672/",
+		"exchange" 		: "test-exchange",
+		"qos" 			: 1
+	},
+
+	"redis" : {
+		"server"		: "10.135.28.70:6379",
+		"pass"			: "rpasswd",
+		"poolsize"		: 50,
+		"retry"			: 3
+	},
+
+	"zookeeper" : {
+		"enable"		: true,
+		"addr"			: "10.154.156.122:2181",
+		"timeout"		: 30,
+		"path"			: "/push"
+	},
+
+	"auth" : {
+		"provider"		: "letv",
+		"letv_url"		: "http://api.sso.letv.com/api/checkTicket/tk"
+	}
+}
+

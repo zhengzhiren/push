@@ -106,31 +106,31 @@ func main() {
 	auth.NewInstance(&conf.Config)
 
 	var ato uint32 = 60
-	if conf.Config.AcceptTimeout > 0 {
-		ato = conf.Config.AcceptTimeout
+	if conf.Config.Comet.AcceptTimeout > 0 {
+		ato = conf.Config.Comet.AcceptTimeout
 	}
 	var rto uint32 = 60
-	if conf.Config.ReadTimeout > 0 {
-		rto = conf.Config.ReadTimeout
+	if conf.Config.Comet.ReadTimeout > 0 {
+		rto = conf.Config.Comet.ReadTimeout
 	}
 	var wto uint32 = 60
-	if conf.Config.WriteTimeout > 0 {
-		wto = conf.Config.WriteTimeout
+	if conf.Config.Comet.WriteTimeout > 0 {
+		wto = conf.Config.Comet.WriteTimeout
 	}
 	var hto uint32 = 240
-	if conf.Config.HeartbeatTimeout > 0 {
-		hto = conf.Config.HeartbeatTimeout
+	if conf.Config.Comet.HeartbeatTimeout > 0 {
+		hto = conf.Config.Comet.HeartbeatTimeout
 	}
 	var mbl uint32 = 2048
-	if conf.Config.MaxBodyLen > 0 {
-		mbl = conf.Config.MaxBodyLen
+	if conf.Config.Comet.MaxBodyLen > 0 {
+		mbl = conf.Config.Comet.MaxBodyLen
 	}
 	var mc uint32 = 10000
-	if conf.Config.MaxClients > 0 {
-		mc = conf.Config.MaxClients
+	if conf.Config.Comet.MaxClients > 0 {
+		mc = conf.Config.Comet.MaxClients
 	}
 	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc)
-	listener, err := cometServer.Init(conf.Config.Comet)
+	listener, err := cometServer.Init("0.0.0.0" + conf.Config.Comet.Port)
 	if err != nil {
 		log.Critical(err)
 		os.Exit(1)

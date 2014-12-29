@@ -1,9 +1,15 @@
 {
-	"comet" 			: "0.0.0.0:20000",
+	"comet" : {
+		"port" : "20000"
+	},
+
 	"web"				: "0.0.0.0:19999",
-	"pushapi"			: "0.0.0.0:8080",
-	"command_timeout"	: 20,
-	"devcenter"			: "device.scloud.letv.com",
+	"pushapi"			: "0.0.0.0:18080",
+
+	"control" : {
+		"command_timeout"	: 20,
+		"devcenter"			: "device.scloud.letv.com"
+	},
 
 	"rabbit" : {
 		"uri" 			: "amqp://guest:guest@10.135.28.70:5672/",
