@@ -129,7 +129,7 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 func startHttp(addr string) {
 	log.Infof("web server routine start")
 	// push API
-	http.HandleFunc("/api/v1/message", messageHandler)
+	http.HandleFunc("/sync/message", messageHandler)
 	err := http.ListenAndServe(addr, nil)
 	if err != nil {
 		log.Criticalf("http listen: ", err)
@@ -195,7 +195,7 @@ func main() {
 				if _, ok := waitingMsgs[key]; !ok {
 					waitingMsgs[key] = msg
 				}
-			case <-time.After(time.Duration(conf.Config.Sync.Interval) * time.Second):
+			case <-time.After(conf.Config.Sync.Interval * time.Second):
 				for _, msg := range(waitingMsgs) {
 					push(msg)
 				}
