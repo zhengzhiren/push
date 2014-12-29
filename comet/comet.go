@@ -58,7 +58,12 @@ const (
 //}
 
 func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *PushMessage) bool {
-	if rawMsg.SendId != "" {
+	if len(app.SendIds) != 0 {
+	// regapp with sendids
+		if rawMsg.SendId == "" {
+			return false
+		}
+
 		found := false
 		for _, sendid := range(app.SendIds) {
 			if sendid == rawMsg.SendId {
