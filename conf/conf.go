@@ -56,6 +56,11 @@ type ConfigStruct struct {
         MaxNotices int          `json:"max_notices"`
         Timeout time.Duration   `json:"timeout"`
     }                           `json:"notify"`
+
+	Sync struct {
+		Url string		`json:"url"`
+		Interval int	`json:"interval"`
+	} `json:"sync"`
 }
 
 var (

@@ -178,7 +178,7 @@ func main() {
 		wg.Done()
 	}()
 
-	go startHttp("0.0.0.0:17777")
+	go startHttp(conf.Config.Sync.Url)
 	waitingMsgs := make(map[string]*SyncMsg)
 	go func() {
 		log.Infof("message handler routine start")
@@ -195,7 +195,7 @@ func main() {
 				if _, ok := waitingMsgs[key]; !ok {
 					waitingMsgs[key] = msg
 				}
-			case <-time.After(10 * time.Second):
+			case <-time.After(time.Duration(conf.Config.Sync.Interval) * time.Second):
 				for _, msg := range(waitingMsgs) {
 					push(msg)
 				}
