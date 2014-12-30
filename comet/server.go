@@ -134,13 +134,13 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 			case pack := <-client.outMsgs:
 				b, _ := pack.msg.Header.Serialize()
 				if _, err := conn.Write(b); err != nil {
-					log.Infof("sendout header failed, %s", err)
+					log.Infof("%s %p:sendout header failed, %s", devid, conn, err)
 					client.Broken = true
 					return
 				}
 				if pack.msg.Data != nil {
 					if _, err := conn.Write(pack.msg.Data); err != nil {
-						log.Infof("sendout body failed, %s", err)
+						log.Infof("%s %p:sendout body failed, %s", devid, conn, err)
 						client.Broken = true
 						return
 					}
@@ -149,8 +149,9 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 				if pack.reply != nil {
 					client.WaitingChannels[pack.msg.Header.Seq] = pack.reply
 				}
-				log.Infof("%s: SEND (%d) (%s) seq(%d)",
+				log.Infof("%s %p: SEND (%d) (%s) seq(%d)",
 					client.devId,
+					conn,
 					pack.msg.Header.Type,
 					pack.msg.Data,
 					pack.msg.Header.Seq)
@@ -158,7 +159,7 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 			//case seq := <-client.seqCh:
 			//	delete(WaitingChannels, seq)
 			case <-client.ctrl:
-				//log.Infof("%p: leave send routine", conn)
+				log.Infof("%s %p: leave send routine", devid, conn)
 				return
 			}
 		}
@@ -277,7 +278,7 @@ func myread(conn *net.TCPConn, buf []byte) int {
 
 // handle a TCP connection
 func (this *Server) handleConnection(conn *net.TCPConn) {
-	log.Debugf("New connection (%p) from (%s)", conn, conn.RemoteAddr())
+	log.Debugf("new connection (%p) from (%s)", conn, conn.RemoteAddr())
 	// handle register first
 	if this.clientCount >= 10000 {
 		log.Warnf("too more client, refuse")
@@ -304,18 +305,18 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 	for {
 		select {
 		case <-this.exitCh:
-			log.Debugf("%s: ask me quit", client.devId)
+			log.Debugf("%s %p: ask me quit", client.devId, conn)
 			break
 		default:
 		}
 		if client.Broken {
-			log.Debugf("%s: client broken", client.devId)
+			log.Debugf("%s %p: client broken", client.devId, conn)
 			break
 		}
 
 		now := time.Now()
 		if now.After(client.lastActive.Add(this.hbTimeout * time.Second)) {
-			log.Debugf("%s: heartbeat timeout", client.devId)
+			log.Debugf("%s %p: heartbeat timeout", client.devId, conn)
 			//client.SendMessage(MSG_CHECK, 0, nil, nil)
 			break
 		}
@@ -350,12 +351,12 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				continue
 			}
 			if err := header.Deserialize(headBuf[0:HEADER_SIZE]); err != nil {
-				log.Warnf("%s: header deserialize failed", client.devId)
+				log.Warnf("%s %p: header deserialize failed", client.devId, conn)
 				break
 			}
 
 			if header.Len > this.maxBodyLen {
-				log.Warnf("%s: header len too big %d", client.devId, header.Len)
+				log.Warnf("%s %p: header len too big %d", client.devId, conn, header.Len)
 				break
 			}
 			if header.Len > 0 {
@@ -380,7 +381,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			nRead += n
 			if uint32(nRead) < header.Len {
 				if now.After(startTime.Add(60 * time.Second)) {
-					log.Infof("%s: read body timeout", client.devId)
+					log.Infof("%s %p: read body timeout", client.devId, conn)
 					break
 				}
 				continue
@@ -394,14 +395,14 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 				break
 			}
 		} else {
-			log.Warnf("%s: unknown message type %d", client.devId, header.Type)
+			log.Warnf("%s %p: unknown message type %d", client.devId, conn, header.Type)
 		}
 		readflag = 0
 		nRead = 0
 	}
 
 	// don't use defer to improve performance
-	log.Debugf("%s: close connection", client.devId)
+	log.Debugf("%s %p: close connection", client.devId, conn)
 	for _, regapp := range client.RegApps {
 		AMInstance.DelApp(regapp.RegId)
 	}
@@ -543,12 +544,18 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	log.Debugf("%p: RECV INIT (%s) seq(%d)", conn, data, header.Seq)
 
 	for {
+		waitcnt := 0
 		x := DevicesMap.Get(devid)
 		if x != nil {
+			if waitcnt >= 5 {
+				conn.Close()
+				return nil
+			}
+			waitcnt += 1
 			client := x.(*Client)
 			client.Broken = true
 			time.Sleep(1 * time.Second)
-			log.Infof("%s (%p): wait old connection close", devid, conn)
+			log.Infof("%s %p: wait old connection close", devid, conn)
 		} else {
 			break
 		}
@@ -562,12 +569,12 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	// check if the device Id has connected to other servers
 	serverName, err := storage.Instance.CheckDevice(devid)
 	if err != nil {
-		log.Errorf("%s: failed to check device existence: (%s)", devid, err)
+		log.Errorf("%s %p: failed to check device existence: (%s)", devid, conn, err)
 		conn.Close()
 		return nil
 	}
 	if serverName != "" {
-		log.Warnf("%s: has connected with server (%s)", devid, serverName)
+		log.Warnf("%s %p: has connected with server (%s)", devid, conn, serverName)
 		conn.Close()
 		return nil
 	}
@@ -588,7 +595,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		// client give me regapp infos
 		for _, info := range request.Apps {
 			if info.AppId == "" || info.RegId == "" {
-				log.Warnf("appid or regid is empty")
+				//log.Warnf("appid or regid is empty")
 				continue
 			}
 			// these regapps should in storage already
