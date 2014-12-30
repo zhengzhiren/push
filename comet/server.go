@@ -460,6 +460,21 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 		}
 
 		if ok {
+			if len(regapp.SendIds) > 0 {
+			// regapp with sendids
+				if rawMsg.SendId != "" {
+					found := false
+					for _, sendid := range(regapp.SendIds) {
+						if sendid == rawMsg.SendId {
+							found = true
+							break
+						}
+					}
+					if !found {
+						continue
+					}
+				}
+			}
 			msg := PushMessage{
 				MsgId: rawMsg.MsgId,
 				AppId: rawMsg.AppId,
@@ -478,7 +493,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 }
 
 func inBlacklist(server *Server, devId string, now *time.Time) bool {
-	if now.After(server.BlackUpdate.Add(180*time.Second)) {
+	if now.After(server.BlackUpdate.Add(60*time.Second)) {
 		if BlackDevices, err := storage.Instance.SetMembers("db_black_devices"); err != nil {
 			sort.Strings(BlackDevices)
 			server.BlackDevices = BlackDevices
@@ -554,8 +569,8 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 	}
 	log.Debugf("%p: RECV INIT (%s) seq(%d)", conn, data, header.Seq)
 
+	waitcnt := 0
 	for {
-		waitcnt := 0
 		x := DevicesMap.Get(devid)
 		if x != nil {
 			if waitcnt >= 5 {

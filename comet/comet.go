@@ -58,12 +58,10 @@ const (
 //}
 
 func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *PushMessage) bool {
-	if len(app.SendIds) != 0 {
+	//if len(app.SendIds) != 0 {
 	// regapp with sendids
-		if rawMsg.SendId == "" {
-			return false
-		}
-
+	log.Infof("before push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
+	if rawMsg.SendId != "" {
 		found := false
 		for _, sendid := range(app.SendIds) {
 			if sendid == rawMsg.SendId {
@@ -72,22 +70,24 @@ func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *Pus
 			}
 		}
 		if !found {
+			log.Debugf("check sendid (%s) failed", rawMsg.SendId)
 			return false
 		}
 	}
 
 	x := DevicesMap.Get(app.DevId)
 	if x == nil {
+		log.Debugf("device %s offline", app.DevId)
 		return false
 	}
 	client := x.(*Client)
-	log.Infof("push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
 	b, err := json.Marshal(msg)
 	if err != nil {
 		log.Infof("failed to encode msg %v", msg)
 		return false
 	}
 	client.SendMessage(MSG_PUSH, 0, b, nil)
+	log.Infof("after push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
 	return true
 }
 
