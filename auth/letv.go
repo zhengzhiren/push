@@ -42,6 +42,7 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 		log.Warnf("ioutil readall failed: %s", err)
 		return false, ""
 	}
+	res.Body.Close()
 	//log.Infof("sso response (%s)", body)
 	var tr tokenResult
 	err = json.Unmarshal(body, &tr)
