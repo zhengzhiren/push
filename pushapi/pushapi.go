@@ -77,8 +77,8 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 		return false, "empty 'topic' when 'push_type'==5"
 	}
 	if m.PushParams.TopicOp != "" &&
-		m.PushParams.TopicOp != "union" &&
-		m.PushParams.TopicOp != "intersection" &&
+		m.PushParams.TopicOp != "or" &&
+		m.PushParams.TopicOp != "and" &&
 		m.PushParams.TopicOp != "except" {
 		return false, "invalid 'topic_op'"
 	}

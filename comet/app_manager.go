@@ -232,7 +232,7 @@ func (this *AppManager) GetAppsByUser(appId string, userId string) []*RegApp {
 
 func matchTopics(subcriptions []string, topics []string, topicOp string) bool {
 	switch topicOp {
-	case "intersection":
+	case "and":
 		for _, topic := range topics {
 			match := false
 			for _, sub := range subcriptions {
@@ -260,7 +260,7 @@ func matchTopics(subcriptions []string, topics []string, topicOp string) bool {
 			}
 		}
 		return true
-	default: // "union"
+	default: // "or"
 		for _, sub := range subcriptions {
 			for _, topic := range topics {
 				if sub == topic {
