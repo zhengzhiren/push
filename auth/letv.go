@@ -31,7 +31,7 @@ type tokenResult struct {
 
 func (this *LetvAuth)Auth(token string) (bool, string) {
 	url := fmt.Sprintf("%s/%s", this.url, token)
-	log.Infof("letv auth: url(%s)", url)
+	//log.Infof("letv auth: url(%s)", url)
 	res, err := http.Get(url)
 	if err != nil {
 		log.Warnf("http get failed: %s", err)

@@ -74,10 +74,10 @@ func push(syncmsg *SyncMsg) (*http.Response, error) {
 		AppId : syncmsg.AppId,
 		MsgType : 2,
 		PushType : 3,
-		Content : fmt.Sprintf("{\"sendid\":\"%s\"}", syncmsg.SendId),
+		Content : fmt.Sprintf("{\"sendid\" : \"%s\"}", syncmsg.SendId),
 		SendId : syncmsg.SendId,
 	}
-	pushmsg.PushParams.UserId = []string{syncmsg.UserId}
+	pushmsg.PushParams.UserId = []string{"letv_"+ syncmsg.UserId}
 	pushmsg.Options.TTL = 60
 	b, _ := json.Marshal(pushmsg)
 	client := &http.Client{}
