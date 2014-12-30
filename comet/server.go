@@ -447,11 +447,9 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 				}
 			}
 		case PUSH_TYPE_TOPIC:
-			for _, topic := range regapp.Topics {
-				if topic == rawMsg.PushParams.Topic {
-					ok = true
-					break
-				}
+			if matchTopics(regapp.Topics, rawMsg.PushParams.Topic, rawMsg.PushParams.TopicOp) {
+				ok = true
+				break
 			}
 		default:
 			continue

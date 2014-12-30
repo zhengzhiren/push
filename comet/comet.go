@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	PUSH_TYPE_ALL       = 1
-	PUSH_TYPE_REGID     = 2
-	PUSH_TYPE_USERID    = 3
-	PUSH_TYPE_DEVID     = 4
-	PUSH_TYPE_TOPIC     = 5
-	PUSH_TYPE_ALIAS     = 6
+	PUSH_TYPE_ALL    = 1
+	PUSH_TYPE_REGID  = 2
+	PUSH_TYPE_USERID = 3
+	PUSH_TYPE_DEVID  = 4
+	PUSH_TYPE_TOPIC  = 5
+	PUSH_TYPE_ALIAS  = 6
 
 	MSG_TYPE_NOTIFICATION = 1
 	MSG_TYPE_MESSAGE      = 2
@@ -59,13 +59,13 @@ const (
 
 func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *PushMessage) bool {
 	if len(app.SendIds) != 0 {
-	// regapp with sendids
+		// regapp with sendids
 		if rawMsg.SendId == "" {
 			return false
 		}
 
 		found := false
-		for _, sendid := range(app.SendIds) {
+		for _, sendid := range app.SendIds {
 			if sendid == rawMsg.SendId {
 				found = true
 				break
@@ -93,9 +93,9 @@ func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *Pus
 
 func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 	msg := PushMessage{
-		MsgId:   rawMsg.MsgId,
-		AppId:   appId,
-		Type:    rawMsg.MsgType,
+		MsgId: rawMsg.MsgId,
+		AppId: appId,
+		Type:  rawMsg.MsgType,
 	}
 	if rawMsg.MsgType == MSG_TYPE_MESSAGE {
 		msg.Content = rawMsg.Content
@@ -131,7 +131,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 			}
 		}
 	case PUSH_TYPE_TOPIC: // topic
-		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic)
+		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic, rawMsg.PushParams.TopicOp)
 		for _, app := range apps {
 			pushMessage(appId, app, rawMsg, &msg)
 		}

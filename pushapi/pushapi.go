@@ -73,8 +73,14 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	if m.PushType == 4 && (m.PushParams.DevId == nil || len(m.PushParams.DevId) == 0) {
 		return false, "empty 'devid' when 'push_type'==4"
 	}
-	if m.PushType == 5 && m.PushParams.Topic == "" {
+	if m.PushType == 5 && len(m.PushParams.Topic) == 0 {
 		return false, "empty 'topic' when 'push_type'==5"
+	}
+	if m.PushParams.TopicOp != "" &&
+		m.PushParams.TopicOp != "union" &&
+		m.PushParams.TopicOp != "intersection" &&
+		m.PushParams.TopicOp != "except" {
+		return false, "invalid 'topic_op'"
 	}
 	if m.Options.TTL > 3*86400 {
 		return false, "invalid 'options.ttl'"
