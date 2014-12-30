@@ -74,7 +74,7 @@ func callThirdPartyIf(method string, url string, body io.Reader, header *map[str
 
     r := ThirdPartyResponse{}
     err = json.NewDecoder(resp.Body).Decode(&r)
-
+    resp.Body.Close()
     if err != nil {
         return err, nil
     }
