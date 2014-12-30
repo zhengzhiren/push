@@ -52,6 +52,7 @@ type Server struct {
 
 var (
 	msgNames = map[uint8]string{
+		MSG_INIT_REPLY         : "InitReply",
 		MSG_REGISTER_REPLY     : "RegisterReply",
 		MSG_UNREGISTER_REPLY   : "UnregisterReply",
 		MSG_PUSH               : "Push",
