@@ -20,22 +20,7 @@ type Notice struct {
     AppId string        `json:"appid"`
     AppSec string       `json:"appsec"`
     Tags string         `json:"tags"`
-    MsgType int         `json:"msg_type"`
-    Platform string     `json:"platform,omitempty"`
-    Content string      `json:"content,omitempty"`
-    Notification struct {
-        Title     string `json:"title"`
-        Desc      string `json:"desc,omitempty"`
-        Type      int    `json:"type,omitempty"`
-        SoundUri  string `json:"sound_uri,omitempty"`
-        Action    int    `json:"action,omitempty"`
-        IntentUri string `json:"intent_uri,omitempty"`
-        WebUri    string `json:"web_uri,omitempty"`
-    } `json:"notification,omitempty"`
-    Options struct {
-        TTL int64 `json:"ttl,omitempty"`
-        TTS int64 `json:"tts,omitempty"`
-    } `json:"options"`
+    PushMsg storage.RawMessage `json:"push_msg"`
 }
 
 type PostNotifyData struct {
@@ -118,6 +103,13 @@ func getUids(resp interface{}, uids *[]string) {
     }
 }
 
+func checkNotice(n Notice) bool {
+    if n.AppId == "" || n.AppSec == "" || n.Tags == "" {
+        return false
+    }
+    return true
+}
+
 func postNotify(w http.ResponseWriter, r *http.Request) {
     var response Response
     response.ErrNo = 10000
@@ -128,7 +120,7 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
     data := PostNotifyData{}
     if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
         response.ErrNo = 10001
-        response.ErrMsg = "invalid notification data"
+        response.ErrMsg = fmt.Sprintf("invalid notification data, %s", err)
         b, _ := json.Marshal(response)
         fmt.Fprintf(w, string(b))
         return
@@ -144,19 +136,28 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
 
     results := make(map[int64]chan *Result)
     for _, n := range data.Notices {
+        if n.Id == 0 {
+            log.Warnf("there's a notice without id")
+            continue
+        }
+
         log.Infof("send notice[%d]", n.Id)
         rchan := make(chan *Result)
         results[n.Id] = rchan
+
         go func(n Notice) {
-            d := storage.RawMessage{
-                PushType: PUSH_WITH_UID,
-                AppId: n.AppId,
-                MsgType: n.MsgType,
-                Content: n.Content,
-                Platform: n.Platform,
+            if !checkNotice(n) {
+                rchan <- &Result{
+                    Error: fmt.Errorf("invalid notice, please check notice's items with wiki"),
+                    Data: nil,
+                }
+                return
             }
-            d.Notification = n.Notification
-            d.Options = n.Options
+
+            d := n.PushMsg
+            d.PushType = PUSH_WITH_UID
+            d.AppId = n.AppId
+
             log.Infof("get uids with notice[%d]", n.Id)
             err, resp := callThirdPartyIf("GET", fmt.Sprintf("%s%s", conf.Config.Notify.SubUrl, n.Tags), nil, nil)
             if err != nil {
@@ -170,6 +171,7 @@ func postNotify(w http.ResponseWriter, r *http.Request) {
             getUids(resp, &uids)
             d.PushParams.UserId = uids
             data, _ := json.Marshal(d)
+
             log.Infof("push msgs with notice[%d]", n.Id)
             path := strings.SplitN(conf.Config.Notify.PushUrl, "/", 4)
             date := time.Now().UTC().String()
