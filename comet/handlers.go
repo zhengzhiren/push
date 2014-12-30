@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"time"
-
+	"fmt"
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/stats"
 	"github.com/chenyf/push/storage"
@@ -209,7 +209,7 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 		return 0
 	}
 	if regapp.RegId != request.RegId {
-		onReply(ERR_INVALID_REGID, "registered with another regid", request.AppId)
+		onReply(ERR_INVALID_REGID, fmt.Sprintf("registered with regid %s", regapp.RegId), request.AppId)
 		return 0
 	}
 	AMInstance.UnregisterApp(client.devId, request.RegId, request.AppId, regapp.UserId)
@@ -313,23 +313,10 @@ func handleRegister2(conn *net.TCPConn, client *Client, header *Header, body []b
 
 	var reguid string = ""
 	var ok bool
-	/*if request.Uid != "" {
-		reguid = request.Uid
-	} else {
-		if request.Token != "" {
-			ok, reguid = auth.Instance.Auth(request.Token)
-			if !ok {
-				log.Warnf("%s: auth failed", client.devId)
-				onReply(3, appid, request.Pkg, "")
-				return 0
-			}
-		}
-	}*/
-
 	token := request.Token
-	if token == "" {
+	/*if token == "" {
 		token = request.Uid
-	}
+	}*/
 	if token != "" {
 		ok, reguid = auth.Instance.Auth(token)
 		if !ok {
@@ -402,13 +389,17 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 		onReply(ERR_INVALID_PARAMS, "'pkg' is empty", "", "", 0)
 		return 0
 	}
+	if request.RegId == "" {
+		log.Warnf("%s %p: 'regid' is empty", client.devId, conn)
+		onReply(ERR_INVALID_PARAMS, "'regid' is empty", "", "", 0)
+		return 0
+	}
 	if request.SendId == "" {
 		log.Warnf("%s %p: 'sendid' is empty", client.devId, conn)
 		onReply(ERR_INVALID_PARAMS, "'sendid' is empty", "", request.Pkg, 0)
 		return 0
 	}
 
-	// FUCK: no 'appid', no 'regid'; got them by request.Pkg
 	val, _ := storage.Instance.HashGet("db_packages", request.Pkg)
 	if val == nil {
 		log.Warnf("%s %p: no such pkg '%s'", client.devId, conn, request.Pkg)
@@ -416,18 +407,17 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 		return 0
 	}
 	appid := string(val)
-	regid := RegId(client.devId, appid, request.Uid)
 	regapp, ok := client.RegApps[appid]
 	if !ok {
 		log.Warnf("%s %p: 'pkg' %s hasn't register %s", client.devId, conn, request.Pkg)
 		onReply(ERR_NOT_REG, "hasn't register", appid, request.Pkg, 0)
 		return 0
 	}
-	if regapp.RegId != regid {
-		onReply(ERR_INVALID_REGID, "registered with another regid", appid, request.Pkg, 0)
+	if regapp.RegId != request.RegId {
+		onReply(ERR_INVALID_REGID, fmt.Sprintf("registered with regid %s", regapp.RegId), appid, request.Pkg, 0)
 		return 0
 	}
-	if ok := delSendid(client, regid, regapp, request.SendId); !ok {
+	if ok := delSendid(client, request.RegId, regapp, request.SendId); !ok {
 		onReply(ERR_INTERNAL, "server error", appid, request.Pkg, 0)
 		return 0
 	}
@@ -437,7 +427,7 @@ func handleUnregister2(conn *net.TCPConn, client *Client, header *Header, body [
 	}
 
 	// remove it from memory when regapp.SendIds is empty
-	AMInstance.UnregisterApp(client.devId, regid, appid, request.Uid)
+	AMInstance.UnregisterApp(client.devId, request.RegId, appid, regapp.UserId)
 	delete(client.RegApps, appid)
 	onReply(0, "", appid, request.Pkg, 0)
 	return 0

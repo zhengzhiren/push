@@ -50,6 +50,20 @@ type Server struct {
 	clientCount   uint32
 }
 
+var (
+	msgNames = map[uint8]string{
+		MSG_REGISTER_REPLY     : "RegisterReply",
+		MSG_UNREGISTER_REPLY   : "UnregisterReply",
+		MSG_PUSH               : "Push",
+		MSG_SUBSCRIBE_REPLY    : "SubscribeReply",
+		MSG_UNSUBSCRIBE_REPLY  : "UnsubscribeReply",
+		MSG_GET_TOPICS_REPLY   : "GetTopicsReply",
+		MSG_CMD                : "Command",
+		MSG_REGISTER2_REPLY    : "Register2Reply",
+		MSG_UNREGISTER2_REPLY  : "Unregister2Reply",
+	}
+)
+
 func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32) *Server {
 	return &Server{
 		Name:          utils.GetLocalIP(),
@@ -150,11 +164,16 @@ func (this *Server) InitClient(conn *net.TCPConn, devid string) *Client {
 				if pack.reply != nil {
 					client.WaitingChannels[pack.msg.Header.Seq] = pack.reply
 				}
-				log.Infof("%s %p: SEND (%d) (%s) seq(%d)",
+				msgname, ok := msgNames[pack.msg.Header.Type]
+				if !ok {
+					msgname = "Unknown"
+				}
+				log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
 					client.devId,
 					conn,
-					pack.msg.Header.Type,
+					msgname,
 					pack.msg.Data,
+					pack.msg.Header.Type,
 					pack.msg.Header.Seq)
 				time.Sleep(10 * time.Millisecond)
 			//case seq := <-client.seqCh:
