@@ -39,7 +39,8 @@ type Server struct {
 	exitCh        chan bool
 	wg            *sync.WaitGroup
 	funcMap       map[uint8]MsgHandler
-	blackDevices  []string
+	BlackDevices  []string
+	BlackUpdate   time.Time
 	acceptTimeout time.Duration
 	readTimeout   time.Duration
 	writeTimeout  time.Duration
@@ -199,8 +200,9 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		return nil, err
 	}
 
-	if this.blackDevices, err = storage.Instance.SetMembers("db_black_devices"); err != nil {
-		sort.Strings(this.blackDevices)
+	if this.BlackDevices, err = storage.Instance.SetMembers("db_black_devices"); err != nil {
+		sort.Strings(this.BlackDevices)
+		this.BlackUpdate = time.Now()
 	}
 
 	// keep the data of this node not expired on redis
@@ -475,8 +477,16 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 	}
 }
 
-func inBlacklist(server *Server, devId string) bool {
-	for _, s := range server.blackDevices {
+func inBlacklist(server *Server, devId string, now *time.Time) bool {
+	if now.After(server.BlackUpdate.Add(180*time.Second)) {
+		if BlackDevices, err := storage.Instance.SetMembers("db_black_devices"); err != nil {
+			sort.Strings(BlackDevices)
+			server.BlackDevices = BlackDevices
+			server.BlackUpdate = *now
+		}
+	}
+
+	for _, s := range server.BlackDevices {
 		if s == devId {
 			return true
 		}
@@ -493,7 +503,8 @@ func checkDevIdFormat(devId string) bool {
 
 func waitInit(server *Server, conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
-	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+	now := time.Now()
+	conn.SetReadDeadline(now.Add(20 * time.Second))
 	buf := make([]byte, HEADER_SIZE)
 	if n := myread(conn, buf); n <= 0 {
 		conn.Close()
@@ -537,7 +548,7 @@ func waitInit(server *Server, conn *net.TCPConn) *Client {
 		conn.Close()
 		return nil
 	}
-	if inBlacklist(server, devid) {
+	if inBlacklist(server, devid, &now) {
 		conn.Close()
 		return nil
 	}
