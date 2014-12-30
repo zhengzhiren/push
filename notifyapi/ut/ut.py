@@ -5,24 +5,26 @@ def test():
     d = {
         "notices": [{
             "id": 1,
-            "appsec": "appsec_trRhtZPGjfdMatwoFKQz",
-            "appid": "appid_0a0e3404f5c648fc8c57dab52f871053",
-            "msg_type": 2,
-            "platform": "android",
+            "appsec": "sk_ffLOQXYkeHpQlilnurdT",
+            "appid": "id_8ac4be471b414877b362c5d63e59a212",
             "tags": "1,2,3",
-            "content": "xxxxxxxxxxxx",
+            "push_msg" : {
+                "msg_type": 2,
+                "platform": "android",
+                "content": "xxxxxxxxxxxx",
+            },
         },
         {
             "id": 2,
-            "appsec": "appsec_trRhtZPGjfdMatwoFKQz",
-            "appid": "appid_0a0e3404f5c648fc8c57dab52f871053",
-            "msg_type": 2,
-            "platform": "android",
-            "tags": "2,3,4",
-            "content": "yyyyyyy",
+            "appsec": "sk_ffLOQXYkeHpQlilnurdT",
+            "appid": "",
+            "push_msg" : {
+                "msg_type": 2,
+                "tags": "2,3,4",
+                "content": "yyyyyyy",
+            }
         },
         {
-            "id": 3,
             "appsec": "appsec_trRhtZPGjfdMatwoFKQz",
             "appid": "appid_0a0e3404f5c648fc8c57dab52f871053",
             "msg_type": 2,
@@ -34,23 +36,22 @@ def test():
             "id": 4,
             "appsec": "appsec_trRhtZPGjfdMatwoFKQz",
             "appid": "appid_0a0e3404f5c648fc8c57dab52f871053",
-            "msg_type": 2,
-            "platform": "android",
             "tags": "3,4,5",
-            "content": "wwww",
-            "options": {
-                "ttl": 1800,
-                "tts": 1800,
+            "push_msg" :{
+                "msg_type": 2,
+                "platform": "android",
+                "content": "wwww",
+                "options": {
+                    "ttl": 1800,
+                    "tts": 1800,
+                }
             }
         },
         {
             "id": 5,
-            "appsec": "appsec_trRhtZPGjfdMatwoFKQz",
-            "appid": "appid_0a0e3404f5c648fc8c57dab52f871053",
-            "msg_type": 1,
-            "platform": "android",
+            "appsec": "sk_ffLOQXYkeHpQlilnurdT",
+            "appid": "id_8ac4be471b414877b362c5d63e59a212",
             "tags": "3,4,5",
-            "content": "zzzz",
         },
         ]        
     }
