@@ -122,18 +122,18 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	var reguid string = ""
 	var ok bool
 	/*
-	if request.Uid != "" {
-		reguid = request.Uid
-	} else {
-		if request.Token != "" {
-			ok, reguid = auth.Instance.Auth(request.Token)
-			if !ok {
-				log.Warnf("%s: auth failed", client.devId)
-				onReply(3, request.AppId, "", "")
-				return 0
+		if request.Uid != "" {
+			reguid = request.Uid
+		} else {
+			if request.Token != "" {
+				ok, reguid = auth.Instance.Auth(request.Token)
+				if !ok {
+					log.Warnf("%s: auth failed", client.devId)
+					onReply(3, request.AppId, "", "")
+					return 0
+				}
 			}
-		}
-	}*/
+		}*/
 	if request.Token != "" {
 		ok, reguid = auth.Instance.Auth(request.Token)
 		if !ok {
@@ -145,13 +145,13 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	regid := RegId(client.devId, request.AppId, reguid)
 	//log.Debugf("%s: uid (%s), regid (%s)", client.devId, reguid, regid)
 	if regapp, ok := client.RegApps[request.AppId]; ok {
-	// 已经在内存中
+		// 已经在内存中
 		if regapp.RegId == regid {
-		// regid一致，直接返回注册成功
+			// regid一致，直接返回注册成功
 			onReply(0, "", request.AppId, rawapp.Pkg, regid)
 			return 0
 		} else {
-		// regid不一致，不允许注册
+			// regid不一致，不允许注册
 			onReply(ERR_REG_CONFLICT, "reg conflict", request.AppId, rawapp.Pkg, regid)
 			return 0
 		}
@@ -480,14 +480,15 @@ func handleSubscribe(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 
-	// unknown regid
+	// unknown AppId
 	var ok bool
 	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		log.Warnf("%s: unkonw AppId %s", client.devId, request.AppId)
 		onReply(4, request.AppId)
 		return 0
 	}
+	// unknown RegId
 	if regapp.RegId != request.RegId {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		onReply(10, request.AppId)
@@ -551,14 +552,15 @@ func handleUnsubscribe(conn *net.TCPConn, client *Client, header *Header, body [
 		return 0
 	}
 
-	// unknown regid
+	// unknown AppId
 	var ok bool
 	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		log.Warnf("%s: unkonw AppId %s", client.devId, request.AppId)
 		onReply(3, request.AppId)
 		return 0
 	}
+	// unknown regid
 	if regapp.RegId != request.RegId {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		onReply(10, request.AppId)
@@ -610,14 +612,16 @@ func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []b
 		return 0
 	}
 
-	// unknown regid
+	// unknown AppId
 	var ok bool
 	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
-		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		log.Warnf("%s: unkonw AppId %s", client.devId, request.AppId)
 		onReply(3, request.AppId)
 		return 0
 	}
+
+	// unknown RegId
 	if regapp.RegId != request.RegId {
 		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
 		onReply(10, request.AppId)
