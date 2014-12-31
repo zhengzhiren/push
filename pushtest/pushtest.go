@@ -21,13 +21,19 @@ type Config struct {
 	Count int `json:"count"`
 }
 
+type RegApp struct {
+	RegId string `json:"regid"`
+	Pkg string `json:"pkg"`
+}
+
 type Client struct {
 	DevId   string
-	conn    *net.TCPConn 
+	conn    *net.TCPConn
 	outMsgs chan *comet.Message
 	nextSeq uint32
 	ctrl    chan bool // notify sendout routing to quit when close connection
 	Broken  bool
+	RegApps map[string]*RegApp
 }
 
 func NewClient(devId string, conn *net.TCPConn, outMsgs chan *comet.Message) *Client {
@@ -35,6 +41,7 @@ func NewClient(devId string, conn *net.TCPConn, outMsgs chan *comet.Message) *Cl
 		DevId : devId,
 		conn : conn,
 		outMsgs : outMsgs,
+		RegApps : make(map[string]*RegApp),
 	}
 }
 
@@ -71,21 +78,43 @@ func (client *Client)HandleMessage() bool {
 			log.Infof("invalid request, not JSON\n")
 			return true
 		}
-		regid := reply.RegId
-		log.Infof("got regid (%s)", regid)
+		_, ok := client.RegApps[reply.AppId]
+		if !ok {
+			client.RegApps[reply.AppId] = &RegApp{
+				RegId : reply.RegId,
+				Pkg : reply.Pkg,
+			}
+		}
+
 	} else if header.Type == comet.MSG_PUSH {
 		var request comet.PushMessage
 		if err := json.Unmarshal(data, &request); err != nil {
-			log.Infof("invalid request, not JSON\n")
+			log.Infof("invalid request, not JSON")
+			return true
+		}
+		regapp, ok := client.RegApps[request.AppId]
+		if !ok {
+			log.Infof("Unknown appid (%s)", request.AppId)
 			return true
 		}
 		response := comet.PushReplyMessage{
 			MsgId: request.MsgId,
 			AppId: request.AppId,
-			RegId: "",
+			RegId: regapp.RegId,
 		}
 		b, _ := json.Marshal(response)
 		client.SendMessage(comet.MSG_PUSH_REPLY, header.Seq, b)
+	} else if header.Type == comet.MSG_INIT_REPLY {
+		var reply comet.InitReplyMessage
+		json.Unmarshal(data, &reply)
+		for _, app := range(reply.Apps) {
+			if _, ok := client.RegApps[app.AppId]; !ok {
+				client.RegApps[app.AppId] = &RegApp{
+					RegId : app.RegId,
+					Pkg : app.Pkg,
+				}
+			}
+		}
 	}
 	return true
 }
