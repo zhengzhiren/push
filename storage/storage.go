@@ -15,10 +15,11 @@ type RawMessage struct {
 	MsgType    int    `json:"msg_type"`
 	PushType   int    `json:"push_type"`
 	PushParams struct {
-		RegId  []string `json:"regid,omitempty"`
-		UserId []string `json:"userid,omitempty"`
-		DevId  []string `json:"devid,omitempty"`
-		Topic  string   `json:"topic,omitempty"`
+		RegId   []string `json:"regid,omitempty"`
+		UserId  []string `json:"userid,omitempty"`
+		DevId   []string `json:"devid,omitempty"`
+		Topic   []string `json:"topic,omitempty"`
+		TopicOp string   `json:"topic_op,omitempty"`
 	} `json:"push_params"`
 	Content      string `json:"content,omitempty"`
 	Notification struct {
@@ -100,6 +101,13 @@ type Storage interface {
 	GetStatsReplyTooLate() (int, error)
 
 	ClearStats() error
+
+	//
+	// statistics for push message
+	//
+	MsgStatsReceived(msgId int64) error
+	MsgStatsClick(msgId int64) error
+	GetMsgStats(msgId int64) (int, int, error)
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)

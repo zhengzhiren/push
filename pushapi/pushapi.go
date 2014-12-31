@@ -3,11 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/chenyf/push/auth"
-	"github.com/chenyf/push/comet"
-	"github.com/chenyf/push/storage"
-	"github.com/chenyf/push/utils"
-	"github.com/chenyf/push/zk"
 	log "github.com/cihub/seelog"
 	uuid "github.com/codeskyblue/go-uuid"
 	"io/ioutil"
@@ -15,6 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chenyf/push/auth"
+	"github.com/chenyf/push/comet"
+	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/utils"
+	"github.com/chenyf/push/zk"
 )
 
 const (
@@ -73,8 +74,14 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	if m.PushType == 4 && (m.PushParams.DevId == nil || len(m.PushParams.DevId) == 0) {
 		return false, "empty 'devid' when 'push_type'==4"
 	}
-	if m.PushType == 5 && m.PushParams.Topic == "" {
+	if m.PushType == 5 && len(m.PushParams.Topic) == 0 {
 		return false, "empty 'topic' when 'push_type'==5"
+	}
+	if m.PushParams.TopicOp != "" &&
+		m.PushParams.TopicOp != "or" &&
+		m.PushParams.TopicOp != "and" &&
+		m.PushParams.TopicOp != "except" {
+		return false, "invalid 'topic_op'"
 	}
 	if m.Options.TTL > 3*86400 {
 		return false, "invalid 'options.ttl'"
@@ -510,7 +517,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if b == nil {
-		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		errResponse(w, ERR_INTERNAL, "no msgid in this appid", 500)
 		return
 	}
 
@@ -528,20 +535,20 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 	default:
 		target_cnt = 0
 	}
-	send_cnt := "0"
-	b, err = storage.Instance.HashGet("db_msg_stat", msgid)
+
+	msgId, _ := strconv.Atoi(msgid)
+	received, click, err := storage.Instance.GetMsgStats(int64(msgId))
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
 		return
 	}
-	if b != nil {
-		send_cnt = string(b)
-	}
+
 	var response Response
 	response.ErrNo = 0
-	response.Data = map[string]string{
-		"target": strconv.Itoa(target_cnt),
-		"send":   send_cnt,
+	response.Data = map[string]int{
+		"target":   target_cnt,
+		"received": received,
+		"click":    click,
 	}
 	b, err = json.Marshal(response)
 	if err != nil {

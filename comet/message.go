@@ -40,19 +40,20 @@ const (
 	MSG_REGISTER2_REPLY   = uint8(24)
 	MSG_UNREGISTER2       = uint8(25)
 	MSG_UNREGISTER2_REPLY = uint8(26)
+	MSG_STATS             = uint8(27)
+	MSG_STATS_REPLY       = uint8(28)
 )
 
 const (
-	ERR_INTERNAL          = 1000
-	ERR_INVALID_REQ       = 1001
-	ERR_INVALID_PARAMS    = 1002
-	ERR_INVALID_APPID     = 1003
-	ERR_INVALID_PKG       = 1004
-	ERR_AUTH              = 1005
-	ERR_REG_CONFLICT      = 1006
-	ERR_NOT_REG           = 1007
-	ERR_INVALID_REGID     = 1008
-
+	ERR_INTERNAL       = 1000
+	ERR_INVALID_REQ    = 1001
+	ERR_INVALID_PARAMS = 1002
+	ERR_INVALID_APPID  = 1003
+	ERR_INVALID_PKG    = 1004
+	ERR_AUTH           = 1005
+	ERR_REG_CONFLICT   = 1006
+	ERR_NOT_REG        = 1007
+	ERR_INVALID_REGID  = 1008
 )
 
 // msg to byte
@@ -89,11 +90,11 @@ type Base2 struct {
 	Pkg   string `json:"pkg"`
 }
 type InitReplyMessage struct {
-	Result int     `json:"result"`
-	ErrInfo string `json:"errinfo,omitempty"`
-	Apps   []Base2 `json:"apps,omitempty"`
-	HB     int32   `json:"hb,omitempty"`
-	Reconn int32   `json:"reconn,omitempty"`
+	Result  int     `json:"result"`
+	ErrInfo string  `json:"errinfo,omitempty"`
+	Apps    []Base2 `json:"apps,omitempty"`
+	HB      int32   `json:"hb,omitempty"`
+	Reconn  int32   `json:"reconn,omitempty"`
 }
 type RegisterMessage struct {
 	AppId  string `json:"appid"`
@@ -103,11 +104,11 @@ type RegisterMessage struct {
 	Uid    string `json:"uid,omitempty"`
 }
 type RegisterReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg,omitempty"`
-	RegId  string `json:"regid,omitempty"`
+	Result  int    `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
+	AppId   string `json:"appid"`
+	Pkg     string `json:"pkg,omitempty"`
+	RegId   string `json:"regid,omitempty"`
 }
 type UnregisterMessage struct {
 	AppId  string `json:"appid"`
@@ -115,9 +116,9 @@ type UnregisterMessage struct {
 	RegId  string `json:"regid"`
 }
 type UnregisterReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId  string `json:"appid"`
+	Result  int    `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
+	AppId   string `json:"appid"`
 }
 type PushMessage struct {
 	MsgId   int64  `json:"msgid"`
@@ -136,10 +137,10 @@ type SubscribeMessage struct {
 	Topic string `json:"topic"`
 }
 type SubscribeReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId  string `json:"appid"`
-	RegId  string `json:"regid"`
+	Result  int    `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
+	AppId   string `json:"appid"`
+	RegId   string `json:"regid"`
 }
 type UnsubscribeMessage struct {
 	AppId string `json:"appid"`
@@ -147,21 +148,21 @@ type UnsubscribeMessage struct {
 	Topic string `json:"topic"`
 }
 type UnsubscribeReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId  string `json:"appid"`
-	RegId  string `json:"regid"`
+	Result  int    `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
+	AppId   string `json:"appid"`
+	RegId   string `json:"regid"`
 }
 type GetTopicsMessage struct {
 	AppId string `json:"appid"`
 	RegId string `json:"regid"`
 }
 type GetTopicsReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId string `json:"appid"`
-	RegId string `json:"regid"`
-	Topics []string `json:"topics"`
+	Result  int      `json:"result"`
+	ErrInfo string   `json:"errinfo,omitempty"`
+	AppId   string   `json:"appid"`
+	RegId   string   `json:"regid"`
+	Topics  []string `json:"topics"`
 }
 type CommandMessage struct {
 	Service string `json:"service"`
@@ -172,29 +173,40 @@ type CommandReplyMessage struct {
 	Result string `json:"result"`
 }
 type Register2Message struct {
-	Pkg     string   `json:"pkg"`
-	Token   string   `json:"token,omitempty"`
+	Pkg   string `json:"pkg"`
+	Token string `json:"token,omitempty"`
 	//Uid     string   `json:"uid,omitempty"`
 	SendIds []string `json:"sendids"`
 }
 type Register2ReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg"`
-	RegId  string `json:"regid"`
+	Result  int    `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
+	AppId   string `json:"appid"`
+	Pkg     string `json:"pkg"`
+	RegId   string `json:"regid"`
 }
 type Unregister2Message struct {
-	Pkg     string `json:"pkg"`
+	Pkg string `json:"pkg"`
 	//Uid     string `json:"uid,omitempty"`
-	RegId   string `json:"regid"`
-	SendId  string `json:"sendid"`  // [all]
+	RegId  string `json:"regid"`
+	SendId string `json:"sendid"` // [all]
 }
 type Unregister2ReplyMessage struct {
-	Result int    `json:"result"`
-	ErrInfo string  `json:"errinfo,omitempty"`
-	AppId  string `json:"appid"`
-	Pkg    string `json:"pkg"`
-	SenderCnt int `json:"sendercnt"`
+	Result    int    `json:"result"`
+	ErrInfo   string `json:"errinfo,omitempty"`
+	AppId     string `json:"appid"`
+	Pkg       string `json:"pkg"`
+	SenderCnt int    `json:"sendercnt"`
 }
-
+type StatsMessage struct {
+	AppId string `json:"appid"`
+	RegId string `json:"regid"`
+	MsgId int64  `json:"msgid"`
+	Click bool   `json:"click,omitempty"`
+}
+type StatsReplyMessage struct {
+	Result  int    `json:"result"`
+	ErrInfo string `json:"errinfo,omitempty"`
+	AppId   string `json:"appid"`
+	RegId   string `json:"regid"`
+}

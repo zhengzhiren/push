@@ -436,6 +436,38 @@ func (r *RedisStorage) ClearStats() error {
 	return err
 }
 
+func (r *RedisStorage) MsgStatsReceived(msgId int64) error {
+	_, err := r.Do("HINCRBY", fmt.Sprintf("db_msg_stat:%d", msgId), "received", 1)
+	return err
+}
+
+func (r *RedisStorage) MsgStatsClick(msgId int64) error {
+	_, err := r.Do("HINCRBY", fmt.Sprintf("db_msg_stat:%d", msgId), "click", 1)
+	return err
+}
+
+func (r *RedisStorage) GetMsgStats(msgId int64) (int, int, error) {
+	log.Debugf("GetMsgStats: %d", msgId)
+	key := fmt.Sprintf("db_msg_stat:%d", msgId)
+	ret, err := redis.Values(r.Do("HMGET", key, "received", "click"))
+	if err != nil {
+		log.Warnf("redis: HGET failed (%s)", err)
+		return 0, 0, err
+	}
+	if ret == nil {
+		return 0, 0, nil
+	}
+	received := 0
+	if ret[0] != nil {
+		received, _ = redis.Int(ret[0], nil)
+	}
+	click := 0
+	if ret[1] != nil {
+		click, _ = redis.Int(ret[1], nil)
+	}
+	return received, click, nil
+}
+
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
 	ret, err := r.Do("HGETALL", db)
 	if err != nil {
@@ -572,4 +604,3 @@ func (r *RedisStorage) KeyExpire(key string, ttl int32) (int, error) {
 	}
 	return ret, err
 }
-
