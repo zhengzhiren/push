@@ -40,6 +40,7 @@ func (this *LetvAuth)Auth(token string) (bool, string) {
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		log.Warnf("ioutil readall failed: %s", err)
+		res.Body.Close()
 		return false, ""
 	}
 	res.Body.Close()
