@@ -516,7 +516,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if b == nil {
-		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
+		errResponse(w, ERR_INTERNAL, "no msgid in this appid", 500)
 		return
 	}
 

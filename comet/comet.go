@@ -60,7 +60,7 @@ const (
 func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *PushMessage) bool {
 	//if len(app.SendIds) != 0 {
 	// regapp with sendids
-	log.Infof("before push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
+	log.Infof("msgid %d: before push to (device %s) (regid %s)", rawMsg.MsgId, app.DevId, app.RegId)
 	if rawMsg.SendId != "" {
 		found := false
 		for _, sendid := range app.SendIds {
@@ -70,24 +70,24 @@ func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *Pus
 			}
 		}
 		if !found {
-			log.Debugf("check sendid (%s) failed", rawMsg.SendId)
+			log.Debugf("msgid %d: check sendid (%s) failed", rawMsg.MsgId, rawMsg.SendId)
 			return false
 		}
 	}
 
 	x := DevicesMap.Get(app.DevId)
 	if x == nil {
-		log.Debugf("device %s offline", app.DevId)
+		log.Debugf("msgid %d: device %s offline", rawMsg.MsgId, app.DevId)
 		return false
 	}
 	client := x.(*Client)
 	b, err := json.Marshal(msg)
 	if err != nil {
-		log.Infof("failed to encode msg %v", msg)
+		log.Errorf("msgid %d: failed to encode msg %v", rawMsg.MsgId, msg)
 		return false
 	}
 	client.SendMessage(MSG_PUSH, 0, b, nil)
-	log.Infof("after push to (app %s) (device %s) (regid %s)", appId, app.DevId, app.RegId)
+	log.Infof("msgid %d: after push to (device %s) (regid %s)", rawMsg.MsgId, app.DevId, app.RegId)
 	return true
 }
 
@@ -109,27 +109,37 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		for _, app := range apps {
 			pushMessage(appId, app, rawMsg, &msg)
 		}
+		log.Infof("msgid %d: get %d apps", rawMsg.MsgId, len(apps))
 	case PUSH_TYPE_REGID: // regid list
+		count := 0
 		for _, regid := range rawMsg.PushParams.RegId {
 			app := AMInstance.GetApp(appId, regid)
 			if app != nil {
 				pushMessage(appId, app, rawMsg, &msg)
+				count += 1
 			}
 		}
+		log.Infof("msgid %d: get %d apps by regid", rawMsg.MsgId, count)
 	case PUSH_TYPE_USERID: // userid list
 		for _, uid := range rawMsg.PushParams.UserId {
+			count := 0
 			apps := AMInstance.GetAppsByUser(appId, uid)
 			for _, app := range apps {
 				pushMessage(appId, app, rawMsg, &msg)
+				count += 1
 			}
+			log.Infof("msgid %d: get %d apps by user %s", rawMsg.MsgId, count, uid)
 		}
 	case PUSH_TYPE_DEVID: // devid list
+		count := 0
 		for _, devid := range rawMsg.PushParams.DevId {
 			app := AMInstance.GetAppByDevice(appId, devid)
 			if app != nil {
 				pushMessage(appId, app, rawMsg, &msg)
+				count += 1
 			}
 		}
+		log.Infof("msgid %d: get %d apps by devid", rawMsg.MsgId, count)
 	case PUSH_TYPE_TOPIC: // topic
 		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic, rawMsg.PushParams.TopicOp)
 		for _, app := range apps {
