@@ -40,7 +40,6 @@ const (
 	MSG_REGISTER2_REPLY   = uint8(24)
 	MSG_UNREGISTER2       = uint8(25)
 	MSG_UNREGISTER2_REPLY = uint8(26)
-	MSG_CHECK             = uint8(100)
 )
 
 const (
@@ -175,7 +174,7 @@ type CommandReplyMessage struct {
 type Register2Message struct {
 	Pkg     string   `json:"pkg"`
 	Token   string   `json:"token,omitempty"`
-	Uid     string   `json:"uid,omitempty"`
+	//Uid     string   `json:"uid,omitempty"`
 	SendIds []string `json:"sendids"`
 }
 type Register2ReplyMessage struct {
@@ -187,7 +186,8 @@ type Register2ReplyMessage struct {
 }
 type Unregister2Message struct {
 	Pkg     string `json:"pkg"`
-	Uid     string `json:"uid,omitempty"`
+	//Uid     string `json:"uid,omitempty"`
+	RegId   string `json:"regid"`
 	SendId  string `json:"sendid"`  // [all]
 }
 type Unregister2ReplyMessage struct {

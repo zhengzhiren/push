@@ -88,7 +88,9 @@ func push(syncmsg *SyncMsg) (*http.Response, error) {
 	req.Header.Add("Authorization", fmt.Sprintf("LETV %s pushtest", syncmsg.AppId))
 	log.Infof("push msg...")
 	resp, err := client.Do(req)
-	return resp, err
+	resp.Body.Close()
+	return nil, err
+	//return resp, err
 }
 
 func addMessage(w http.ResponseWriter, r *http.Request) {
