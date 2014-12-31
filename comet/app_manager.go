@@ -308,8 +308,3 @@ func (this *AppManager) LoadAppInfosByDevice(devId string) map[string]*AppInfo {
 	}
 	return infos
 }
-
-func (this *AppManager) UpdateMsgStat(devId string, msgId int64) bool {
-	storage.Instance.HashIncrBy("db_msg_stat", fmt.Sprintf("%d", msgId), 1)
-	return true
-}

@@ -102,6 +102,13 @@ type Storage interface {
 
 	ClearStats() error
 
+	//
+	// statistics for push message
+	//
+	MsgStatsReceived(msgId int64) error
+	MsgStatsClick(msgId int64) error
+	GetMsgStats(msgId int64) (int, int, error)
+
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
 	HashSet(db string, key string, val []byte) (int, error)

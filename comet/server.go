@@ -52,16 +52,16 @@ type Server struct {
 
 var (
 	msgNames = map[uint8]string{
-		MSG_INIT_REPLY         : "InitReply",
-		MSG_REGISTER_REPLY     : "RegisterReply",
-		MSG_UNREGISTER_REPLY   : "UnregisterReply",
-		MSG_PUSH               : "Push",
-		MSG_SUBSCRIBE_REPLY    : "SubscribeReply",
-		MSG_UNSUBSCRIBE_REPLY  : "UnsubscribeReply",
-		MSG_GET_TOPICS_REPLY   : "GetTopicsReply",
-		MSG_CMD                : "Command",
-		MSG_REGISTER2_REPLY    : "Register2Reply",
-		MSG_UNREGISTER2_REPLY  : "Unregister2Reply",
+		MSG_INIT_REPLY:        "InitReply",
+		MSG_REGISTER_REPLY:    "RegisterReply",
+		MSG_UNREGISTER_REPLY:  "UnregisterReply",
+		MSG_PUSH:              "Push",
+		MSG_SUBSCRIBE_REPLY:   "SubscribeReply",
+		MSG_UNSUBSCRIBE_REPLY: "UnsubscribeReply",
+		MSG_GET_TOPICS_REPLY:  "GetTopicsReply",
+		MSG_CMD:               "Command",
+		MSG_REGISTER2_REPLY:   "Register2Reply",
+		MSG_UNREGISTER2_REPLY: "Unregister2Reply",
 	}
 )
 
@@ -214,6 +214,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	this.funcMap[MSG_CMD_REPLY] = handleCmdReply
 	this.funcMap[MSG_REGISTER2] = handleRegister2
 	this.funcMap[MSG_UNREGISTER2] = handleUnregister2
+	this.funcMap[MSG_STATS] = handleStats
 
 	if err := storage.Instance.InitDevices(this.Name); err != nil {
 		log.Errorf("failed to InitDevices: %s", err.Error())
@@ -479,10 +480,10 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 
 		if ok {
 			if len(regapp.SendIds) > 0 {
-			// regapp with sendids
+				// regapp with sendids
 				if rawMsg.SendId != "" {
 					found := false
-					for _, sendid := range(regapp.SendIds) {
+					for _, sendid := range regapp.SendIds {
 						if sendid == rawMsg.SendId {
 							found = true
 							break
@@ -512,7 +513,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 }
 
 func inBlacklist(server *Server, devId string, now *time.Time) bool {
-	if now.After(server.BlackUpdate.Add(60*time.Second)) {
+	if now.After(server.BlackUpdate.Add(60 * time.Second)) {
 		if BlackDevices, err := storage.Instance.SetMembers("db_black_devices"); err != nil {
 			sort.Strings(BlackDevices)
 			server.BlackDevices = BlackDevices

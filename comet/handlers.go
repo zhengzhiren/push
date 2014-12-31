@@ -2,13 +2,14 @@ package comet
 
 import (
 	"encoding/json"
+	"fmt"
+	log "github.com/cihub/seelog"
 	"net"
 	"time"
-	"fmt"
+
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/stats"
 	"github.com/chenyf/push/storage"
-	log "github.com/cihub/seelog"
 )
 
 func sendReply(client *Client, msgType uint8, seq uint32, v interface{}) {
@@ -247,7 +248,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 	info := regapp.AppInfo
 	info.LastMsgId = request.MsgId
 	AMInstance.UpdateAppInfo(client.devId, request.RegId, &info)
-	AMInstance.UpdateMsgStat(client.devId, request.MsgId)
+	storage.Instance.MsgStatsReceived(request.MsgId)
 	regapp.LastMsgId = request.MsgId
 	return 0
 }
@@ -622,6 +623,60 @@ func handleGetTopics(conn *net.TCPConn, client *Client, header *Header, body []b
 	reply.RegId = request.RegId
 	reply.Topics = regapp.Topics
 	sendReply(client, MSG_GET_TOPICS_REPLY, header.Seq, &reply)
+	return 0
+}
+
+/*
+** return:
+**   1: invalid JSON
+**   2: missing 'appid' or 'regid'
+**   3: unknown 'regid'
+ */
+func handleStats(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
+	log.Debugf("%s: RECV Stats (%s)", client.devId, body)
+	var request StatsMessage
+	var reply StatsReplyMessage
+
+	onReply := func(result int, appId string) {
+		reply.Result = result
+		reply.AppId = appId
+		sendReply(client, MSG_STATS_REPLY, header.Seq, &reply)
+	}
+
+	if err := json.Unmarshal(body, &request); err != nil {
+		log.Warnf("%s: json decode failed: (%v)", client.devId, err)
+		onReply(1, request.AppId)
+		return 0
+	}
+
+	if request.AppId == "" || request.RegId == "" {
+		log.Warnf("%s: appid or regid is empty", client.devId)
+		onReply(2, request.AppId)
+		return 0
+	}
+
+	// unknown AppId
+	var ok bool
+	regapp, ok := client.RegApps[request.AppId]
+	if !ok {
+		log.Warnf("%s: unkonw AppId %s", client.devId, request.AppId)
+		onReply(4, request.AppId)
+		return 0
+	}
+	// unknown RegId
+	if regapp.RegId != request.RegId {
+		log.Warnf("%s: unkonw regid %s", client.devId, request.RegId)
+		onReply(10, request.AppId)
+		return 0
+	}
+
+	if request.Click {
+		storage.Instance.MsgStatsClick(request.MsgId)
+	}
+	reply.Result = 0
+	reply.AppId = request.AppId
+	reply.RegId = request.RegId
+	sendReply(client, MSG_STATS_REPLY, header.Seq, &reply)
 	return 0
 }
 
