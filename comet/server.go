@@ -508,6 +508,7 @@ func handleOfflineMsgs(client *Client, regapp *RegApp) {
 			}
 			b, _ := json.Marshal(msg)
 			client.SendMessage(MSG_PUSH, 0, b, nil)
+			log.Infof("msgid %d: push to client", rawMsg.MsgId)
 		}
 	}
 }
