@@ -223,17 +223,17 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 	var request PushReplyMessage
 	if err := json.Unmarshal(body, &request); err != nil {
 		log.Warnf("%s %p: json decode failed: (%v)", client.devId, conn, err)
-		return -1
+		return 0
 	}
 
 	if request.AppId == "" || request.RegId == "" {
-		log.Warnf("%s %p: appid or regis is empty", client.devId, conn)
-		return -1
+		log.Warnf("%s %p: appid or regid is empty", client.devId, conn)
+		return 0
 	}
 	// unknown regid
 	regapp, ok := client.RegApps[request.AppId]
 	if !ok {
-		log.Warnf("%s %p: unkonw regid %s", client.devId, conn, request.RegId)
+		log.Warnf("%s %p: unknown regid %s", client.devId, conn, request.RegId)
 		return 0
 	}
 	if regapp.RegId != request.RegId {
