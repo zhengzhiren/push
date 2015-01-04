@@ -249,6 +249,7 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 	info.LastMsgId = request.MsgId
 	AMInstance.UpdateAppInfo(client.devId, request.RegId, &info)
 	storage.Instance.MsgStatsReceived(request.MsgId)
+	storage.Instance.AppStatsReceived(request.AppId)
 	regapp.LastMsgId = request.MsgId
 	return 0
 }
@@ -672,6 +673,7 @@ func handleStats(conn *net.TCPConn, client *Client, header *Header, body []byte)
 
 	if request.Click {
 		storage.Instance.MsgStatsClick(request.MsgId)
+		storage.Instance.AppStatsClick(request.AppId)
 	}
 	reply.Result = 0
 	reply.AppId = request.AppId
