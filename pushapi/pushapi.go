@@ -660,3 +660,46 @@ func getAppStats(w rest.ResponseWriter, r *rest.Request) {
 	}
 	w.WriteJson(resp)
 }
+
+func getSysStats(w rest.ResponseWriter, r *rest.Request) {
+	r.ParseForm()
+	startDate := r.FormValue("start_date")
+	endDate := r.FormValue("end_date")
+
+	var (
+		start time.Time
+		end   time.Time
+		err   error
+	)
+	if startDate == "" {
+		start = time.Now()
+	} else {
+		if start, err = time.Parse("20060102", startDate); err != nil {
+			rest.Error(w, "invalid date format", http.StatusBadRequest)
+			return
+		}
+	}
+	if endDate == "" {
+		end = time.Now()
+	} else {
+		if end, err = time.Parse("20060102", endDate); err != nil {
+			rest.Error(w, "invalid date format", http.StatusBadRequest)
+			return
+		}
+	}
+	if start.After(end) {
+		rest.Error(w, "start date greater than end date", http.StatusBadRequest)
+		return
+	}
+
+	resp := Response{
+		ErrNo: 0,
+	}
+	resp.Data, err = storage.Instance.GetSysStats(start, end)
+	if err != nil {
+		rest.Error(w, "storage I/O failed", http.StatusInternalServerError)
+		log.Warnf("GetSysStats failed: %s", err.Error())
+		return
+	}
+	w.WriteJson(resp)
+}

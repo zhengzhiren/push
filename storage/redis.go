@@ -521,6 +521,56 @@ func (r *RedisStorage) GetAppStats(appId string, start time.Time, end time.Time)
 	return appStats, nil
 }
 
+func (r *RedisStorage) GetSysStats(start time.Time, end time.Time) ([]*AppStats, error) {
+	f := func(key string) (int, error) {
+		appIds, err := redis.Strings(r.Do("ZRANGE", key, 0, -1))
+		if err != nil {
+			return 0, err
+		}
+		total := 0
+		for _, appId := range appIds {
+			count, err := redis.Int(r.Do("ZSCORE", key, appId))
+			if err != nil && err != redis.ErrNil {
+				return 0, err
+			}
+			total += count
+		}
+		return total, nil
+	}
+
+	appStats := []*AppStats{}
+	for ; !start.After(end); start = start.Add(24 * time.Hour) {
+		date := dateKey(start)
+
+		key := fmt.Sprintf("stats_app_pushapi:%s", date)
+		pushapi, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_received:%s", date)
+		received, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_click:%s", date)
+		click, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		stats := AppStats{
+			Date:     date,
+			PushApi:  pushapi,
+			Received: received,
+			Click:    click,
+		}
+		appStats = append(appStats, &stats)
+	}
+	return appStats, nil
+}
+
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
 	ret, err := r.Do("HGETALL", db)
 	if err != nil {

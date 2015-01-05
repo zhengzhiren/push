@@ -125,6 +125,7 @@ type Storage interface {
 	AppStatsReceived(appId string) error
 	AppStatsClick(appId string) error
 	GetAppStats(appId string, start time.Time, end time.Time) ([]*AppStats, error)
+	GetSysStats(start time.Time, end time.Time) ([]*AppStats, error)
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)

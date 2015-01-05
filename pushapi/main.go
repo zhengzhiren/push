@@ -162,6 +162,7 @@ func startHttp(addr string, cmdTimeout int) {
 		&rest.Route{"GET", "/stats/control", getStats},
 		&rest.Route{"DELETE", "/stats/control", deleteStats},
 		&rest.Route{"Get", "/stats/app", getAppStats},
+		&rest.Route{"Get", "/stats/sys", getSysStats},
 		&rest.Route{"GET", "/.status",
 			func(w rest.ResponseWriter, r *rest.Request) {
 				w.WriteJson(handler.GetStatus())
