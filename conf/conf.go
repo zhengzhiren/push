@@ -17,36 +17,38 @@ type ConfigStruct struct {
 		MaxClients       uint32 `json:"max_clients"`
 	} `json:"comet"`
 
-	PushAPI              string `json:"pushapi"`
-	Web                  string `json:"web"`
+	PushAPI string `json:"pushapi"`
+	Web     string `json:"web"`
 
 	Control struct {
-		CommandTimeout   int    `json:"command_timeout"`
-		DevCenter        string `json:"devcenter"`
+		CommandTimeout int    `json:"command_timeout"`
+		DevCenter      string `json:"devcenter"`
 	} `json:"control"`
 
 	Rabbit struct {
-		Enable           bool   `json:"enable"`
-		Uri              string `json:"uri"`
-		Exchange         string `json:"exchange"`
-		ExchangeType     string `json:"exchange_type"`
-		Key              string `json:"key"`
-		Reliable         bool   `json:"reliable"`
-		QOS              int    `json:"qos"`
+		Enable       bool   `json:"enable"`
+		Uri          string `json:"uri"`
+		Exchange     string `json:"exchange"`
+		ExchangeType string `json:"exchange_type"`
+		Key          string `json:"key"`
+		Reliable     bool   `json:"reliable"`
+		QOS          int    `json:"qos"`
 	} `json:"rabbit"`
 
 	Redis struct {
-		Server           string `json:"server"`
-		Pass             string `json:"pass"`
-		PoolSize         int    `json:"poolsize"`
-		Retry            int    `json:"retry"`
+		Server      string `json:"server"`
+		Pass        string `json:"pass"`
+		MaxActive   int    `json:"maxactive"`
+		MaxIdle     int    `json:"maxidle"`
+		IdleTimeout int    `json:"idletimeout"`
+		Retry       int    `json:"retry"`
 	} `json:"redis"`
 
 	ZooKeeper struct {
-		Enable           bool          `json:"enable"`
-		Addr             string        `json:"addr"`
-		Timeout          time.Duration `json:"timeout"`
-		Path             string        `json:"path"`
+		Enable  bool          `json:"enable"`
+		Addr    string        `json:"addr"`
+		Timeout time.Duration `json:"timeout"`
+		Path    string        `json:"path"`
 	} `json:"zookeeper"`
 
 	Auth struct {
@@ -54,17 +56,17 @@ type ConfigStruct struct {
 		LetvUrl  string `json:"letv_url"`
 	} `json:"auth"`
 
-    Notify struct {
-        Addr string             `json:"addr"`
-        SubUrl string           `json:"sub_url"`
-        PushUrl string          `json:"push_url"`
-        MaxNotices int          `json:"max_notices"`
-        Timeout time.Duration   `json:"timeout"`
-    } `json:"notify"`
+	Notify struct {
+		Addr       string        `json:"addr"`
+		SubUrl     string        `json:"sub_url"`
+		PushUrl    string        `json:"push_url"`
+		MaxNotices int           `json:"max_notices"`
+		Timeout    time.Duration `json:"timeout"`
+	} `json:"notify"`
 
 	Sync struct {
-		Url string		        `json:"url"`
-		Interval time.Duration  `json:"interval"`
+		Url      string        `json:"url"`
+		Interval time.Duration `json:"interval"`
 	} `json:"sync"`
 }
 
