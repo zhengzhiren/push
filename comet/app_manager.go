@@ -46,7 +46,7 @@ func RegId(devid string, appId string, userId string) string {
 func (this *AppManager) AddApp(devId string, regId string, info *AppInfo) *RegApp {
 	this.lock.RLock()
 	if app, ok := this.appMap[regId]; ok {
-		log.Warnf("%s: regid %s in memory already", devId, regId)
+		log.Errorf("%s: regid %s in memory already", devId, regId)
 		this.lock.RUnlock()
 		return app
 	}

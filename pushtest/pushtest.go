@@ -11,13 +11,16 @@ import (
 	"encoding/json"
 	"time"
 	//"strings"
+	"strconv"
 	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
 )
 
 type Config struct {
 	Server string `json:"server"`
+	Name string `json:"name"`
 	AppIds []string `json:"appids"`
+	Interval time.Duration `json:interval"`
 	Count int `json:"count"`
 }
 
@@ -27,6 +30,8 @@ type RegApp struct {
 }
 
 type Client struct {
+	index   int
+	Init    bool
 	DevId   string
 	conn    *net.TCPConn
 	outMsgs chan *comet.Message
@@ -36,8 +41,10 @@ type Client struct {
 	RegApps map[string]*RegApp
 }
 
-func NewClient(devId string, conn *net.TCPConn, outMsgs chan *comet.Message) *Client {
+func NewClient(index int, devId string, conn *net.TCPConn, outMsgs chan *comet.Message) *Client {
 	return &Client{
+		index : index,
+		Init : false,
 		DevId : devId,
 		conn : conn,
 		outMsgs : outMsgs,
@@ -71,7 +78,7 @@ func (client *Client)HandleMessage() bool {
 		return false
 	}
 
-	log.Infof("recv: (%d) (%d) (%s)", header.Type, header.Len, string(data))
+	log.Infof("client %d: recv: (%d) (%s)", client.index, header.Type, string(data))
 	if header.Type == comet.MSG_REGISTER_REPLY {
 		var reply comet.RegisterReplyMessage
 		if err := json.Unmarshal(data, &reply); err != nil {
@@ -94,7 +101,7 @@ func (client *Client)HandleMessage() bool {
 		}
 		regapp, ok := client.RegApps[request.AppId]
 		if !ok {
-			log.Infof("Unknown appid (%s)", request.AppId)
+			//log.Infof("Unknown appid (%s)", request.AppId)
 			return true
 		}
 		response := comet.PushReplyMessage{
@@ -108,13 +115,17 @@ func (client *Client)HandleMessage() bool {
 		var reply comet.InitReplyMessage
 		json.Unmarshal(data, &reply)
 		for _, app := range(reply.Apps) {
+		/*
 			if _, ok := client.RegApps[app.AppId]; !ok {
 				client.RegApps[app.AppId] = &RegApp{
 					RegId : app.RegId,
 					Pkg : app.Pkg,
 				}
 			}
+		*/
+			sendUnregister(client, app.AppId, app.RegId, "")
 		}
+		client.Init = true
 	}
 	return true
 }
@@ -138,7 +149,7 @@ func (client *Client)SendMessage(msgType uint8, seq uint32, body []byte) (uint32
 	return seq, true
 }
 
-func sendInit(client *Client) {
+func sendInit(client *Client, config *Config) {
 	init_msg := comet.InitMessage{
 		DevId: client.DevId,
 		Sync: 1,
@@ -154,27 +165,36 @@ func sendRegister(client *Client, appid string, regid string, token string) {
 		RegId:  regid,
 		Token:  token,
 	}
-
 	b2, _ := json.Marshal(reg_msg)
 	client.SendMessage(comet.MSG_REGISTER, 0, b2)
 }
 
-func runClient(config *Config, index int, wg *sync.WaitGroup, ctrl chan bool, addr *net.TCPAddr) {
-	log.Infof("enter client routine")
+func sendUnregister(client *Client, appid string, regid string, token string) {
+	reg_msg := comet.UnregisterMessage{
+		AppId:  appid,
+		AppKey: "",
+		RegId:  regid,
+	}
+	b2, _ := json.Marshal(reg_msg)
+	client.SendMessage(comet.MSG_UNREGISTER, 0, b2)
+}
+
+func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, addr *net.TCPAddr) {
+	log.Infof("client %d: enter routine", index)
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
-		log.Infof("connect to server failed: %v", err)
+		log.Infof("client %d: connect to server failed: %v", index, err)
 		return
 	}
-	log.Infof("connected to server")
+	log.Infof("client %d: connected to server", index)
 	conn.SetNoDelay(true)
 	defer conn.Close()
 
 	outMsg := make(chan *comet.Message, 10)
 	ctrl2 := make(chan bool, 1)
-	client := NewClient(fmt.Sprintf("testdevid_%d", index), conn, outMsg)
+	client := NewClient(index, fmt.Sprintf("perftest-%s-%d", config.Name, index), conn, outMsg)
 
-	sendInit(client)
+	sendInit(client, config)
 
 	wg.Add(1)
 	go func() {
@@ -184,61 +204,74 @@ func runClient(config *Config, index int, wg *sync.WaitGroup, ctrl chan bool, ad
 		for {
 			select {
 			case <-ctrl2:
-				log.Infof("leave output routine")
+				log.Infof("client %d: leave output routine", index)
 				return
 			case msg := <-outMsg:
 				b, _ := msg.Header.Serialize()
 				conn.Write(b)
 				conn.Write(msg.Data)
-				log.Infof("send: (%d) (%d) (%s)", msg.Header.Type, msg.Header.Len, msg.Data)
+				log.Infof("client %d: send: (%d) (%s)", index, msg.Header.Type, msg.Data)
 			case <-time.After(50*time.Second):
 				conn.Write(heartbeat)
 			}
 		}
 	}()
 
-	time.Sleep(3)
+	time.Sleep(3*time.Second)
+	/*
 	for _, appid := range(config.AppIds) {
 		sendRegister(client, appid, "", "")
-		time.Sleep(1)
-	}
+		time.Sleep(1*time.Second)
+	}*/
 
+	registered := false
 	for {
 	// main loop
 		select {
-		case <-ctrl:
-			close(ctrl2)
-			wg.Done()
-			log.Infof("leave client routine")
-			return
-		default:
+			case <-ctrl:
+				close(ctrl2)
+				wg.Done()
+				log.Infof("client %d: leave routine", index)
+				return
+			default:
 		}
+		if !registered && client.Init {
+			for _, appid := range(config.AppIds) {
+				sendRegister(client, appid, "", "")
+				time.Sleep(1*time.Second)
+			}
+			registered = true
+		}
+
 		if ok := client.HandleMessage(); !ok {
 			close(ctrl2)
 			wg.Done()
-			log.Infof("leave client routine")
+			log.Infof("client %d: leave routine", index)
 			return
 		}
-		time.Sleep(1)
+		time.Sleep(30*time.Millisecond)
 	}
 }
 
-
 func main() {
-	if len(os.Args) <= 1 {
-		log.Infof("Usage: cfgfile")
-		return
+	cfgfile := "conf.json"
+	begin := 0
+	count := 1
+	if len(os.Args) >= 3 {
+		begin, _ = strconv.Atoi(os.Args[1])
+		count, _ = strconv.Atoi(os.Args[2])
 	}
-	cfgfile := os.Args[1]
 	r, err := os.Open(cfgfile)
 	if err != nil {
+		log.Errorf("failed to open config file %s", cfgfile)
 		return
 	}
-	decoder := json.NewDecoder(r)
 
 	var config Config
+	decoder := json.NewDecoder(r)
 	err = decoder.Decode(&config)
 	if err != nil {
+		log.Errorf("invalid config file")
 		return
 	}
 
@@ -249,21 +282,23 @@ func main() {
 	ctrl := make(chan bool, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
+	running := true
 	wg.Add(1)
 	go func() {
 		sig := <-c
 		log.Infof("Received signal '%v', exiting\n", sig)
+		running = false
 		close(ctrl)
 		wg.Done()
 	}()
 
-	for n := 0; n < config.Count; n++ {
-		go runClient(&config, n, wg, ctrl, addr)
-		time.Sleep(2)
+	for n := begin; n < begin+count; n++ {
+		if !running {
+			break
+		}
+		go runClient(n, &config, wg, ctrl, addr)
+		time.Sleep(config.Interval * time.Millisecond)
 	}
 	wg.Wait()
-
 }
-
-
 
