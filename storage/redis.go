@@ -20,16 +20,18 @@ func NewRedisStorage(config *conf.ConfigStruct) *RedisStorage {
 	return newRedisStorage(
 		config.Redis.Server,
 		config.Redis.Pass,
-		config.Redis.PoolSize,
+		config.Redis.MaxActive,
+		config.Redis.MaxIdle,
+		config.Redis.IdleTimeout,
 		config.Redis.Retry)
 }
 
-func newRedisStorage(server string, pass string, poolsize int, retry int) *RedisStorage {
+func newRedisStorage(server string, pass string, maxActive int, maxIdle int, idleTimeout int, retry int) *RedisStorage {
 	return &RedisStorage{
 		pool: &redis.Pool{
-			MaxActive:   poolsize,
-			MaxIdle:     poolsize,
-			IdleTimeout: 300 * time.Second,
+			MaxActive:   maxActive,
+			MaxIdle:     maxIdle,
+			IdleTimeout: time.Duration(idleTimeout) * time.Second,
 			Dial: func() (redis.Conn, error) {
 				c, err := redis.Dial("tcp", server)
 				if err != nil {

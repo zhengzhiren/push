@@ -16,7 +16,9 @@
 	"redis" : {
 		"server"		: "10.135.28.70:6379",
 		"pass"			: "rpasswd",
-		"poolsize"		: 50,
+		"maxactive"		: 1000,
+		"maxidle"		: 100,
+		"idletimeout"	: 300,
 		"retry"			: 3
 	},
 
