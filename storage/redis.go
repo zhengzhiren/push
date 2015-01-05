@@ -469,6 +469,12 @@ func dateKey(date time.Time) string {
 	return date.Format("20060102")
 }
 
+func (r *RedisStorage) AppStatsPushApi(appId string) error {
+	key := fmt.Sprintf("stats_app_pushapi:%s", dateKey(time.Now()))
+	_, err := r.Do("ZINCRBY", key, 1, appId)
+	return err
+}
+
 func (r *RedisStorage) AppStatsReceived(appId string) error {
 	key := fmt.Sprintf("stats_app_received:%s", dateKey(time.Now()))
 	_, err := r.Do("ZINCRBY", key, 1, appId)
@@ -485,18 +491,28 @@ func (r *RedisStorage) GetAppStats(appId string, start time.Time, end time.Time)
 	appStats := []*AppStats{}
 	for ; !start.After(end); start = start.Add(24 * time.Hour) {
 		date := dateKey(start)
-		key := fmt.Sprintf("stats_app_received:%s", date)
-		received, err := redis.Int(r.Do("ZSCORE", key, appId))
-		if err != nil {
+
+		key := fmt.Sprintf("stats_app_pushapi:%s", date)
+		pushapi, err := redis.Int(r.Do("ZSCORE", key, appId))
+		if err != nil && err != redis.ErrNil {
 			return nil, err
 		}
+
+		key = fmt.Sprintf("stats_app_received:%s", date)
+		received, err := redis.Int(r.Do("ZSCORE", key, appId))
+		if err != nil && err != redis.ErrNil {
+			return nil, err
+		}
+
 		key = fmt.Sprintf("stats_app_click:%s", date)
 		click, err := redis.Int(r.Do("ZSCORE", key, appId))
-		if err != nil {
+		if err != nil && err != redis.ErrNil {
 			return nil, err
 		}
+
 		stats := AppStats{
 			Date:     date,
+			PushApi:  pushapi,
 			Received: received,
 			Click:    click,
 		}

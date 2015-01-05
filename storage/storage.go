@@ -54,6 +54,7 @@ type RawApp struct {
 
 type AppStats struct {
 	Date     string `json:"date"`
+	PushApi  int    `json:"pushapi"`
 	Received int    `json:"received"`
 	Click    int    `json:"click"`
 }
@@ -120,6 +121,7 @@ type Storage interface {
 	//
 	// statistics for push message per App
 	//
+	AppStatsPushApi(appId string) error
 	AppStatsReceived(appId string) error
 	AppStatsClick(appId string) error
 	GetAppStats(appId string, start time.Time, end time.Time) ([]*AppStats, error)

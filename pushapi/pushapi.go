@@ -453,6 +453,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	msgBox <- msg
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
+	storage.Instance.AppStatsPushApi(appid)
 }
 
 /*
@@ -617,6 +618,11 @@ func getAppStats(w rest.ResponseWriter, r *rest.Request) {
 	appId := r.FormValue("appid")
 	startDate := r.FormValue("start_date")
 	endDate := r.FormValue("end_date")
+	if appId == "" {
+		rest.Error(w, "missing 'appid'", http.StatusBadRequest)
+		return
+	}
+
 	var (
 		start time.Time
 		end   time.Time
@@ -649,6 +655,7 @@ func getAppStats(w rest.ResponseWriter, r *rest.Request) {
 	resp.Data, err = storage.Instance.GetAppStats(appId, start, end)
 	if err != nil {
 		rest.Error(w, "storage I/O failed", http.StatusInternalServerError)
+		log.Warnf("GetAppStats failed: %s", err.Error())
 		return
 	}
 	w.WriteJson(resp)

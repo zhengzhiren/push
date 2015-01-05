@@ -4,9 +4,13 @@ import (
 	"flag"
 	"os"
 	//"time"
-	"crypto/hmac"
-	"crypto/sha1"
 	"fmt"
+	log "github.com/cihub/seelog"
+	"net/http"
+	"os/signal"
+	"sync"
+	"syscall"
+
 	"github.com/chenyf/push/auth"
 	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/conf"
@@ -14,12 +18,6 @@ import (
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
-	log "github.com/cihub/seelog"
-	"net/http"
-	"os/signal"
-	"strings"
-	"sync"
-	"syscall"
 )
 
 func deviceHandler(w http.ResponseWriter, r *http.Request) {
@@ -44,31 +42,6 @@ func deviceHandler(w http.ResponseWriter, r *http.Request) {
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 	size := comet.DevicesMap.Size()
 	fmt.Fprintf(w, "total online device: %d\n", size)
-}
-
-func checkAuthz(uid string, devid string) bool {
-	return false
-}
-
-func sign(path string, query map[string]string) []byte {
-	uid := query["uid"]
-	rid := query["rid"]
-	tid := query["tid"]
-	src := query["src"]
-	tm := query["tm"]
-	pmtt := query["pmtt"]
-
-	raw := []string{path, uid, rid, tid, src, tm, pmtt}
-	args := []string{}
-	x := []int{6, 5, 4, 3, 2, 1, 0}
-	for _, item := range x {
-		args = append(args, raw[item])
-	}
-	data := strings.Join(args, "")
-	key := "xnRzFxoCDRVRU2mNQ7AoZ5MCxpAR7ntnmlgRGYav"
-	mac := hmac.New(sha1.New, []byte(key))
-	mac.Write([]byte(data))
-	return mac.Sum(nil)
 }
 
 func main() {
