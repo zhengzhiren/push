@@ -138,7 +138,7 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", addr)
 	l, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
-		log.Errorf("failed to listen, (%v)", err)
+		log.Warnf("failed to listen, (%v)", err)
 		return nil, err
 	}
 	log.Infof("start comet server at (%s)", addr)
@@ -163,7 +163,6 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		sort.Strings(this.blackDevices)
 		this.blackUpdate = time.Now()
 	}
-
 	return l, nil
 }
 
@@ -191,7 +190,7 @@ func (this *Server) Run(listener *net.TCPListener) {
 	for {
 		select {
 		case <-this.exitCh:
-			log.Debugf("ask me to quit")
+			log.Infof("ask me to quit")
 			return
 		default:
 		}
@@ -203,7 +202,7 @@ func (this *Server) Run(listener *net.TCPListener) {
 			if e, ok := err.(*net.OpError); ok && e.Timeout() {
 				continue
 			}
-			log.Debugf("accept failed: %v\n", err)
+			log.Warnf("accept failed: %v\n", err)
 			continue
 		}
 		/*
@@ -219,10 +218,10 @@ func (this *Server) Run(listener *net.TCPListener) {
 
 func (this *Server) Stop() {
 	// close后，所有的exitCh都返回false
-	log.Debugf("stopping comet server")
+	log.Infof("stopping comet server")
 	close(this.exitCh)
 	this.wg.Wait()
-	log.Debugf("comet server stopped")
+	log.Infof("comet server stopped")
 }
 
 func (this *Server) createClient(conn *net.TCPConn, devid string) *Client {
@@ -250,13 +249,13 @@ func (this *Server) createClient(conn *net.TCPConn, devid string) *Client {
 			case pack := <-client.outMsgs:
 				b, _ := pack.msg.Header.Serialize()
 				if _, err := conn.Write(b); err != nil {
-					log.Infof("%s %p:sendout header failed, %s", devid, conn, err)
+					log.Warnf("%s %p:sendout header failed, %s", devid, conn, err)
 					client.broken = true
 					return
 				}
 				if pack.msg.Data != nil {
 					if _, err := conn.Write(pack.msg.Data); err != nil {
-						log.Infof("%s %p:sendout body failed, %s", devid, conn, err)
+						log.Warnf("%s %p:sendout body failed, %s", devid, conn, err)
 						client.broken = true
 						return
 					}
@@ -397,7 +396,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			nRead += n
 			if uint32(nRead) < header.Len {
 				if now.After(startTime.Add(60 * time.Second)) {
-					log.Infof("%s %p: read body timeout", client.devId, conn)
+					log.Warnf("%s %p: read body timeout", client.devId, conn)
 					break
 				}
 				continue
@@ -492,7 +491,7 @@ func (this *Server) waitInit(conn *net.TCPConn) *Client {
 			client := x.(*Client)
 			client.broken = true
 			time.Sleep(2 * time.Second)
-			log.Infof("%s %p: wait old connection close", devid, conn)
+			log.Debugf("%s %p: wait old connection close", devid, conn)
 		} else {
 			break
 		}

@@ -33,18 +33,16 @@ func newRedisStorage(server string, pass string, poolsize int, retry int) *Redis
 			Dial: func() (redis.Conn, error) {
 				c, err := redis.Dial("tcp", server)
 				if err != nil {
-					log.Infof("failed to connect Redis (%s), (%s)", server, err)
+					log.Warnf("failed to connect Redis (%s), (%s)", server, err)
 					return nil, err
 				}
 				if pass != "" {
 					if _, err := c.Do("AUTH", pass); err != nil {
-						log.Infof("failed to auth Redis (%s), (%s)", server, err)
+						log.Warnf("failed to auth Redis (%s), (%s)", server, err)
 						return nil, err
 					}
-				} else {
-					log.Infof("Skipped AUTH with Redis")
 				}
-				log.Infof("connected with Redis (%s)", server)
+				log.Debugf("connected with Redis (%s)", server)
 				return c, err
 			},
 			TestOnBorrow: func(c redis.Conn, t time.Time) error {
@@ -65,7 +63,7 @@ func (r *RedisStorage) Do(commandName string, args ...interface{}) (interface{},
 		if err == nil {
 			break
 		} else {
-			log.Infof("failed to get conn from pool (%s)", err)
+			log.Warnf("failed to get conn from pool (%s)", err)
 		}
 		time.Sleep(time.Second)
 	}
@@ -83,7 +81,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 	key := "db_offline_msg_" + appId
 	ret, err := redis.Strings(r.Do("HKEYS", key))
 	if err != nil {
-		log.Infof("failed to get fields of offline msg:", err)
+		log.Warnf("failed to get fields of offline msg:", err)
 		return nil
 	}
 
@@ -150,7 +148,7 @@ func (r *RedisStorage) GetRawMsg(appId string, msgId int64) *RawMessage {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
 	}
-	log.Infof("RAW message: (%s)", string(ret))
+	log.Debugf("RAW message: (%s)", string(ret))
 	rmsg := &RawMessage{}
 	if err := json.Unmarshal(ret, rmsg); err != nil {
 		log.Warnf("failed to decode raw msg:", err)
@@ -180,7 +178,7 @@ func (r *RedisStorage) RemoveDevice(serverName, devId string) error {
 func (r *RedisStorage) GetServerNames() ([]string, error) {
 	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
 	if err != nil {
-		log.Errorf("failed to get comet nodes KEYS:", err)
+		log.Warnf("failed to get comet nodes KEYS:", err)
 		return nil, err
 	}
 	var names []string
@@ -193,7 +191,7 @@ func (r *RedisStorage) GetServerNames() ([]string, error) {
 func (r *RedisStorage) GetDeviceIds(serverName string) ([]string, error) {
 	fields, err := redis.Strings(r.Do("HKEYS", "db_comet_"+serverName))
 	if err != nil {
-		log.Errorf("failed to get comet nodes KEYS:", err)
+		log.Warnf("failed to get comet nodes KEYS:", err)
 		return nil, err
 	}
 	return fields, nil
@@ -202,13 +200,13 @@ func (r *RedisStorage) GetDeviceIds(serverName string) ([]string, error) {
 func (r *RedisStorage) CheckDevice(devId string) (string, error) {
 	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
 	if err != nil {
-		log.Errorf("failed to get comet nodes KEYS:", err)
+		log.Warnf("failed to get comet nodes KEYS:", err)
 		return "", err
 	}
 	for _, key := range keys {
 		exist, err := r.HashExists(key, devId)
 		if err != nil {
-			log.Errorf("error on HashExists:", err)
+			log.Warnf("error on HashExists:", err)
 			return "", err
 		}
 		if exist == 1 {
