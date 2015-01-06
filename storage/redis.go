@@ -67,7 +67,7 @@ func (r *RedisStorage) Do(commandName string, args ...interface{}) (interface{},
 		} else {
 			log.Warnf("failed to get conn from pool (%s)", err)
 		}
-		time.Sleep(time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	if i == 0 || conn == nil {
 		return nil, fmt.Errorf("failed to find a useful redis conn")
@@ -493,7 +493,7 @@ func (r *RedisStorage) HashGet(db string, key string) ([]byte, error) {
 	if ret != nil {
 		ret, err := redis.Bytes(ret, nil)
 		if err != nil {
-			log.Warnf("redis: convert to bytes failed (%s)", err)
+			log.Errorf("redis: convert to bytes failed (%s)", err)
 		}
 		return ret, err
 	}

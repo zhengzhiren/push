@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -8,51 +9,52 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"encoding/json"
 	"time"
 	//"strings"
-	"strconv"
 	"github.com/chenyf/push/comet"
 	log "github.com/cihub/seelog"
+	"strconv"
 )
 
 type Config struct {
-	Server string `json:"server"`
-	Name string `json:"name"`
-	AppIds []string `json:"appids"`
-	Interval time.Duration `json:interval"`
-	Count int `json:"count"`
+	Server    string        `json:"server"`
+	Name      string        `json:"name"`
+	HeartBeat time.Duration `json:"heartbeat"`
+	AppIds    []string      `json:"appids"`
+	Interval  time.Duration `json:interval"`
+	Count     int           `json:"count"`
 }
 
 type RegApp struct {
 	RegId string `json:"regid"`
-	Pkg string `json:"pkg"`
+	Pkg   string `json:"pkg"`
 }
 
 type Client struct {
 	index   int
+	broken  bool
 	Init    bool
 	DevId   string
 	conn    *net.TCPConn
 	outMsgs chan *comet.Message
 	nextSeq uint32
 	ctrl    chan bool // notify sendout routing to quit when close connection
-	Broken  bool
 	RegApps map[string]*RegApp
 }
 
 func NewClient(index int, devId string, conn *net.TCPConn, outMsgs chan *comet.Message) *Client {
 	return &Client{
-		index : index,
-		Init : false,
-		DevId : devId,
-		conn : conn,
-		outMsgs : outMsgs,
-		RegApps : make(map[string]*RegApp),
+		index:   index,
+		broken:  false,
+		Init:    false,
+		DevId:   devId,
+		conn:    conn,
+		outMsgs: outMsgs,
+		RegApps: make(map[string]*RegApp),
 	}
 }
 
-func (client *Client)HandleMessage() bool {
+func (client *Client) HandleMessage() bool {
 	client.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	headSize := 10
 	buf := make([]byte, headSize)
@@ -66,6 +68,7 @@ func (client *Client)HandleMessage() bool {
 
 	var header comet.Header
 	if err := header.Deserialize(buf); err != nil {
+		log.Warnf("deserialize header failed, %s", err)
 		return false
 	}
 	if header.Len <= 0 {
@@ -74,7 +77,7 @@ func (client *Client)HandleMessage() bool {
 
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(client.conn, data); err != nil {
-		log.Infof("read from client failed: (%v)", err)
+		log.Infof("read from server failed: (%v)", err)
 		return false
 	}
 
@@ -82,21 +85,21 @@ func (client *Client)HandleMessage() bool {
 	if header.Type == comet.MSG_REGISTER_REPLY {
 		var reply comet.RegisterReplyMessage
 		if err := json.Unmarshal(data, &reply); err != nil {
-			log.Infof("invalid request, not JSON\n")
+			log.Infof("invalid reply, not JSON\n")
 			return true
 		}
 		_, ok := client.RegApps[reply.AppId]
 		if !ok {
 			client.RegApps[reply.AppId] = &RegApp{
-				RegId : reply.RegId,
-				Pkg : reply.Pkg,
+				RegId: reply.RegId,
+				Pkg:   reply.Pkg,
 			}
 		}
 
 	} else if header.Type == comet.MSG_PUSH {
 		var request comet.PushMessage
 		if err := json.Unmarshal(data, &request); err != nil {
-			log.Infof("invalid request, not JSON")
+			log.Infof("invalid reply, not JSON")
 			return true
 		}
 		regapp, ok := client.RegApps[request.AppId]
@@ -114,15 +117,15 @@ func (client *Client)HandleMessage() bool {
 	} else if header.Type == comet.MSG_INIT_REPLY {
 		var reply comet.InitReplyMessage
 		json.Unmarshal(data, &reply)
-		for _, app := range(reply.Apps) {
-		/*
-			if _, ok := client.RegApps[app.AppId]; !ok {
-				client.RegApps[app.AppId] = &RegApp{
-					RegId : app.RegId,
-					Pkg : app.Pkg,
+		for _, app := range reply.Apps {
+			/*
+				if _, ok := client.RegApps[app.AppId]; !ok {
+					client.RegApps[app.AppId] = &RegApp{
+						RegId : app.RegId,
+						Pkg : app.Pkg,
+					}
 				}
-			}
-		*/
+			*/
 			sendUnregister(client, app.AppId, app.RegId, "")
 		}
 		client.Init = true
@@ -130,7 +133,7 @@ func (client *Client)HandleMessage() bool {
 	return true
 }
 
-func (client *Client)SendMessage(msgType uint8, seq uint32, body []byte) (uint32, bool) {
+func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte) (uint32, bool) {
 	bodylen := 0
 	if body != nil {
 		bodylen = len(body)
@@ -152,7 +155,7 @@ func (client *Client)SendMessage(msgType uint8, seq uint32, body []byte) (uint32
 func sendInit(client *Client, config *Config) {
 	init_msg := comet.InitMessage{
 		DevId: client.DevId,
-		Sync: 1,
+		Sync:  1,
 	}
 	b2, _ := json.Marshal(init_msg)
 	client.SendMessage(comet.MSG_INIT, 0, b2)
@@ -183,7 +186,7 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, ad
 	log.Infof("client %d: enter routine", index)
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
-		log.Infof("client %d: connect to server failed: %v", index, err)
+		log.Warnf("client %d: connect to server failed: %v", index, err)
 		return
 	}
 	log.Infof("client %d: connected to server", index)
@@ -198,7 +201,7 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, ad
 
 	wg.Add(1)
 	go func() {
-	// output routine
+		// output routine
 		heartbeat := make([]byte, 1)
 		heartbeat[0] = 0
 		for {
@@ -208,37 +211,47 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, ad
 				return
 			case msg := <-outMsg:
 				b, _ := msg.Header.Serialize()
-				conn.Write(b)
-				conn.Write(msg.Data)
+				if _, err := conn.Write(b); err != nil {
+					log.Warnf("client %d: sendout header failed, %s", index, err)
+					client.broken = true
+					return
+				}
+				if msg.Data != nil {
+					if _, err := conn.Write(msg.Data); err != nil {
+						log.Warnf("client %d: sendout body failed, %s", index, err)
+						client.broken = true
+						return
+					}
+				}
 				log.Infof("client %d: send: (%d) (%s)", index, msg.Header.Type, msg.Data)
-			case <-time.After(50*time.Second):
+			case <-time.After(config.HeartBeat * time.Second):
 				conn.Write(heartbeat)
 			}
 		}
 	}()
 
-	time.Sleep(3*time.Second)
-	/*
-	for _, appid := range(config.AppIds) {
-		sendRegister(client, appid, "", "")
-		time.Sleep(1*time.Second)
-	}*/
-
+	time.Sleep(3 * time.Second)
 	registered := false
 	for {
-	// main loop
+		// main loop
 		select {
-			case <-ctrl:
-				close(ctrl2)
-				wg.Done()
-				log.Infof("client %d: leave routine", index)
-				return
-			default:
+		case <-ctrl:
+			close(ctrl2)
+			wg.Done()
+			log.Infof("client %d: leave routine", index)
+			return
+		default:
+		}
+		if client.broken {
+			close(ctrl2)
+			wg.Done()
+			log.Infof("client %d: leave routine", index)
+			return
 		}
 		if !registered && client.Init {
-			for _, appid := range(config.AppIds) {
+			for _, appid := range config.AppIds {
 				sendRegister(client, appid, "", "")
-				time.Sleep(1*time.Second)
+				time.Sleep(1 * time.Second)
 			}
 			registered = true
 		}
@@ -249,7 +262,7 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, ad
 			log.Infof("client %d: leave routine", index)
 			return
 		}
-		time.Sleep(30*time.Millisecond)
+		time.Sleep(30 * time.Millisecond)
 	}
 }
 
@@ -263,20 +276,26 @@ func main() {
 	}
 	r, err := os.Open(cfgfile)
 	if err != nil {
-		log.Errorf("failed to open config file %s", cfgfile)
-		return
+		fmt.Printf("failed to open config file %s", cfgfile)
+		os.Exit(1)
 	}
 
 	var config Config
 	decoder := json.NewDecoder(r)
 	err = decoder.Decode(&config)
 	if err != nil {
-		log.Errorf("invalid config file")
-		return
+		fmt.Printf("invalid config file")
+		os.Exit(1)
 	}
 
-	addr, _ := net.ResolveTCPAddr("tcp4", config.Server)
+	logger, err := log.LoggerFromConfigAsFile("log.xml")
+	if err != nil {
+		fmt.Printf("Load log config failed: (%s)\n", err)
+		os.Exit(1)
+	}
+	log.ReplaceLogger(logger)
 
+	addr, _ := net.ResolveTCPAddr("tcp4", config.Server)
 	wg := &sync.WaitGroup{}
 	c := make(chan os.Signal, 1)
 	ctrl := make(chan bool, 1)
@@ -301,4 +320,3 @@ func main() {
 	}
 	wg.Wait()
 }
-

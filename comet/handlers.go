@@ -105,7 +105,7 @@ func handleRegister(conn *net.TCPConn, client *Client, header *Header, body []by
 	var rawapp storage.RawApp
 	b, err := storage.Instance.HashGet("db_apps", request.AppId)
 	if err != nil {
-		log.Warnf("%s %p: hashget 'db_apps' failed, (%s). appid (%s)", client.devId, conn, request.AppId)
+		log.Warnf("%s %p: hashget 'db_apps' failed, (%s) (%s)", client.devId, conn, request.AppId, err)
 		onReply(ERR_INTERNAL, "server error", request.AppId, "", "")
 		return 0
 	}
