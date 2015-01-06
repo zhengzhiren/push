@@ -7,8 +7,11 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"sort"
-	"strings"
 	"time"
+)
+
+const (
+	cometNodesKey = "comet_nodes"
 )
 
 type RedisStorage struct {
@@ -159,67 +162,54 @@ func (r *RedisStorage) GetRawMsg(appId string, msgId int64) *RawMessage {
 	return rmsg
 }
 
+func (r *RedisStorage) AddComet(serverName string) error {
+	_, err := r.Do("SADD", cometNodesKey, serverName)
+	return err
+}
+
+func (r *RedisStorage) RemoveComet(serverName string) error {
+	_, err := r.Do("SREM", cometNodesKey, serverName)
+	return err
+}
+
 func (r *RedisStorage) AddDevice(serverName, devId string) error {
-	_, err := redis.Int(r.Do("HSET", "db_comet_"+serverName, devId, nil))
-	if err != nil {
-		log.Warnf("redis: HSET failed (%s)", err)
-		return err
-	}
-	return nil
+	_, err := redis.Int(r.Do("HSET", "comet:"+serverName, devId, nil))
+	return err
 }
 
 func (r *RedisStorage) RemoveDevice(serverName, devId string) error {
-	_, err := r.Do("HDEL", "db_comet_"+serverName, devId)
-	if err != nil {
-		log.Warnf("redis: HDEL failed (%s)", err)
-		return err
-	}
-	return nil
+	_, err := r.Do("HDEL", "comet:"+serverName, devId)
+	return err
 }
 
 func (r *RedisStorage) GetServerNames() ([]string, error) {
-	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
-	if err != nil {
-		log.Warnf("failed to get comet nodes KEYS:", err)
-		return nil, err
-	}
-	var names []string
-	for _, key := range keys {
-		names = append(names, strings.TrimPrefix(key, "db_comet_"))
-	}
-	return names, nil
+	return redis.Strings(r.Do("SMEMBERS", cometNodesKey))
 }
 
 func (r *RedisStorage) GetDeviceIds(serverName string) ([]string, error) {
-	fields, err := redis.Strings(r.Do("HKEYS", "db_comet_"+serverName))
-	if err != nil {
-		log.Warnf("failed to get comet nodes KEYS:", err)
-		return nil, err
-	}
-	return fields, nil
+	return redis.Strings(r.Do("HKEYS", "comet:"+serverName))
 }
 
 func (r *RedisStorage) CheckDevice(devId string) (string, error) {
-	keys, err := redis.Strings(r.Do("KEYS", "db_comet_*"))
+	names, err := r.GetServerNames()
 	if err != nil {
-		log.Warnf("failed to get comet nodes KEYS:", err)
 		return "", err
 	}
-	for _, key := range keys {
-		exist, err := r.HashExists(key, devId)
+	for _, name := range names {
+		key := "comet:" + name
+		exist, err := redis.Bool(r.Do("SISMEMBER", key, devId))
 		if err != nil {
-			log.Warnf("error on HashExists:", err)
 			return "", err
 		}
-		if exist == 1 {
-			return strings.TrimPrefix(key, "db_comet_"), nil
+		if exist {
+			return name, nil
 		}
 	}
 	return "", nil
 }
 
 func (r *RedisStorage) RefreshDevices(serverName string, timeout int) error {
-	_, err := redis.Int(r.Do("EXPIRE", "db_comet_"+serverName, timeout))
+	_, err := redis.Int(r.Do("EXPIRE", "comet:"+serverName, timeout))
 	if err != nil {
 		log.Warnf("redis: EXPIRE failed, (%s)", err)
 	}
@@ -227,7 +217,7 @@ func (r *RedisStorage) RefreshDevices(serverName string, timeout int) error {
 }
 
 func (r *RedisStorage) InitDevices(serverName string) error {
-	_, err := redis.Int(r.Do("DEL", "db_comet_"+serverName))
+	_, err := redis.Int(r.Do("DEL", "comet:"+serverName))
 	if err != nil {
 		log.Warnf("redis: DEL failed, (%s)", err)
 	}

@@ -64,6 +64,9 @@ type Storage interface {
 	GetOfflineMsgs(appId string, regId string, regTime int64, msgId int64) []*RawMessage
 	GetRawMsg(appId string, msgId int64) *RawMessage
 
+	AddComet(serverName string) error
+	RemoveComet(serverName string) error
+
 	AddDevice(serverName, devId string) error
 	RemoveDevice(serverName, devId string) error
 	// Get all comet server names
