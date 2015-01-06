@@ -197,7 +197,7 @@ func (r *RedisStorage) CheckDevice(devId string) (string, error) {
 	}
 	for _, name := range names {
 		key := "comet:" + name
-		exist, err := redis.Bool(r.Do("SISMEMBER", key, devId))
+		exist, err := redis.Bool(r.Do("HEXISTS", key, devId))
 		if err != nil {
 			return "", err
 		}
