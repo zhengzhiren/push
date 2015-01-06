@@ -88,6 +88,8 @@ func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *Pus
 	}
 	client.SendMessage(MSG_PUSH, 0, b, nil)
 	log.Infof("msgid %d: after push to (device %s) (regid %s)", rawMsg.MsgId, app.DevId, app.RegId)
+	storage.Instance.MsgStatsSend(rawMsg.MsgId)
+	storage.Instance.AppStatsSend(rawMsg.AppId)
 	return true
 }
 

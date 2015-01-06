@@ -14,7 +14,6 @@ import (
 	uuid "github.com/codeskyblue/go-uuid"
 
 	"github.com/chenyf/push/auth"
-	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
@@ -511,7 +510,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 	type StatResponse struct {
 		MsgId      int64 `json:"msg_id"`
 		CreateTime int64 `json:"create_time"`
-		Target     int   `json:"target"`
+		Send       int   `json:"send"`
 		Received   int   `json:"received"`
 		Click      int   `json:"click"`
 	}
@@ -540,19 +539,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 		MsgId:      int64(msgId),
 	}
 
-	switch rawmsg.PushType {
-	case comet.PUSH_TYPE_ALL: // broadcast
-		respData.Target, _ = storage.Instance.HashLen(fmt.Sprintf("db_app_%s", appid))
-	case comet.PUSH_TYPE_REGID: // regid list
-		respData.Target = len(rawmsg.PushParams.RegId)
-	case comet.PUSH_TYPE_USERID: // userid list
-	case comet.PUSH_TYPE_DEVID: // devid list
-		respData.Target = len(rawmsg.PushParams.DevId)
-	default:
-		respData.Target = 0
-	}
-
-	respData.Received, respData.Click, err = storage.Instance.GetMsgStats(int64(msgId))
+	respData.Send, respData.Received, respData.Click, err = storage.Instance.GetMsgStats(int64(msgId))
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
 		return
