@@ -50,6 +50,16 @@ type Server struct {
 	clientCount   uint32
 }
 
+const (
+	LISTEN_TIMEOUT        time.Duration = 5
+	READ_HEADER_TIMEOUT   time.Duration = 5
+	READ_BODY_TIMEOUT     time.Duration = 60
+	INIT_MSG_TIMEOUT      time.Duration = 20
+	NODE_REFRESH_INTERVAL time.Duration = 30
+	NODE_EXPIRE_TIMEOUT   int           = 60
+	BLACK_UPDATE_INTERVAL time.Duration = 60
+)
+
 var (
 	msgNames = map[uint8]string{
 		MSG_INIT_REPLY:        "InitReply",
@@ -181,8 +191,8 @@ func (this *Server) Run(listener *net.TCPListener) {
 			case <-this.exitCh:
 				log.Infof("Exiting storage refreshing routine")
 				return
-			case <-time.After(10 * time.Second):
-				storage.Instance.RefreshDevices(this.Name, 30)
+			case <-time.After(NODE_REFRESH_INTERVAL * time.Second):
+				storage.Instance.RefreshDevices(this.Name, NODE_EXPIRE_TIMEOUT)
 			}
 		}
 	}()
@@ -195,14 +205,13 @@ func (this *Server) Run(listener *net.TCPListener) {
 		default:
 		}
 
-		listener.SetDeadline(time.Now().Add(3 * time.Second))
-		//listener.SetDeadline(time.Now().Add(this.acceptTimeout))
+		listener.SetDeadline(time.Now().Add(LISTEN_TIMEOUT * time.Second))
 		conn, err := listener.AcceptTCP()
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok && e.Timeout() {
 				continue
 			}
-			log.Warnf("accept failed: %v\n", err)
+			log.Errorf("accept failed: %v\n", err)
 			continue
 		}
 		/*
@@ -288,7 +297,7 @@ func (this *Server) createClient(conn *net.TCPConn, devid string) *Client {
 func (this *Server) closeClient(client *Client) {
 	client.ctrl <- true
 	if err := storage.Instance.RemoveDevice(this.Name, client.devId); err != nil {
-		log.Warnf("failed to remove device %s from redis:", client.devId, err)
+		log.Errorf("failed to remove device %s from redis, %s", client.devId, err)
 	}
 	DevicesMap.Delete(client.devId)
 }
@@ -337,7 +346,8 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			break
 		}
 
-		conn.SetReadDeadline(now.Add(5 * time.Second))
+		// read timeout
+		conn.SetReadDeadline(now.Add(READ_HEADER_TIMEOUT * time.Second))
 		if readStep == 0 {
 			// read first byte
 			n := myRead(conn, headBuf[0:1])
@@ -395,7 +405,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 			}
 			nRead += n
 			if uint32(nRead) < header.Len {
-				if now.After(startTime.Add(60 * time.Second)) {
+				if now.After(startTime.Add(READ_BODY_TIMEOUT * time.Second)) {
 					log.Warnf("%s %p: read body timeout", client.devId, conn)
 					break
 				}
@@ -405,7 +415,8 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		}
 
 		if handler, ok := this.funcMap[header.Type]; ok {
-			client.lastActive = time.Now()
+			//client.lastActive = time.Now()
+			client.lastActive = now
 			if ret := handler(conn, client, &header, dataBuf); ret < 0 {
 				break
 			}
@@ -429,7 +440,7 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 func (this *Server) waitInit(conn *net.TCPConn) *Client {
 	// 要求客户端尽快发送初始化消息
 	now := time.Now()
-	conn.SetReadDeadline(now.Add(20 * time.Second))
+	conn.SetReadDeadline(now.Add(INIT_MSG_TIMEOUT * time.Second))
 	buf := make([]byte, HEADER_SIZE)
 	if n := myRead(conn, buf); n <= 0 {
 		conn.Close()
@@ -651,7 +662,7 @@ func (this *Server) handleOfflineMsgs(client *Client, regapp *RegApp) {
 }
 
 func (this *Server) checkBlacklist(devId string, now *time.Time) bool {
-	if now.After(this.blackUpdate.Add(60 * time.Second)) {
+	if now.After(this.blackUpdate.Add(BLACK_UPDATE_INTERVAL * time.Second)) {
 		if blackDevices, err := storage.Instance.SetMembers("db_black_devices"); err != nil {
 			sort.Strings(blackDevices)
 			this.blackDevices = blackDevices

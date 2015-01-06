@@ -1,5 +1,6 @@
 {
 	"server" : "10.135.28.70:20000",
 	"appids" : ["appid_38c47c3fb1284ef48d0f2d9c08f06218"],
+	"heartbeat" : 50,
 	"count" : 3
 }
