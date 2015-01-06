@@ -152,14 +152,17 @@ func startHttp(addr string, cmdTimeout int) {
 		DisableXPoweredBy:        true,
 		DisableJsonIndent:        true,
 		EnableStatusService:      true,
+		EnableRelaxedContentType: true,
 		EnableResponseStackTrace: true,
 	}
 	err := handler.SetRoutes(
 		&rest.Route{"GET", "/devices", getDeviceList},
 		&rest.Route{"GET", "/devices/:devid", getDevice},
 		&rest.Route{"POST", "/devices/:devid", AuthMiddlewareFunc(controlDevice)},
-		&rest.Route{"GET", "/stats", getStats},
-		&rest.Route{"DELETE", "/stats", deleteStats},
+		&rest.Route{"GET", "/stats/control", getStats},
+		&rest.Route{"DELETE", "/stats/control", deleteStats},
+		&rest.Route{"Get", "/stats/app", getAppStats},
+		&rest.Route{"Get", "/stats/sys", getSysStats},
 		&rest.Route{"GET", "/.status",
 			func(w rest.ResponseWriter, r *rest.Request) {
 				w.WriteJson(handler.GetStatus())

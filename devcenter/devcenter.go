@@ -45,8 +45,10 @@ func IsBinding(sso_tk, devId string) (bool, error) {
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
+		res.Body.Close()
 		return false, err
 	}
+	res.Body.Close()
 
 	var result BindingResp
 	err = json.Unmarshal(body, &result)
@@ -69,8 +71,10 @@ func GetDeviceList(sso_tk string, devType int) ([]Device, error) {
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
+		res.Body.Close()
 		return nil, err
 	}
+	res.Body.Close()
 
 	//log.Debugf("Got response from device center: %s", body)
 
@@ -95,8 +99,10 @@ func GetDevices(uid string, devType int) ([]Device, error) {
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
+		res.Body.Close()
 		return nil, err
 	}
+	res.Body.Close()
 
 	//log.Debugf("Got response from device center: %s", body)
 

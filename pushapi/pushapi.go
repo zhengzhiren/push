@@ -3,16 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/cihub/seelog"
-	uuid "github.com/codeskyblue/go-uuid"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ant0ine/go-json-rest/rest"
+	log "github.com/cihub/seelog"
+	uuid "github.com/codeskyblue/go-uuid"
+
 	"github.com/chenyf/push/auth"
-	"github.com/chenyf/push/comet"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/zk"
@@ -451,6 +452,7 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 	msgBox <- msg
 	b, _ = json.Marshal(response)
 	fmt.Fprintf(w, string(b))
+	storage.Instance.AppStatsPushApi(appid)
 }
 
 /*
@@ -505,6 +507,13 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 */
 
 func getMessage(w http.ResponseWriter, r *http.Request) {
+	type StatResponse struct {
+		MsgId      int64 `json:"msg_id"`
+		CreateTime int64 `json:"create_time"`
+		Send       int   `json:"send"`
+		Received   int   `json:"received"`
+		Click      int   `json:"click"`
+	}
 	appid := r.FormValue("appid")
 	msgid := r.FormValue("msgid")
 	if appid == "" || msgid == "" {
@@ -523,21 +532,14 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 
 	var rawmsg storage.RawMessage
 	err = json.Unmarshal(b, &rawmsg)
-	target_cnt := 0
-	switch rawmsg.PushType {
-	case comet.PUSH_TYPE_ALL: // broadcast
-		target_cnt, _ = storage.Instance.HashLen(fmt.Sprintf("db_app_%s", appid))
-	case comet.PUSH_TYPE_REGID: // regid list
-		target_cnt = len(rawmsg.PushParams.RegId)
-	case comet.PUSH_TYPE_USERID: // userid list
-	case comet.PUSH_TYPE_DEVID: // devid list
-		target_cnt = len(rawmsg.PushParams.DevId)
-	default:
-		target_cnt = 0
-	}
 
 	msgId, _ := strconv.Atoi(msgid)
-	received, click, err := storage.Instance.GetMsgStats(int64(msgId))
+	respData := StatResponse{
+		CreateTime: rawmsg.CTime,
+		MsgId:      int64(msgId),
+	}
+
+	respData.Send, respData.Received, respData.Click, err = storage.Instance.GetMsgStats(int64(msgId))
 	if err != nil {
 		errResponse(w, ERR_INTERNAL, "storage I/O failed", 500)
 		return
@@ -545,11 +547,7 @@ func getMessage(w http.ResponseWriter, r *http.Request) {
 
 	var response Response
 	response.ErrNo = 0
-	response.Data = map[string]int{
-		"target":   target_cnt,
-		"received": received,
-		"click":    click,
-	}
+	response.Data = respData
 	b, err = json.Marshal(response)
 	if err != nil {
 		log.Warnf("error (%s)", err)
@@ -600,4 +598,95 @@ func confirmOne(ack, nack chan uint64) {
 	case tag := <-nack:
 		log.Infof("failed delivery of delivery tag: %d", tag)
 	}
+}
+
+func getAppStats(w rest.ResponseWriter, r *rest.Request) {
+	r.ParseForm()
+	appId := r.FormValue("appid")
+	startDate := r.FormValue("start_date")
+	endDate := r.FormValue("end_date")
+	if appId == "" {
+		rest.Error(w, "missing 'appid'", http.StatusBadRequest)
+		return
+	}
+
+	var (
+		start time.Time
+		end   time.Time
+		err   error
+	)
+	if startDate == "" {
+		start = time.Now()
+	} else {
+		if start, err = time.Parse("20060102", startDate); err != nil {
+			rest.Error(w, "invalid date format", http.StatusBadRequest)
+			return
+		}
+	}
+	if endDate == "" {
+		end = time.Now()
+	} else {
+		if end, err = time.Parse("20060102", endDate); err != nil {
+			rest.Error(w, "invalid date format", http.StatusBadRequest)
+			return
+		}
+	}
+	if start.After(end) {
+		rest.Error(w, "start date greater than end date", http.StatusBadRequest)
+		return
+	}
+
+	resp := Response{
+		ErrNo: 0,
+	}
+	resp.Data, err = storage.Instance.GetAppStats(appId, start, end)
+	if err != nil {
+		rest.Error(w, "storage I/O failed", http.StatusInternalServerError)
+		log.Warnf("GetAppStats failed: %s", err.Error())
+		return
+	}
+	w.WriteJson(resp)
+}
+
+func getSysStats(w rest.ResponseWriter, r *rest.Request) {
+	r.ParseForm()
+	startDate := r.FormValue("start_date")
+	endDate := r.FormValue("end_date")
+
+	var (
+		start time.Time
+		end   time.Time
+		err   error
+	)
+	if startDate == "" {
+		start = time.Now()
+	} else {
+		if start, err = time.Parse("20060102", startDate); err != nil {
+			rest.Error(w, "invalid date format", http.StatusBadRequest)
+			return
+		}
+	}
+	if endDate == "" {
+		end = time.Now()
+	} else {
+		if end, err = time.Parse("20060102", endDate); err != nil {
+			rest.Error(w, "invalid date format", http.StatusBadRequest)
+			return
+		}
+	}
+	if start.After(end) {
+		rest.Error(w, "start date greater than end date", http.StatusBadRequest)
+		return
+	}
+
+	resp := Response{
+		ErrNo: 0,
+	}
+	resp.Data, err = storage.Instance.GetSysStats(start, end)
+	if err != nil {
+		rest.Error(w, "storage I/O failed", http.StatusInternalServerError)
+		log.Warnf("GetSysStats failed: %s", err.Error())
+		return
+	}
+	w.WriteJson(resp)
 }

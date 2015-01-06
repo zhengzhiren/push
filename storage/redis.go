@@ -436,6 +436,11 @@ func (r *RedisStorage) ClearStats() error {
 	return err
 }
 
+func (r *RedisStorage) MsgStatsSend(msgId int64) error {
+	_, err := r.Do("HINCRBY", fmt.Sprintf("db_msg_stat:%d", msgId), "send", 1)
+	return err
+}
+
 func (r *RedisStorage) MsgStatsReceived(msgId int64) error {
 	_, err := r.Do("HINCRBY", fmt.Sprintf("db_msg_stat:%d", msgId), "received", 1)
 	return err
@@ -446,26 +451,155 @@ func (r *RedisStorage) MsgStatsClick(msgId int64) error {
 	return err
 }
 
-func (r *RedisStorage) GetMsgStats(msgId int64) (int, int, error) {
-	log.Debugf("GetMsgStats: %d", msgId)
+func (r *RedisStorage) GetMsgStats(msgId int64) (int, int, int, error) {
 	key := fmt.Sprintf("db_msg_stat:%d", msgId)
-	ret, err := redis.Values(r.Do("HMGET", key, "received", "click"))
+	ret, err := redis.Values(r.Do("HMGET", key, "send", "received", "click"))
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	if ret == nil {
-		return 0, 0, nil
+		return 0, 0, 0, nil
+	}
+	send := 0
+	if ret[0] != nil {
+		send, _ = redis.Int(ret[0], nil)
 	}
 	received := 0
-	if ret[0] != nil {
-		received, _ = redis.Int(ret[0], nil)
+	if ret[1] != nil {
+		received, _ = redis.Int(ret[1], nil)
 	}
 	click := 0
-	if ret[1] != nil {
-		click, _ = redis.Int(ret[1], nil)
+	if ret[2] != nil {
+		click, _ = redis.Int(ret[2], nil)
 	}
-	return received, click, nil
+	return send, received, click, nil
+}
+
+func dateKey(date time.Time) string {
+	return date.Format("20060102")
+}
+
+func (r *RedisStorage) AppStatsPushApi(appId string) error {
+	key := fmt.Sprintf("stats_app_pushapi:%s", dateKey(time.Now()))
+	_, err := r.Do("ZINCRBY", key, 1, appId)
+	return err
+}
+
+func (r *RedisStorage) AppStatsSend(appId string) error {
+	key := fmt.Sprintf("stats_app_send:%s", dateKey(time.Now()))
+	_, err := r.Do("ZINCRBY", key, 1, appId)
+	return err
+}
+
+func (r *RedisStorage) AppStatsReceived(appId string) error {
+	key := fmt.Sprintf("stats_app_received:%s", dateKey(time.Now()))
+	_, err := r.Do("ZINCRBY", key, 1, appId)
+	return err
+}
+
+func (r *RedisStorage) AppStatsClick(appId string) error {
+	key := fmt.Sprintf("stats_app_click:%s", dateKey(time.Now()))
+	_, err := r.Do("ZINCRBY", key, 1, appId)
+	return err
+}
+
+func (r *RedisStorage) GetAppStats(appId string, start time.Time, end time.Time) ([]*AppStats, error) {
+	appStats := []*AppStats{}
+	for ; !start.After(end); start = start.Add(24 * time.Hour) {
+		date := dateKey(start)
+
+		key := fmt.Sprintf("stats_app_pushapi:%s", date)
+		pushapi, err := redis.Int(r.Do("ZSCORE", key, appId))
+		if err != nil && err != redis.ErrNil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_send:%s", date)
+		send, err := redis.Int(r.Do("ZSCORE", key, appId))
+		if err != nil && err != redis.ErrNil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_received:%s", date)
+		received, err := redis.Int(r.Do("ZSCORE", key, appId))
+		if err != nil && err != redis.ErrNil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_click:%s", date)
+		click, err := redis.Int(r.Do("ZSCORE", key, appId))
+		if err != nil && err != redis.ErrNil {
+			return nil, err
+		}
+
+		stats := AppStats{
+			Date:     date,
+			PushApi:  pushapi,
+			Send:     send,
+			Received: received,
+			Click:    click,
+		}
+		appStats = append(appStats, &stats)
+	}
+	return appStats, nil
+}
+
+func (r *RedisStorage) GetSysStats(start time.Time, end time.Time) ([]*AppStats, error) {
+	f := func(key string) (int, error) {
+		appIds, err := redis.Strings(r.Do("ZRANGE", key, 0, -1))
+		if err != nil {
+			return 0, err
+		}
+		total := 0
+		for _, appId := range appIds {
+			count, err := redis.Int(r.Do("ZSCORE", key, appId))
+			if err != nil && err != redis.ErrNil {
+				return 0, err
+			}
+			total += count
+		}
+		return total, nil
+	}
+
+	appStats := []*AppStats{}
+	for ; !start.After(end); start = start.Add(24 * time.Hour) {
+		date := dateKey(start)
+
+		key := fmt.Sprintf("stats_app_pushapi:%s", date)
+		pushapi, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_send:%s", date)
+		send, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_received:%s", date)
+		received, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		key = fmt.Sprintf("stats_app_click:%s", date)
+		click, err := f(key)
+		if err != nil {
+			return nil, err
+		}
+
+		stats := AppStats{
+			Date:     date,
+			PushApi:  pushapi,
+			Send:     send,
+			Received: received,
+			Click:    click,
+		}
+		appStats = append(appStats, &stats)
+	}
+	return appStats, nil
 }
 
 func (r *RedisStorage) HashGetAll(db string) ([]string, error) {

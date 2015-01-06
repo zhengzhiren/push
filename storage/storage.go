@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"time"
+
 	"github.com/chenyf/push/conf"
 )
 
@@ -48,6 +50,14 @@ type RawApp struct {
 	Desc   string `json:"desc"`
 	AppKey string `json:"appkey,omitempty"`
 	AppSec string `json:"appsec,omitempty"`
+}
+
+type AppStats struct {
+	Date     string `json:"date"`
+	PushApi  int    `json:"pushapi"`
+	Send     int    `json:"send"`
+	Received int    `json:"received"`
+	Click    int    `json:"click"`
 }
 
 type Storage interface {
@@ -105,9 +115,20 @@ type Storage interface {
 	//
 	// statistics for push message
 	//
+	MsgStatsSend(msgId int64) error
 	MsgStatsReceived(msgId int64) error
 	MsgStatsClick(msgId int64) error
-	GetMsgStats(msgId int64) (int, int, error)
+	GetMsgStats(msgId int64) (int, int, int, error)
+
+	//
+	// statistics for push message per App
+	//
+	AppStatsPushApi(appId string) error
+	AppStatsSend(appId string) error
+	AppStatsReceived(appId string) error
+	AppStatsClick(appId string) error
+	GetAppStats(appId string, start time.Time, end time.Time) ([]*AppStats, error)
+	GetSysStats(start time.Time, end time.Time) ([]*AppStats, error)
 
 	HashGetAll(db string) ([]string, error)
 	HashGet(db string, key string) ([]byte, error)
