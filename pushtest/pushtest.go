@@ -22,7 +22,6 @@ type Config struct {
 	HeartBeat time.Duration `json:"heartbeat"`
 	AppIds    []string      `json:"appids"`
 	Interval  time.Duration `json:interval"`
-	Count     int           `json:"count"`
 }
 
 type RegApp struct {
@@ -182,14 +181,14 @@ func sendUnregister(client *Client, appid string, regid string, token string) {
 	client.SendMessage(comet.MSG_UNREGISTER, 0, b2)
 }
 
-func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, addr *net.TCPAddr) {
+func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, local, server *net.TCPAddr) {
 	log.Infof("client %d: enter routine", index)
-	conn, err := net.DialTCP("tcp", nil, addr)
+	conn, err := net.DialTCP("tcp", nil, server)
 	if err != nil {
 		log.Warnf("client %d: connect to server failed: %v", index, err)
 		return
 	}
-	log.Infof("client %d: connected to server", index)
+	log.Infof("client %d: connected to server (%s->%s)", index, conn.LocalAddr(), conn.RemoteAddr())
 	conn.SetNoDelay(true)
 	defer conn.Close()
 
@@ -295,7 +294,7 @@ func main() {
 	}
 	log.ReplaceLogger(logger)
 
-	addr, _ := net.ResolveTCPAddr("tcp4", config.Server)
+	server, _ := net.ResolveTCPAddr("tcp4", config.Server)
 	wg := &sync.WaitGroup{}
 	c := make(chan os.Signal, 1)
 	ctrl := make(chan bool, 1)
@@ -315,7 +314,7 @@ func main() {
 		if !running {
 			break
 		}
-		go runClient(n, &config, wg, ctrl, addr)
+		go runClient(n, &config, wg, ctrl, nil, server)
 		time.Sleep(config.Interval * time.Millisecond)
 	}
 	wg.Wait()
