@@ -44,7 +44,7 @@ func newRedisStorage(server string, pass string, maxActive int, maxIdle int, idl
 						return nil, err
 					}
 				}
-				log.Debugf("connected with Redis (%s)", server)
+				//log.Debugf("connected with Redis (%s)", server)
 				return c, err
 			},
 			TestOnBorrow: func(c redis.Conn, t time.Time) error {

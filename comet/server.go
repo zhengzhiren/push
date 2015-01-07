@@ -2,17 +2,17 @@ package comet
 
 import (
 	"encoding/json"
+	"github.com/chenyf/push/storage"
+	"github.com/chenyf/push/utils"
+	"github.com/chenyf/push/utils/safemap"
+	log "github.com/cihub/seelog"
 	"io"
+	"math/rand"
 	"net"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/chenyf/push/storage"
-	"github.com/chenyf/push/utils"
-	"github.com/chenyf/push/utils/safemap"
-	log "github.com/cihub/seelog"
 )
 
 type MsgHandler func(*net.TCPConn, *Client, *Header, []byte) int
@@ -26,38 +26,49 @@ type Pack struct {
 type Client struct {
 	devId        string
 	RegApps      map[string]*RegApp
-	outMsgs      chan *Pack
 	nextSeq      uint32
 	lastActive   time.Time
 	waitChannels map[uint32]chan *Message
 	ctrl         chan bool // notify sendout routing to quit when close connection
-	broken       bool
+	closed       bool
+	conn         *net.TCPConn
+	outChannel   *chan *Pack
 }
 
 type Server struct {
-	Name          string // unique name of this server
-	exitCh        chan bool
-	wg            *sync.WaitGroup
-	funcMap       map[uint8]MsgHandler
-	blackDevices  []string
-	blackUpdate   time.Time
-	acceptTimeout time.Duration
-	readTimeout   time.Duration
-	writeTimeout  time.Duration
-	hbTimeout     time.Duration
-	maxBodyLen    uint32
-	maxClients    uint32
-	clientCount   uint32
+	Name           string // unique name of this server
+	ctrl           chan bool
+	lock           *sync.Mutex
+	wg             *sync.WaitGroup
+	funcMap        map[uint8]MsgHandler
+	blackDevices   []string
+	blackUpdate    time.Time
+	acceptTimeout  time.Duration
+	readTimeout    time.Duration
+	writeTimeout   time.Duration
+	hbTimeout      time.Duration
+	maxBodyLen     uint32
+	maxClients     uint32
+	clientCount    uint32
+	sendRoutineCnt int
+	sendRoutines   map[int]*SendRoutine
+}
+
+type SendRoutine struct {
+	id         int
+	ctrl       chan bool
+	outChannel chan *Pack
 }
 
 const (
 	LISTEN_TIMEOUT        time.Duration = 5
-	READ_HEADER_TIMEOUT   time.Duration = 5
+	READ_HEADER_TIMEOUT   time.Duration = 60
 	READ_BODY_TIMEOUT     time.Duration = 60
 	INIT_MSG_TIMEOUT      time.Duration = 20
 	NODE_REFRESH_INTERVAL time.Duration = 30
 	NODE_EXPIRE_TIMEOUT   int           = 60
 	BLACK_UPDATE_INTERVAL time.Duration = 60
+	MAX_WAITING_MSGS      int           = 20
 )
 
 var (
@@ -73,7 +84,6 @@ var (
 		MSG_REGISTER2_REPLY:   "Register2Reply",
 		MSG_UNREGISTER2_REPLY: "Unregister2Reply",
 	}
-
 	DevicesMap *safemap.SafeMap = safemap.NewSafeMap()
 )
 
@@ -89,8 +99,22 @@ func myRead(conn *net.TCPConn, buf []byte) int {
 	return n
 }
 
+func NewClient(devId string, conn *net.TCPConn, outChannel *chan *Pack) *Client {
+	return &Client{
+		devId:        devId,
+		conn:         conn,
+		outChannel:   outChannel,
+		RegApps:      make(map[string]*RegApp),
+		nextSeq:      1, //sequence number begin from 1 each time
+		lastActive:   time.Now(),
+		waitChannels: make(map[uint32]chan *Message, MAX_WAITING_MSGS), //TODO
+		ctrl:         make(chan bool),
+		closed:       false,
+	}
+}
+
 func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply chan *Message) (uint32, bool) {
-	if reply != nil && len(client.waitChannels) == 10 {
+	if reply != nil && len(client.waitChannels) >= MAX_WAITING_MSGS {
 		return 0, false
 	}
 	if seq == 0 {
@@ -110,13 +134,12 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply 
 		Header: header,
 		Data:   body,
 	}
-
 	pack := &Pack{
 		msg:    msg,
 		client: client,
 		reply:  reply,
 	}
-	client.outMsgs <- pack
+	*(client.outChannel) <- pack
 	return seq, true
 }
 
@@ -128,19 +151,81 @@ func (this *Client) NextSeq() uint32 {
 	return atomic.AddUint32(&this.nextSeq, 1)
 }
 
-func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32) *Server {
+func NewSendRoutine(id int) *SendRoutine {
+	return &SendRoutine{
+		id:         id,
+		ctrl:       make(chan bool),
+		outChannel: make(chan *Pack, 1000),
+	}
+}
+
+func (this *SendRoutine) Run() {
+	go func() {
+		log.Infof("send routine %d: start", this.id)
+		for {
+			select {
+			case pack := <-this.outChannel:
+				client := pack.client
+				if client.closed {
+					continue
+				}
+				b, _ := pack.msg.Header.Serialize()
+				if _, err := client.conn.Write(b); err != nil {
+					log.Warnf("%s %p:sendout header failed, %s", client.devId, client.conn, err)
+					client.closed = true
+					continue
+				}
+				if pack.msg.Data != nil {
+					if _, err := client.conn.Write(pack.msg.Data); err != nil {
+						log.Warnf("%s %p:sendout body failed, %s", client.devId, client.conn, err)
+						client.closed = true
+						continue
+					}
+				}
+				// add reply channel
+				if pack.reply != nil {
+					client.waitChannels[pack.msg.Header.Seq] = pack.reply
+				}
+				msgname, ok := msgNames[pack.msg.Header.Type]
+				if !ok {
+					msgname = "Unknown"
+				}
+				log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
+					client.devId,
+					client.conn,
+					msgname,
+					pack.msg.Data,
+					pack.msg.Header.Type,
+					pack.msg.Header.Seq)
+				time.Sleep(10 * time.Millisecond)
+			case <-this.ctrl:
+				log.Infof("send routine %d: stop", this.id)
+				return
+			}
+		}
+	}()
+}
+
+func (this *SendRoutine) Stop() {
+	close(this.ctrl)
+}
+
+func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32, srcnt int) *Server {
 	return &Server{
-		Name:          utils.GetLocalIP(),
-		exitCh:        make(chan bool),
-		wg:            &sync.WaitGroup{},
-		funcMap:       make(map[uint8]MsgHandler),
-		acceptTimeout: time.Duration(ato),
-		readTimeout:   time.Duration(rto),
-		writeTimeout:  time.Duration(wto),
-		hbTimeout:     time.Duration(hto),
-		maxBodyLen:    maxBodyLen,
-		maxClients:    maxClients,
-		clientCount:   0,
+		Name:           utils.GetLocalIP(),
+		ctrl:           make(chan bool),
+		lock:           new(sync.Mutex),
+		wg:             &sync.WaitGroup{},
+		funcMap:        make(map[uint8]MsgHandler),
+		acceptTimeout:  time.Duration(ato),
+		readTimeout:    time.Duration(rto),
+		writeTimeout:   time.Duration(wto),
+		hbTimeout:      time.Duration(hto),
+		maxBodyLen:     maxBodyLen,
+		maxClients:     maxClients,
+		clientCount:    0,
+		sendRoutineCnt: srcnt,
+		sendRoutines:   make(map[int]*SendRoutine),
 	}
 }
 
@@ -168,12 +253,43 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 		log.Errorf("failed to InitDevices: %s", err.Error())
 		return nil, err
 	}
-
 	if this.blackDevices, err = storage.Instance.SetMembers("db_black_devices"); err != nil {
 		sort.Strings(this.blackDevices)
 		this.blackUpdate = time.Now()
 	}
 	return l, nil
+}
+
+func (this *Server) startSendRoutines() {
+	for n := 0; n < this.sendRoutineCnt; n++ {
+		sendroutine := NewSendRoutine(n)
+		this.sendRoutines[n] = sendroutine
+		sendroutine.Run()
+	}
+}
+
+func (this *Server) stopSendRoutines() {
+	for _, sendroutine := range this.sendRoutines {
+		sendroutine.Stop()
+	}
+}
+
+func (this *Server) startRefreshRoutine() {
+	go func() {
+		log.Infof("refresh routine: start")
+		for {
+			select {
+			case <-this.ctrl:
+				log.Infof("refresh routine: stop")
+				return
+			case <-time.After(NODE_REFRESH_INTERVAL * time.Second):
+				storage.Instance.RefreshDevices(this.Name, NODE_EXPIRE_TIMEOUT)
+			}
+		}
+	}()
+}
+
+func (this *Server) stopRefreshRoutine() {
 }
 
 func (this *Server) Run(listener *net.TCPListener) {
@@ -185,22 +301,15 @@ func (this *Server) Run(listener *net.TCPListener) {
 	log.Infof("Starting comet server on: %s", listener.Addr().String())
 
 	// keep the data of this node not expired on redis
-	go func() {
-		for {
-			select {
-			case <-this.exitCh:
-				log.Infof("Exiting storage refreshing routine")
-				return
-			case <-time.After(NODE_REFRESH_INTERVAL * time.Second):
-				storage.Instance.RefreshDevices(this.Name, NODE_EXPIRE_TIMEOUT)
-			}
-		}
-	}()
+	this.startRefreshRoutine()
+	this.startSendRoutines()
 
 	for {
 		select {
-		case <-this.exitCh:
+		case <-this.ctrl:
 			log.Infof("ask me to quit")
+			this.stopSendRoutines()
+			this.stopRefreshRoutine()
 			return
 		default:
 		}
@@ -226,11 +335,19 @@ func (this *Server) Run(listener *net.TCPListener) {
 }
 
 func (this *Server) Stop() {
-	// close后，所有的exitCh都返回false
+	// close后，所有的ctrl都返回false
 	log.Infof("stopping comet server")
-	close(this.exitCh)
+	close(this.ctrl)
 	this.wg.Wait()
 	log.Infof("comet server stopped")
+}
+
+func (this *Server) getOutChannel() *chan *Pack {
+	id := rand.Intn(this.sendRoutineCnt)
+	return &this.sendRoutines[id].outChannel
+}
+
+func (this *Server) putOutChannel() {
 }
 
 func (this *Server) createClient(conn *net.TCPConn, devid string) *Client {
@@ -239,70 +356,67 @@ func (this *Server) createClient(conn *net.TCPConn, devid string) *Client {
 		log.Warnf("failed to put device %s into redis:", devid, err)
 		return nil
 	}
-	client := &Client{
-		devId:        devid,
-		RegApps:      make(map[string]*RegApp),
-		nextSeq:      100, //sequence number begin from 100 each time
-		lastActive:   time.Now(),
-		outMsgs:      make(chan *Pack, 100),
-		waitChannels: make(map[uint32]chan *Message, 10), //TODO
-		ctrl:         make(chan bool),
-		broken:       false,
-	}
+	client := NewClient(devid, conn, this.getOutChannel())
 	DevicesMap.Set(devid, client)
 
-	go func() {
-		//log.Infof("%p: enter send routine", conn)
-		for {
-			select {
-			case pack := <-client.outMsgs:
-				b, _ := pack.msg.Header.Serialize()
-				if _, err := conn.Write(b); err != nil {
-					log.Warnf("%s %p:sendout header failed, %s", devid, conn, err)
-					client.broken = true
-					return
-				}
-				if pack.msg.Data != nil {
-					if _, err := conn.Write(pack.msg.Data); err != nil {
-						log.Warnf("%s %p:sendout body failed, %s", devid, conn, err)
-						client.broken = true
+	/*
+		go func() {
+			//log.Infof("%p: enter send routine", conn)
+			for {
+				select {
+				case pack := <-client.outChannel:
+					b, _ := pack.msg.Header.Serialize()
+					if _, err := conn.Write(b); err != nil {
+						log.Warnf("%s %p:sendout header failed, %s", devid, conn, err)
+						client.closed = true
 						return
 					}
+					if pack.msg.Data != nil {
+						if _, err := conn.Write(pack.msg.Data); err != nil {
+							log.Warnf("%s %p:sendout body failed, %s", devid, conn, err)
+							client.closed = true
+							return
+						}
+					}
+					// add reply channel
+					if pack.reply != nil {
+						client.waitChannels[pack.msg.Header.Seq] = pack.reply
+					}
+					msgname, ok := msgNames[pack.msg.Header.Type]
+					if !ok {
+						msgname = "Unknown"
+					}
+					log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
+						client.devId,
+						conn,
+						msgname,
+						pack.msg.Data,
+						pack.msg.Header.Type,
+						pack.msg.Header.Seq)
+					time.Sleep(10 * time.Millisecond)
+				case <-client.ctrl:
+					log.Infof("%s %p: leave send routine", devid, conn)
+					return
 				}
-				// add reply channel
-				if pack.reply != nil {
-					client.waitChannels[pack.msg.Header.Seq] = pack.reply
-				}
-				msgname, ok := msgNames[pack.msg.Header.Type]
-				if !ok {
-					msgname = "Unknown"
-				}
-				log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
-					client.devId,
-					conn,
-					msgname,
-					pack.msg.Data,
-					pack.msg.Header.Type,
-					pack.msg.Header.Seq)
-				time.Sleep(10 * time.Millisecond)
-			case <-client.ctrl:
-				log.Infof("%s %p: leave send routine", devid, conn)
-				return
 			}
-		}
-	}()
+		}()
+	*/
 	return client
 }
 
 func (this *Server) closeClient(client *Client) {
-	client.ctrl <- true
+	//client.ctrl <- true
+	client.closed = true
+	close(client.ctrl)
 	if err := storage.Instance.RemoveDevice(this.Name, client.devId); err != nil {
-		log.Errorf("failed to remove device %s from redis, %s", client.devId, err)
+		log.Errorf("failed to remove device %s from storage, %s", client.devId, err)
 	}
 	DevicesMap.Delete(client.devId)
+	client.conn.Close()
 }
 
 // handle a TCP connection
+// running in a seprate routine
 func (this *Server) handleConnection(conn *net.TCPConn) {
 	log.Debugf("new connection (%p) from (%s)", conn, conn.RemoteAddr())
 	// handle register first
@@ -329,14 +443,16 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 
 	// main routine: read message from client
 	for {
-		select {
-		case <-this.exitCh:
-			log.Debugf("%s %p: ask me quit", client.devId, conn)
-			break
-		default:
-		}
-		if client.broken {
-			log.Debugf("%s %p: client broken", client.devId, conn)
+		/*
+			select {
+			case <-this.ctrl:
+				log.Debugf("%s %p: ask me quit", client.devId, conn)
+				break
+			default:
+			}
+		*/
+		if client.closed {
+			log.Debugf("%s %p: client closed", client.devId, conn)
 			break
 		}
 
@@ -433,7 +549,6 @@ func (this *Server) handleConnection(conn *net.TCPConn) {
 		AMInstance.DelApp(regapp.RegId)
 	}
 	this.closeClient(client)
-	conn.Close()
 	this.clientCount--
 }
 
@@ -443,49 +558,41 @@ func (this *Server) waitInit(conn *net.TCPConn) *Client {
 	conn.SetReadDeadline(now.Add(INIT_MSG_TIMEOUT * time.Second))
 	buf := make([]byte, HEADER_SIZE)
 	if n := myRead(conn, buf); n <= 0 {
-		conn.Close()
 		return nil
 	}
 
 	var header Header
 	if err := header.Deserialize(buf[0:HEADER_SIZE]); err != nil {
 		log.Warnf("%p: parse header failed: (%v)", conn, err)
-		conn.Close()
 		return nil
 	}
 
 	if header.Type != MSG_INIT {
 		log.Warnf("%p: not INIT message, %d", conn, header.Type)
-		conn.Close()
 		return nil
 	}
 
 	if header.Len > this.maxBodyLen {
 		log.Warnf("%p: header len too big: %d", conn, header.Len)
-		conn.Close()
 		return nil
 	}
 	data := make([]byte, header.Len)
 	if n := myRead(conn, data); n <= 0 {
-		conn.Close()
 		return nil
 	}
 
 	var request InitMessage
 	if err := json.Unmarshal(data, &request); err != nil {
 		log.Warnf("%p: decode INIT body failed: (%v)", conn, err)
-		conn.Close()
 		return nil
 	}
 
 	devid := request.DevId
 	if !this.checkDeviceId(devid) {
 		log.Warnf("%p: invalid device id (%s)", conn, devid)
-		conn.Close()
 		return nil
 	}
 	if !this.checkBlacklist(devid, &now) {
-		conn.Close()
 		return nil
 	}
 	log.Debugf("%p: RECV INIT (%s) seq(%d)", conn, data, header.Seq)
@@ -495,12 +602,11 @@ func (this *Server) waitInit(conn *net.TCPConn) *Client {
 		x := DevicesMap.Get(devid)
 		if x != nil {
 			if waitcnt >= 5 {
-				conn.Close()
 				return nil
 			}
 			waitcnt += 1
 			client := x.(*Client)
-			client.broken = true
+			client.closed = true
 			time.Sleep(2 * time.Second)
 			log.Debugf("%s %p: wait old connection close", devid, conn)
 		} else {
@@ -509,7 +615,6 @@ func (this *Server) waitInit(conn *net.TCPConn) *Client {
 	}
 	/*if DevicesMap.Check(devid) {
 		log.Infof("%p: device (%s) init in this server already", conn, devid)
-		conn.Close()
 		return nil
 	}*/
 
@@ -517,18 +622,15 @@ func (this *Server) waitInit(conn *net.TCPConn) *Client {
 	serverName, err := storage.Instance.CheckDevice(devid)
 	if err != nil {
 		log.Warnf("%s %p: failed to check device existence: (%s)", devid, conn, err)
-		conn.Close()
 		return nil
 	}
 	if serverName != "" {
 		log.Warnf("%s %p: has connected with server (%s)", devid, conn, serverName)
-		conn.Close()
 		return nil
 	}
 
 	client := this.createClient(conn, devid)
 	if client == nil {
-		conn.Close()
 		return nil
 	}
 	reply := InitReplyMessage{

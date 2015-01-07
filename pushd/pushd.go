@@ -7,6 +7,7 @@ import (
 	"fmt"
 	log "github.com/cihub/seelog"
 	"net/http"
+	_ "net/http/pprof"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -103,7 +104,11 @@ func main() {
 	if conf.Config.Comet.MaxClients > 0 {
 		mc = conf.Config.Comet.MaxClients
 	}
-	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc)
+	var srcnt int = 100
+	if conf.Config.Comet.SendRoutineCnt > 0 {
+		srcnt = conf.Config.Comet.SendRoutineCnt
+	}
+	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc, srcnt)
 	listener, err := cometServer.Init("0.0.0.0:" + conf.Config.Comet.Port)
 	if err != nil {
 		log.Critical(err)
@@ -165,6 +170,12 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	if conf.Config.Prof {
+		go func() {
+			http.ListenAndServe(":6789", nil)
+		}()
+	}
 
 	_, err = mq.NewRpcServer(conf.Config.Rabbit.Uri, "gibbon_rpc_exchange", cometServer.Name)
 	if err != nil {
