@@ -275,6 +275,7 @@ func (this *Server) stopSendRoutines() {
 }
 
 func (this *Server) startRefreshRoutine() {
+	// keep the data of this node not expired on redis
 	go func() {
 		log.Infof("refresh routine: start")
 		for {
@@ -299,6 +300,9 @@ func (this *Server) Run(listener *net.TCPListener) {
 
 	//go this.dealSpamConn()
 	log.Infof("Starting comet server on: %s", listener.Addr().String())
+	if err := storage.Instance.AddComet(this.Name); err != nil {
+		log.Errorf("failed to add comet to Redis: %s", err.Error())
+	}
 
 	// keep the data of this node not expired on redis
 	this.startRefreshRoutine()
