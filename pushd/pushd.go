@@ -109,6 +109,14 @@ func main() {
 		srcnt = conf.Config.Comet.SendRoutineCnt
 	}
 	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc, srcnt)
+
+	if conf.Config.Comet.HeartbeatInterval > 0 {
+		cometServer.HbInterval = conf.Config.Comet.HeartbeatInterval
+	}
+	if conf.Config.Comet.ReconnTime > 0 {
+		cometServer.ReconnTime = conf.Config.Comet.ReconnTime
+	}
+
 	listener, err := cometServer.Init("0.0.0.0:" + conf.Config.Comet.Port)
 	if err != nil {
 		log.Critical(err)

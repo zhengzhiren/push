@@ -93,8 +93,8 @@ type InitReplyMessage struct {
 	Result  int     `json:"result"`
 	ErrInfo string  `json:"errinfo,omitempty"`
 	Apps    []Base2 `json:"apps,omitempty"`
-	HB      int32   `json:"hb,omitempty"`
-	Reconn  int32   `json:"reconn,omitempty"`
+	HB      uint32  `json:"hb,omitempty"`
+	Reconn  uint32  `json:"reconn,omitempty"`
 }
 type RegisterMessage struct {
 	AppId  string `json:"appid"`

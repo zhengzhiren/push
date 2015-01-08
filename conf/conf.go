@@ -8,14 +8,16 @@ import (
 
 type ConfigStruct struct {
 	Comet struct {
-		Port             string `json:"port"`
-		AcceptTimeout    uint32 `json:"accept_timeout"`
-		ReadTimeout      uint32 `json:"read_timeout"`
-		WriteTimeout     uint32 `json:"write_timeout"`
-		HeartbeatTimeout uint32 `json:"heartbeat_timeout"`
-		MaxBodyLen       uint32 `json:"max_bodylen"`
-		MaxClients       uint32 `json:"max_clients"`
-		SendRoutineCnt   int    `json:"sendroutine_count"`
+		Port              string `json:"port"`
+		AcceptTimeout     uint32 `json:"accept_timeout"`
+		ReadTimeout       uint32 `json:"read_timeout"`
+		WriteTimeout      uint32 `json:"write_timeout"`
+		HeartbeatTimeout  uint32 `json:"heartbeat_timeout"`
+		MaxBodyLen        uint32 `json:"max_bodylen"`
+		MaxClients        uint32 `json:"max_clients"`
+		SendRoutineCnt    int    `json:"sendroutine_count"`
+		HeartbeatInterval uint32 `json:"heartbeat_interval"`
+		ReconnTime        uint32 `json:"reconn_time"`
 	} `json:"comet"`
 	Prof    bool   `json:"prof"`
 	PushAPI string `json:"pushapi"`

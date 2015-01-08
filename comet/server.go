@@ -52,6 +52,12 @@ type Server struct {
 	clientCount    uint32
 	sendRoutineCnt int
 	sendRoutines   map[int]*SendRoutine
+
+	// client heartbeat interval
+	HbInterval uint32
+
+	// client reconnect time
+	ReconnTime uint32
 }
 
 type SendRoutine struct {
@@ -61,7 +67,8 @@ type SendRoutine struct {
 }
 
 const (
-	LISTEN_TIMEOUT        time.Duration = 5
+	DEFAULT_HB_INTERVAL   uint32        = 60
+	DEFAULT_RECONN_TIME   uint32        = 60
 	READ_HEADER_TIMEOUT   time.Duration = 60
 	READ_BODY_TIMEOUT     time.Duration = 60
 	INIT_MSG_TIMEOUT      time.Duration = 20
@@ -226,6 +233,8 @@ func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32
 		clientCount:    0,
 		sendRoutineCnt: srcnt,
 		sendRoutines:   make(map[int]*SendRoutine),
+		HbInterval:     DEFAULT_HB_INTERVAL,
+		ReconnTime:     DEFAULT_RECONN_TIME,
 	}
 }
 
@@ -318,7 +327,7 @@ func (this *Server) Run(listener *net.TCPListener) {
 		default:
 		}
 
-		listener.SetDeadline(time.Now().Add(LISTEN_TIMEOUT * time.Second))
+		listener.SetDeadline(time.Now().Add(this.acceptTimeout * time.Second))
 		conn, err := listener.AcceptTCP()
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok && e.Timeout() {
@@ -639,8 +648,8 @@ func (this *Server) waitInit(conn *net.TCPConn) *Client {
 	}
 	reply := InitReplyMessage{
 		Result: 0,
-		//HB:     30,
-		//Reconn: 60,
+		HB:     this.HbInterval,
+		Reconn: this.ReconnTime,
 	}
 
 	// TODO: below code should check carefully
