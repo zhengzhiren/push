@@ -261,7 +261,7 @@ func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []by
 	if ok {
 		//remove waiting channel from map
 		delete(client.waitChannels, header.Seq)
-		ch <- &Message{Header: *header, Data: body}
+		ch <- &Message{Header: header, Data: body}
 	} else {
 		log.Warnf("%s %p: no waiting channel for seq: %d, device: %s", client.devId, conn, header.Seq)
 		stats.ReplyTooLate()

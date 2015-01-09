@@ -28,14 +28,14 @@ type RegApp struct {
 }
 
 type AppManager struct {
-	lock   *sync.RWMutex
-	appMap map[string]*RegApp
+	lock      *sync.RWMutex
+	regappMap map[string]*RegApp
 }
 
 var (
 	AMInstance *AppManager = &AppManager{
-		lock:   new(sync.RWMutex),
-		appMap: make(map[string]*RegApp),
+		lock:      new(sync.RWMutex),
+		regappMap: make(map[string]*RegApp),
 	}
 )
 
@@ -45,21 +45,21 @@ func RegId(devid string, appId string, userId string) string {
 
 func (this *AppManager) AddApp(devId string, regId string, info *AppInfo) *RegApp {
 	this.lock.RLock()
-	if app, ok := this.appMap[regId]; ok {
+	if regapp, ok := this.regappMap[regId]; ok {
 		log.Errorf("%s: regid %s in memory already", devId, regId)
 		this.lock.RUnlock()
-		return app
+		return regapp
 	}
 	this.lock.RUnlock()
-	app := &RegApp{
-		DevId: devId,
-		RegId: regId,
+	regapp := &RegApp{
+		DevId:   devId,
+		RegId:   regId,
+		AppInfo: *info,
 	}
-	app.AppInfo = *info
 	this.lock.Lock()
-	this.appMap[regId] = app
+	this.regappMap[regId] = regapp
 	this.lock.Unlock()
-	return app
+	return regapp
 }
 
 /*
@@ -67,9 +67,9 @@ func (this *AppManager) AddApp(devId string, regId string, info *AppInfo) *RegAp
  */
 func (this *AppManager) DelApp(regId string) {
 	this.lock.Lock()
-	_, ok := this.appMap[regId]
+	_, ok := this.regappMap[regId]
 	if ok {
-		delete(this.appMap, regId)
+		delete(this.regappMap, regId)
 	}
 	this.lock.Unlock()
 }
@@ -83,19 +83,20 @@ func (this *AppManager) DelApp(regId string) {
  */
 func (this *AppManager) RegisterApp(devId string, regId string, appId string, userId string) *RegApp {
 	this.lock.RLock()
-	if _, ok := this.appMap[regId]; ok {
+	if _, ok := this.regappMap[regId]; ok {
 		log.Errorf("%s: regid %s in memory already", devId, regId)
 		this.lock.RUnlock()
 		return nil
 	}
 	this.lock.RUnlock()
 
-	var info AppInfo
-	info.AppId = appId
-	info.RegTime = time.Now().Unix()
-	info.UserId = userId
-	info.LastMsgId = -1
-	b, _ := json.Marshal(&info)
+	info := &AppInfo{
+		AppId:     appId,
+		RegTime:   time.Now().Unix(),
+		UserId:    userId,
+		LastMsgId: -1,
+	}
+	b, _ := json.Marshal(info)
 
 	if _, err := storage.Instance.HashSet(fmt.Sprintf("db_app_%s", appId), regId, b); err != nil {
 		return nil
@@ -107,13 +108,13 @@ func (this *AppManager) RegisterApp(devId string, regId string, appId string, us
 		storage.Instance.HashSetNotExist(fmt.Sprintf("db_user_%s", userId), regId, []byte(appId))
 	}
 
-	regapp := this.AddApp(devId, regId, &info)
+	regapp := this.AddApp(devId, regId, info)
 	return regapp
 }
 
 func (this *AppManager) RegisterApp2(devId string, regId string, appId string, userId string) *RegApp {
 	this.lock.RLock()
-	if _, ok := this.appMap[regId]; ok {
+	if _, ok := this.regappMap[regId]; ok {
 		log.Errorf("%s: regid %s in memory already", devId, regId)
 		this.lock.RUnlock()
 		return nil
@@ -121,7 +122,6 @@ func (this *AppManager) RegisterApp2(devId string, regId string, appId string, u
 	this.lock.RUnlock()
 
 	key := fmt.Sprintf("db_app_%s", appId)
-	var info AppInfo
 	val, err := storage.Instance.HashGet(key, regId)
 	if err != nil {
 		return nil
@@ -129,6 +129,7 @@ func (this *AppManager) RegisterApp2(devId string, regId string, appId string, u
 	if val == nil {
 		return nil
 	}
+	var info AppInfo
 	if err := json.Unmarshal(val, &info); err != nil {
 		log.Warnf("invalid app info from storage")
 		//TODO need replace it
@@ -168,7 +169,7 @@ func (this *AppManager) UpdateAppInfo(devId string, regId string, info *AppInfo)
 
 func (this *AppManager) GetApp(appId string, regId string) *RegApp {
 	this.lock.RLock()
-	regapp, ok := this.appMap[regId]
+	regapp, ok := this.regappMap[regId]
 	if ok {
 		this.lock.RUnlock()
 		if regapp.AppId != appId {
@@ -195,9 +196,9 @@ func (this *AppManager) GetAppByDevice(appId string, devId string) *RegApp {
 }
 
 func (this *AppManager) GetApps(appId string) []*RegApp {
-	regapps := make([]*RegApp, 0, len(this.appMap))
+	regapps := make([]*RegApp, 0, len(this.regappMap))
 	this.lock.RLock()
-	for _, regapp := range this.appMap {
+	for _, regapp := range this.regappMap {
 		if regapp.AppId == appId {
 			regapps = append(regapps, regapp)
 		}
@@ -211,7 +212,7 @@ func (this *AppManager) GetAppsByUser(appId string, userId string) []*RegApp {
 	if err != nil {
 		return nil
 	}
-	regapps := make([]*RegApp, 0, len(this.appMap))
+	regapps := make([]*RegApp, 0, len(this.regappMap))
 	this.lock.RLock()
 	for index := 0; index < len(vals); index += 2 {
 		regid := vals[index]
@@ -219,7 +220,7 @@ func (this *AppManager) GetAppsByUser(appId string, userId string) []*RegApp {
 		if appid != appId {
 			continue
 		}
-		regapp, ok := this.appMap[regid]
+		regapp, ok := this.regappMap[regid]
 		if ok {
 			regapps = append(regapps, regapp)
 		}
@@ -271,9 +272,9 @@ func matchTopics(subcriptions []string, topics []string, topicOp string) bool {
 }
 
 func (this *AppManager) GetAppsByTopic(appId string, topics []string, topicOp string) []*RegApp {
-	regapps := make([]*RegApp, 0, len(this.appMap))
+	regapps := make([]*RegApp, 0, len(this.regappMap))
 	this.lock.RLock()
-	for _, regapp := range this.appMap {
+	for _, regapp := range this.regappMap {
 		if regapp.AppId != appId {
 			continue
 		}

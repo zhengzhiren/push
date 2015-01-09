@@ -18,8 +18,10 @@ import (
 type MsgHandler func(*net.TCPConn, *Client, *Header, []byte) int
 
 type Pack struct {
-	msg    *Message
 	client *Client
+	header *Header
+	body   []byte
+	seq    uint32
 	reply  chan *Message
 }
 
@@ -117,27 +119,38 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply 
 	if reply != nil && len(client.waitChannels) >= MAX_WAITING_MSGS {
 		return 0, false
 	}
-	if seq == 0 {
-		seq = client.NextSeq()
-	}
 	bodylen := 0
 	if body != nil {
 		bodylen = len(body)
 	}
-	header := Header{
+	if seq == 0 {
+		seq = client.NextSeq()
+	}
+	header := &Header{
 		Type: msgType,
 		Ver:  0,
 		Seq:  seq,
 		Len:  uint32(bodylen),
 	}
-	msg := &Message{
-		Header: header,
-		Data:   body,
-	}
 	pack := &Pack{
-		msg:    msg,
 		client: client,
+		header: header,
+		body:   body,
+		seq:    seq,
 		reply:  reply,
+	}
+	*(client.outChannel) <- pack
+	return seq, true
+}
+
+func (client *Client) SendMessage2(header *Header, body []byte) (uint32, bool) {
+	seq := client.NextSeq()
+	pack := &Pack{
+		client: client,
+		header: header,
+		body:   body,
+		seq:    seq,
+		reply:  nil,
 	}
 	*(client.outChannel) <- pack
 	return seq, true
@@ -169,14 +182,16 @@ func (this *SendRoutine) Run() {
 				if client.closed {
 					continue
 				}
-				b, _ := pack.msg.Header.Serialize()
+				header := *pack.header
+				header.Seq = pack.seq
+				b, _ := header.Serialize()
 				if _, err := client.conn.Write(b); err != nil {
 					log.Warnf("%s %p:sendout header failed, %s", client.devId, client.conn, err)
 					client.closed = true
 					continue
 				}
-				if pack.msg.Data != nil {
-					if _, err := client.conn.Write(pack.msg.Data); err != nil {
+				if pack.body != nil {
+					if _, err := client.conn.Write(pack.body); err != nil {
 						log.Warnf("%s %p:sendout body failed, %s", client.devId, client.conn, err)
 						client.closed = true
 						continue
@@ -184,9 +199,9 @@ func (this *SendRoutine) Run() {
 				}
 				// add reply channel
 				if pack.reply != nil {
-					client.waitChannels[pack.msg.Header.Seq] = pack.reply
+					client.waitChannels[header.Seq] = pack.reply
 				}
-				msgname, ok := msgNames[pack.msg.Header.Type]
+				msgname, ok := msgNames[header.Type]
 				if !ok {
 					msgname = "Unknown"
 				}
@@ -194,9 +209,9 @@ func (this *SendRoutine) Run() {
 					client.devId,
 					client.conn,
 					msgname,
-					pack.msg.Data,
-					pack.msg.Header.Type,
-					pack.msg.Header.Seq)
+					pack.body,
+					header.Type,
+					header.Seq)
 				time.Sleep(10 * time.Millisecond)
 			case <-this.ctrl:
 				log.Infof("send routine %d: stop", this.id)
@@ -409,7 +424,6 @@ func (this *Server) createClient(conn *net.TCPConn, devid string) *Client {
 }
 
 func (this *Server) closeClient(client *Client) {
-	//client.ctrl <- true
 	client.closed = true
 	close(client.ctrl)
 	if err := storage.Instance.RemoveDevice(this.Name, client.devId); err != nil {
@@ -417,6 +431,11 @@ func (this *Server) closeClient(client *Client) {
 	}
 	DevicesMap.Delete(client.devId)
 	client.conn.Close()
+	/*
+		for _, channel := range(client.waitChannels) {
+			close(channel)
+		}
+	*/
 }
 
 // handle a TCP connection

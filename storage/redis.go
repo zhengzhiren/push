@@ -26,17 +26,21 @@ func NewRedisStorage(config *conf.ConfigStruct) *RedisStorage {
 		config.Redis.MaxActive,
 		config.Redis.MaxIdle,
 		config.Redis.IdleTimeout,
-		config.Redis.Retry)
+		config.Redis.Retry,
+		config.Redis.ConnTimeout,
+		config.Redis.ReadTimeout,
+		config.Redis.WriteTimeout)
 }
 
-func newRedisStorage(server string, pass string, maxActive int, maxIdle int, idleTimeout int, retry int) *RedisStorage {
+func newRedisStorage(server string, pass string, maxActive, maxIdle, idleTimeout, retry, cto, rto, wto int) *RedisStorage {
 	return &RedisStorage{
 		pool: &redis.Pool{
 			MaxActive:   maxActive,
 			MaxIdle:     maxIdle,
 			IdleTimeout: time.Duration(idleTimeout) * time.Second,
 			Dial: func() (redis.Conn, error) {
-				c, err := redis.Dial("tcp", server)
+				//c, err := redis.Dial("tcp", server)
+				c, err := redis.DialTimeout("tcp", server, cto, rto, wto)
 				if err != nil {
 					log.Warnf("failed to connect Redis (%s), (%s)", server, err)
 					return nil, err
@@ -68,9 +72,9 @@ func (r *RedisStorage) Do(commandName string, args ...interface{}) (interface{},
 		if err == nil {
 			break
 		} else {
-			log.Warnf("failed to get conn from pool (%s)", err)
+			//log.Warnf("failed to get conn from pool (%s)", err)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	if i == 0 || conn == nil {
 		return nil, fmt.Errorf("failed to find a useful redis conn")

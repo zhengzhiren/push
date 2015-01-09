@@ -37,12 +37,15 @@ type ConfigStruct struct {
 	} `json:"rabbit"`
 
 	Redis struct {
-		Server      string `json:"server"`
-		Pass        string `json:"pass"`
-		MaxActive   int    `json:"maxactive"`
-		MaxIdle     int    `json:"maxidle"`
-		IdleTimeout int    `json:"idletimeout"`
-		Retry       int    `json:"retry"`
+		Server       string `json:"server"`
+		Pass         string `json:"pass"`
+		MaxActive    int    `json:"maxactive"`
+		MaxIdle      int    `json:"maxidle"`
+		IdleTimeout  int    `json:"idletimeout"`
+		Retry        int    `json:"retry"`
+		ConnTimeout  int    `json:"conntimeout"`
+		ReadTimeout  int    `json:"readtimeout"`
+		WriteTimeout int    `json:"writetimeout"`
 	} `json:"redis"`
 
 	ZooKeeper struct {

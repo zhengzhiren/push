@@ -137,7 +137,7 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte) (uint3
 	if body != nil {
 		bodylen = len(body)
 	}
-	header := comet.Header{
+	header := &comet.Header{
 		Type: msgType,
 		Ver:  0,
 		Seq:  seq,
