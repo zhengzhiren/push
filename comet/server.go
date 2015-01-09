@@ -17,52 +17,6 @@ import (
 
 type MsgHandler func(*net.TCPConn, *Client, *Header, []byte) int
 
-type SendJob struct {
-	client *Client
-	header *Header
-	body   []byte
-	seq    uint32
-	reply  chan *Message
-}
-
-func (this *SendJob) Do() bool {
-	client := this.client
-	if client.closed {
-		return true
-	}
-	header := *this.header
-	header.Seq = this.seq
-	b, _ := header.Serialize()
-	if _, err := client.conn.Write(b); err != nil {
-		log.Warnf("%s %p:sendout header failed, %s", client.devId, client.conn, err)
-		client.closed = true
-		return true
-	}
-	if this.body != nil {
-		if _, err := client.conn.Write(this.body); err != nil {
-			log.Warnf("%s %p:sendout body failed, %s", client.devId, client.conn, err)
-			client.closed = true
-			return true
-		}
-	}
-	// add reply channel
-	if this.reply != nil {
-		client.replyChannels[header.Seq] = this.reply
-	}
-	msgname, ok := msgNames[header.Type]
-	if !ok {
-		msgname = "Unknown"
-	}
-	log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
-		client.devId,
-		client.conn,
-		msgname,
-		this.body,
-		header.Type,
-		header.Seq)
-	return true
-}
-
 type Client struct {
 	devId         string
 	conn          *net.TCPConn
@@ -143,6 +97,52 @@ func NewClient(devId string, conn *net.TCPConn, jobChannel *chan Job) *Client {
 		jobChannel:    jobChannel,
 		replyChannels: make(map[uint32]chan *Message), //TODO
 	}
+}
+
+type SendJob struct {
+	client *Client
+	header *Header
+	body   []byte
+	seq    uint32
+	reply  chan *Message
+}
+
+func (this *SendJob) Do() bool {
+	client := this.client
+	if client.closed {
+		return true
+	}
+	header := *this.header
+	header.Seq = this.seq
+	b, _ := header.Serialize()
+	if _, err := client.conn.Write(b); err != nil {
+		log.Warnf("%s %p:sendout header failed, %s", client.devId, client.conn, err)
+		client.closed = true
+		return true
+	}
+	if this.body != nil {
+		if _, err := client.conn.Write(this.body); err != nil {
+			log.Warnf("%s %p:sendout body failed, %s", client.devId, client.conn, err)
+			client.closed = true
+			return true
+		}
+	}
+	// add reply channel
+	if this.reply != nil {
+		client.replyChannels[header.Seq] = this.reply
+	}
+	msgname, ok := msgNames[header.Type]
+	if !ok {
+		msgname = "Unknown"
+	}
+	log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
+		client.devId,
+		client.conn,
+		msgname,
+		this.body,
+		header.Type,
+		header.Seq)
+	return true
 }
 
 func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply chan *Message) (uint32, bool) {
