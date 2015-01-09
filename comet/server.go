@@ -174,7 +174,7 @@ func NewSendRoutine(id int) *SendRoutine {
 
 func (this *SendRoutine) Run() {
 	go func() {
-		log.Infof("send routine %d: start", this.id)
+		//log.Infof("send routine %d: start", this.id)
 		for {
 			select {
 			case pack := <-this.outChannel:
