@@ -40,7 +40,7 @@ func newRedisStorage(server string, pass string, maxActive, maxIdle, idleTimeout
 			IdleTimeout: time.Duration(idleTimeout) * time.Second,
 			Dial: func() (redis.Conn, error) {
 				//c, err := redis.Dial("tcp", server)
-				c, err := redis.DialTimeout("tcp", server, cto, rto, wto)
+				c, err := redis.DialTimeout("tcp", server, time.Duration(cto), time.Duration(rto), time.Duration(wto))
 				if err != nil {
 					log.Warnf("failed to connect Redis (%s), (%s)", server, err)
 					return nil, err
