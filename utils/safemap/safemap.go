@@ -20,55 +20,60 @@ func NewSafeMap() *SafeMap {
 // Get from maps return the k's value.
 func (this *SafeMap) Get(k interface{}) interface{} {
 	this.lock.RLock()
-	defer this.lock.RUnlock()
-	if val, ok := this.mp[k]; ok {
-		return val
+	r, ok := this.mp[k]
+	if !ok {
+		r = nil
 	}
-	return nil
+	this.lock.RUnlock()
+	return r
 }
 
 // Maps the given key and value.
 // Returns false if the key is already in the map and changes nothing.
 func (this *SafeMap) Set(k interface{}, v interface{}) bool {
 	this.lock.Lock()
-	defer this.lock.Unlock()
+	r := true
 	if val, ok := this.mp[k]; !ok {
 		this.mp[k] = v
 	} else if val != v {
 		this.mp[k] = v
 	} else {
-		return false
+		r = false
 	}
-	return true
+	this.lock.Unlock()
+	return r
 }
 
 // Returns true if k is exist in the map.
 func (this *SafeMap) Check(k interface{}) bool {
 	this.lock.RLock()
-	defer this.lock.RUnlock()
+	r := true
 	if _, ok := this.mp[k]; !ok {
-		return false
+		r = false
 	}
-	return true
+	this.lock.RUnlock()
+	return r
 }
 
 // Delete the given key and value.
 func (this *SafeMap) Delete(k interface{}) {
 	this.lock.Lock()
-	defer this.lock.Unlock()
 	delete(this.mp, k)
+	this.lock.Unlock()
 }
 
 // Items returns all items in safemap
 func (this *SafeMap) Items() map[interface{}]interface{} {
 	this.lock.RLock()
-	defer this.lock.RUnlock()
-	return this.mp
+	r := this.mp
+	this.lock.RUnlock()
+	return r
 }
 
 // Size returns the size of the safemap
 func (this *SafeMap) Size() int {
 	this.lock.RLock()
-	defer this.lock.RUnlock()
-	return len(this.mp)
+	r := len(this.mp)
+	this.lock.RUnlock()
+	return r
 }

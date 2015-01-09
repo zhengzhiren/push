@@ -5,10 +5,10 @@ import (
 	log "github.com/cihub/seelog"
 	//"time"
 	"encoding/json"
-	"github.com/streadway/amqp"
-	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/comet"
+	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
+	"github.com/streadway/amqp"
 )
 
 type Consumer struct {
@@ -19,7 +19,7 @@ type Consumer struct {
 	done    chan error
 }
 
-func NewConsumer(amqpURI, exchange string, qos int) (*Consumer, error) { 
+func NewConsumer(amqpURI, exchange string, qos int) (*Consumer, error) {
 	queueName := utils.GetLocalIP()
 	ctag := queueName + "_tag"
 	c := &Consumer{
@@ -65,7 +65,7 @@ func NewConsumer(amqpURI, exchange string, qos int) (*Consumer, error) {
 
 	if err = c.channel.QueueBind(
 		queue.Name, // name of the queue
-		"",        // bindingKey
+		"",         // bindingKey
 		exchange,   // sourceExchange
 		false,      // noWait
 		nil,        // arguments
@@ -79,13 +79,13 @@ func NewConsumer(amqpURI, exchange string, qos int) (*Consumer, error) {
 
 func (c *Consumer) Consume() error {
 	deliveries, err := c.channel.Consume(
-		c.queue,    // name
-		c.tag,      // consumerTag,
-		false,      // noAck
-		false,      // exclusive
-		false,      // noLocal
-		false,      // noWait
-		nil,        // arguments
+		c.queue, // name
+		c.tag,   // consumerTag,
+		false,   // noAck
+		false,   // exclusive
+		false,   // noLocal
+		false,   // noWait
+		nil,     // arguments
 	)
 	if err != nil {
 		return fmt.Errorf("Queue Consume: %s", err)
@@ -125,9 +125,10 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			continue
 		}
 		rmsg := storage.Instance.GetRawMsg(m["appid"].(string), int64(m["msgid"].(float64)))
-		comet.PushMessages(m["appid"].(string), rmsg)
+		if rmsg != nil {
+			comet.PushMessages(m["appid"].(string), rmsg)
+		}
 	}
 	log.Infof("handle: deliveries channel closed")
 	done <- nil
 }
-

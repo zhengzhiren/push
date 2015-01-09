@@ -219,6 +219,20 @@ func handleUnregister(conn *net.TCPConn, client *Client, header *Header, body []
 	return 0
 }
 
+type UpdateJob struct {
+	devid string
+	regid string
+	info  AppInfo
+}
+
+func (this *UpdateJob) Do() bool {
+	AMInstance.UpdateAppInfo(this.devid, this.regid, &this.info)
+	storage.Instance.MsgStatsReceived(this.info.LastMsgId)
+	storage.Instance.AppStatsReceived(this.info.AppId)
+	return true
+
+}
+
 func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {
 	log.Debugf("%s %p: RECV PushReply (%s)", client.devId, conn, body)
 	var request PushReplyMessage
@@ -245,13 +259,22 @@ func handlePushReply(conn *net.TCPConn, client *Client, header *Header, body []b
 		log.Warnf("%s %p: msgid mismatch: %d <= %d", client.devId, conn, request.MsgId, regapp.LastMsgId)
 		return 0
 	}
-	info := regapp.AppInfo
-	info.LastMsgId = request.MsgId
-	AMInstance.UpdateAppInfo(client.devId, request.RegId, &info)
-	storage.Instance.MsgStatsReceived(request.MsgId)
-	storage.Instance.AppStatsReceived(request.AppId)
 	regapp.LastMsgId = request.MsgId
+	job := &UpdateJob{
+		devid: client.devId,
+		regid: request.RegId,
+		info:  regapp.AppInfo,
+	}
+	*(client.jobChannel) <- job
 	return 0
+	/*
+		info := regapp.AppInfo
+		info.LastMsgId = request.MsgId
+		AMInstance.UpdateAppInfo(client.devId, request.RegId, &info)
+		storage.Instance.MsgStatsReceived(request.MsgId)
+		regapp.LastMsgId = request.MsgId
+		return 0
+	*/
 }
 
 func handleCmdReply(conn *net.TCPConn, client *Client, header *Header, body []byte) int {

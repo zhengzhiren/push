@@ -40,14 +40,18 @@ func newRedisStorage(server string, pass string, maxActive, maxIdle, idleTimeout
 			IdleTimeout: time.Duration(idleTimeout) * time.Second,
 			Dial: func() (redis.Conn, error) {
 				//c, err := redis.Dial("tcp", server)
-				c, err := redis.DialTimeout("tcp", server, time.Duration(cto), time.Duration(rto), time.Duration(wto))
+				c, err := redis.DialTimeout(
+					"tcp", server,
+					time.Duration(cto)*time.Second,
+					time.Duration(rto)*time.Second,
+					time.Duration(wto)*time.Second)
 				if err != nil {
-					log.Warnf("failed to connect Redis (%s), (%s)", server, err)
+					log.Warnf("failed to connect Redis, (%s)", err)
 					return nil, err
 				}
 				if pass != "" {
 					if _, err := c.Do("AUTH", pass); err != nil {
-						log.Warnf("failed to auth Redis (%s), (%s)", server, err)
+						log.Warnf("failed to auth Redis, (%s)", err)
 						return nil, err
 					}
 				}
@@ -90,7 +94,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 	key := "db_offline_msg_" + appId
 	ret, err := redis.Strings(r.Do("HKEYS", key))
 	if err != nil {
-		log.Warnf("failed to get fields of offline msg:", err)
+		log.Warnf("failed to get fields of offline msg, (%s)", err)
 		return nil
 	}
 
@@ -105,7 +109,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 			expire int64
 		)
 		if _, err := fmt.Sscanf(ret[i], "%v_%v_%v", &idx, &ctime, &expire); err != nil {
-			log.Warnf("invaild redis hash field:", err)
+			log.Warnf("invaild redis hash field, (%s)", err)
 			continue
 		}
 		if ctime <= regTime { // the message created before app register
@@ -132,7 +136,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 
 	rmsgs, err := redis.Strings(r.Do("HMGET", args...))
 	if err != nil {
-		log.Warnf("failed to get offline rmsg:", err)
+		log.Warnf("failed to get offline rmsg, (%s)", err)
 		return nil
 	}
 
@@ -141,7 +145,7 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 		t := []byte(rmsgs[i])
 		msg := &RawMessage{}
 		if err := json.Unmarshal(t, msg); err != nil {
-			log.Warnf("failed to decode raw msg:", err)
+			log.Warnf("failed to decode raw msg, (%s)", err)
 			continue
 		}
 		msgs = append(msgs, msg)
@@ -152,15 +156,22 @@ func (r *RedisStorage) GetOfflineMsgs(appId string, regId string, regTime int64,
 // 从存储后端获取指定消息
 func (r *RedisStorage) GetRawMsg(appId string, msgId int64) *RawMessage {
 	key := "db_msg_" + appId
-	ret, err := redis.Bytes(r.Do("HGET", key, msgId))
+	ret, err := r.Do("HGET", key, msgId)
 	if err != nil {
 		log.Warnf("redis: HGET failed (%s)", err)
 		return nil
 	}
-	log.Debugf("RAW message: (%s)", string(ret))
+	if ret == nil {
+		return nil
+	}
+	data, err := redis.Bytes(ret, nil)
+	if err != nil {
+		return nil
+	}
+	log.Debugf("RAW message: (%s)", string(data))
 	rmsg := &RawMessage{}
-	if err := json.Unmarshal(ret, rmsg); err != nil {
-		log.Warnf("failed to decode raw msg:", err)
+	if err := json.Unmarshal(data, rmsg); err != nil {
+		log.Warnf("failed to decode raw msg, (%s)", err)
 		return nil
 	}
 	return rmsg
@@ -615,7 +626,6 @@ func (r *RedisStorage) HashGetAll(db string) ([]string, error) {
 func (r *RedisStorage) HashGet(db string, key string) ([]byte, error) {
 	ret, err := r.Do("HGET", db, key)
 	if err != nil {
-		log.Warnf("redis: HGET failed (%s)", err)
 		return nil, err
 	}
 	if ret != nil {
@@ -629,106 +639,53 @@ func (r *RedisStorage) HashGet(db string, key string) ([]byte, error) {
 }
 
 func (r *RedisStorage) HashSet(db string, key string, val []byte) (int, error) {
-	ret, err := redis.Int(r.Do("HSET", db, key, val))
-	if err != nil {
-		log.Warnf("redis: HSET failed (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("HSET", db, key, val))
 }
 
 func (r *RedisStorage) HashExists(db string, key string) (int, error) {
-	ret, err := redis.Int(r.Do("HEXISTS", db, key))
-	if err != nil {
-		log.Warnf("redis: HEXISTS failed (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("HEXISTS", db, key))
 }
 
 func (r *RedisStorage) HashLen(db string) (int, error) {
-	ret, err := redis.Int(r.Do("HLEN", db))
-	if err != nil {
-		log.Warnf("redis: HLEN failed (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("HLEN", db))
 }
 
 func (r *RedisStorage) HashSetNotExist(db string, key string, val []byte) (int, error) {
-	ret, err := redis.Int(r.Do("HSETNX", db, key, val))
-	if err != nil {
-		log.Warnf("redis: HSETNX failed (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("HSETNX", db, key, val))
 }
 
 func (r *RedisStorage) HashDel(db string, key string) (int, error) {
-	ret, err := redis.Int(r.Do("HDEL", db, key))
-	if err != nil {
-		log.Warnf("redis: HDEL failed (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("HDEL", db, key))
 }
 
 func (r *RedisStorage) HashIncrBy(db string, key string, val int64) (int64, error) {
-	ret, err := redis.Int64(r.Do("HINCRBY", db, key, val))
-	if err != nil {
-		log.Warnf("redis: HINCRBY failed, (%s)", err)
-	}
-	return ret, err
+	return redis.Int64(r.Do("HINCRBY", db, key, val))
 }
 
 func (r *RedisStorage) SetNotExist(key string, val []byte) (int, error) {
-	ret, err := redis.Int(r.Do("SETNX", key, val))
-	if err != nil {
-		log.Warnf("redis: SETNX failed (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("SETNX", key, val))
 }
 
 func (r *RedisStorage) IncrBy(key string, val int64) (int64, error) {
-	ret, err := redis.Int64(r.Do("INCRBY", key, val))
-	if err != nil {
-		log.Warnf("redis: INCRBY failed, (%s)", err)
-	}
-	return ret, err
+	return redis.Int64(r.Do("INCRBY", key, val))
 }
 
 func (r *RedisStorage) SetAdd(key string, val string) (int, error) {
-	ret, err := redis.Int(r.Do("SADD", key, val))
-	if err != nil {
-		log.Warnf("redis: SADD failed, (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("SADD", key, val))
 }
 
 func (r *RedisStorage) SetDel(key string, val string) (int, error) {
-	ret, err := redis.Int(r.Do("SREM", key, val))
-	if err != nil {
-		log.Warnf("redis: SREM failed, (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("SREM", key, val))
 }
 
 func (r *RedisStorage) SetIsMember(key string, val string) (int, error) {
-	ret, err := redis.Int(r.Do("SISMEMBER", key, val))
-	if err != nil {
-		log.Warnf("redis: SISMEMBER failed, (%s)", err)
-	}
-	return ret, err
-
+	return redis.Int(r.Do("SISMEMBER", key, val))
 }
 
 func (r *RedisStorage) SetMembers(key string) ([]string, error) {
-	ret, err := redis.Strings(r.Do("SMEMBERS", key))
-	if err != nil {
-		log.Warnf("redis: SMEMBERS failed, (%s)", err)
-	}
-	return ret, err
+	return redis.Strings(r.Do("SMEMBERS", key))
 }
 
 func (r *RedisStorage) KeyExpire(key string, ttl int32) (int, error) {
-	ret, err := redis.Int(r.Do("EXPIRE", key, ttl))
-	if err != nil {
-		log.Warnf("redis: EXPIRE failed, (%s)", err)
-	}
-	return ret, err
+	return redis.Int(r.Do("EXPIRE", key, ttl))
 }

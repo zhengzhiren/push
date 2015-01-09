@@ -17,12 +17,50 @@ import (
 
 type MsgHandler func(*net.TCPConn, *Client, *Header, []byte) int
 
-type Pack struct {
+type SendJob struct {
 	client *Client
 	header *Header
 	body   []byte
 	seq    uint32
 	reply  chan *Message
+}
+
+func (this *SendJob) Do() bool {
+	client := this.client
+	if client.closed {
+		return true
+	}
+	header := *this.header
+	header.Seq = this.seq
+	b, _ := header.Serialize()
+	if _, err := client.conn.Write(b); err != nil {
+		log.Warnf("%s %p:sendout header failed, %s", client.devId, client.conn, err)
+		client.closed = true
+		return true
+	}
+	if this.body != nil {
+		if _, err := client.conn.Write(this.body); err != nil {
+			log.Warnf("%s %p:sendout body failed, %s", client.devId, client.conn, err)
+			client.closed = true
+			return true
+		}
+	}
+	// add reply channel
+	if this.reply != nil {
+		client.replyChannels[header.Seq] = this.reply
+	}
+	msgname, ok := msgNames[header.Type]
+	if !ok {
+		msgname = "Unknown"
+	}
+	log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
+		client.devId,
+		client.conn,
+		msgname,
+		this.body,
+		header.Type,
+		header.Seq)
+	return true
 }
 
 type Client struct {
@@ -32,33 +70,27 @@ type Client struct {
 	nextSeq       uint32
 	lastActive    time.Time
 	RegApps       map[string]*RegApp
-	sendChannel   *chan *Pack
+	jobChannel    *chan Job
 	replyChannels map[uint32]chan *Message
 }
 
 type Server struct {
-	Name           string // unique name of this server
-	ctrl           chan bool
-	lock           *sync.Mutex
-	wg             *sync.WaitGroup
-	funcMap        map[uint8]MsgHandler
-	blackDevices   []string
-	blackUpdate    time.Time
-	acceptTimeout  time.Duration
-	readTimeout    time.Duration
-	writeTimeout   time.Duration
-	hbTimeout      time.Duration
-	maxBodyLen     uint32
-	maxClients     uint32
-	clientCount    uint32
-	sendRoutineCnt int
-	sendRoutines   map[int]*SendRoutine
-}
-
-type SendRoutine struct {
-	id          int
-	ctrl        chan bool
-	sendChannel chan *Pack
+	Name          string // unique name of this server
+	ctrl          chan bool
+	lock          *sync.Mutex
+	wg            *sync.WaitGroup
+	funcMap       map[uint8]MsgHandler
+	blackDevices  []string
+	blackUpdate   time.Time
+	acceptTimeout time.Duration
+	readTimeout   time.Duration
+	writeTimeout  time.Duration
+	hbTimeout     time.Duration
+	maxBodyLen    uint32
+	maxClients    uint32
+	clientCount   uint32
+	workerCount   int
+	workers       map[int]*Worker
 }
 
 const (
@@ -100,7 +132,7 @@ func myRead(conn *net.TCPConn, buf []byte) int {
 	return n
 }
 
-func NewClient(devId string, conn *net.TCPConn, sendChannel *chan *Pack) *Client {
+func NewClient(devId string, conn *net.TCPConn, jobChannel *chan Job) *Client {
 	return &Client{
 		devId:         devId,
 		conn:          conn,
@@ -108,7 +140,7 @@ func NewClient(devId string, conn *net.TCPConn, sendChannel *chan *Pack) *Client
 		nextSeq:       1, //sequence number begin from 1 each time
 		lastActive:    time.Now(),
 		RegApps:       make(map[string]*RegApp),
-		sendChannel:   sendChannel,
+		jobChannel:    jobChannel,
 		replyChannels: make(map[uint32]chan *Message), //TODO
 	}
 }
@@ -130,27 +162,27 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte, reply 
 		Seq:  seq,
 		Len:  uint32(bodylen),
 	}
-	pack := &Pack{
+	job := &SendJob{
 		client: client,
 		header: header,
 		body:   body,
 		seq:    seq,
 		reply:  reply,
 	}
-	*(client.sendChannel) <- pack
+	*(client.jobChannel) <- job
 	return seq, true
 }
 
 func (client *Client) SendMessage2(header *Header, body []byte) (uint32, bool) {
 	seq := client.NextSeq()
-	pack := &Pack{
+	job := &SendJob{
 		client: client,
 		header: header,
 		body:   body,
 		seq:    seq,
 		reply:  nil,
 	}
-	*(client.sendChannel) <- pack
+	*(client.jobChannel) <- job
 	return seq, true
 }
 
@@ -162,83 +194,22 @@ func (this *Client) NextSeq() uint32 {
 	return atomic.AddUint32(&this.nextSeq, 1)
 }
 
-func NewSendRoutine(id int) *SendRoutine {
-	return &SendRoutine{
-		id:          id,
-		ctrl:        make(chan bool),
-		sendChannel: make(chan *Pack, 1000),
-	}
-}
-
-func (this *SendRoutine) Run() {
-	go func() {
-		//log.Infof("send routine %d: start", this.id)
-		for {
-			select {
-			case pack := <-this.sendChannel:
-				client := pack.client
-				if client.closed {
-					continue
-				}
-				header := *pack.header
-				header.Seq = pack.seq
-				b, _ := header.Serialize()
-				if _, err := client.conn.Write(b); err != nil {
-					log.Warnf("%s %p:sendout header failed, %s", client.devId, client.conn, err)
-					client.closed = true
-					continue
-				}
-				if pack.body != nil {
-					if _, err := client.conn.Write(pack.body); err != nil {
-						log.Warnf("%s %p:sendout body failed, %s", client.devId, client.conn, err)
-						client.closed = true
-						continue
-					}
-				}
-				// add reply channel
-				if pack.reply != nil {
-					client.replyChannels[header.Seq] = pack.reply
-				}
-				msgname, ok := msgNames[header.Type]
-				if !ok {
-					msgname = "Unknown"
-				}
-				log.Infof("%s %p: SEND %s (%s) type(%d) seq(%d)",
-					client.devId,
-					client.conn,
-					msgname,
-					pack.body,
-					header.Type,
-					header.Seq)
-				time.Sleep(10 * time.Millisecond)
-			case <-this.ctrl:
-				log.Infof("send routine %d: stop", this.id)
-				return
-			}
-		}
-	}()
-}
-
-func (this *SendRoutine) Stop() {
-	close(this.ctrl)
-}
-
 func NewServer(ato uint32, rto uint32, wto uint32, hto uint32, maxBodyLen uint32, maxClients uint32, srcnt int) *Server {
 	return &Server{
-		Name:           utils.GetLocalIP(),
-		ctrl:           make(chan bool),
-		lock:           new(sync.Mutex),
-		wg:             &sync.WaitGroup{},
-		funcMap:        make(map[uint8]MsgHandler),
-		acceptTimeout:  time.Duration(ato),
-		readTimeout:    time.Duration(rto),
-		writeTimeout:   time.Duration(wto),
-		hbTimeout:      time.Duration(hto),
-		maxBodyLen:     maxBodyLen,
-		maxClients:     maxClients,
-		clientCount:    0,
-		sendRoutineCnt: srcnt,
-		sendRoutines:   make(map[int]*SendRoutine),
+		Name:          utils.GetLocalIP(),
+		ctrl:          make(chan bool),
+		lock:          new(sync.Mutex),
+		wg:            &sync.WaitGroup{},
+		funcMap:       make(map[uint8]MsgHandler),
+		acceptTimeout: time.Duration(ato),
+		readTimeout:   time.Duration(rto),
+		writeTimeout:  time.Duration(wto),
+		hbTimeout:     time.Duration(hto),
+		maxBodyLen:    maxBodyLen,
+		maxClients:    maxClients,
+		clientCount:   0,
+		workerCount:   srcnt,
+		workers:       make(map[int]*Worker),
 	}
 }
 
@@ -273,17 +244,17 @@ func (this *Server) Init(addr string) (*net.TCPListener, error) {
 	return l, nil
 }
 
-func (this *Server) startSendRoutines() {
-	for n := 0; n < this.sendRoutineCnt; n++ {
-		sendroutine := NewSendRoutine(n)
-		this.sendRoutines[n] = sendroutine
-		sendroutine.Run()
+func (this *Server) startWorkers() {
+	for n := 0; n < this.workerCount; n++ {
+		w := NewWorker(n)
+		this.workers[n] = w
+		w.Run()
 	}
 }
 
-func (this *Server) stopSendRoutines() {
-	for _, sendroutine := range this.sendRoutines {
-		sendroutine.Stop()
+func (this *Server) stopWorkers() {
+	for _, w := range this.workers {
+		w.Stop()
 	}
 }
 
@@ -319,13 +290,13 @@ func (this *Server) Run(listener *net.TCPListener) {
 
 	// keep the data of this node not expired on redis
 	this.startRefreshRoutine()
-	this.startSendRoutines()
+	this.startWorkers()
 
 	for {
 		select {
 		case <-this.ctrl:
 			log.Infof("ask me to quit")
-			this.stopSendRoutines()
+			this.stopWorkers()
 			this.stopRefreshRoutine()
 			return
 		default:
@@ -359,9 +330,9 @@ func (this *Server) Stop() {
 	log.Infof("comet server stopped")
 }
 
-func (this *Server) getOutChannel() *chan *Pack {
-	id := rand.Intn(this.sendRoutineCnt)
-	return &this.sendRoutines[id].sendChannel
+func (this *Server) getOutChannel() *chan Job {
+	id := rand.Intn(this.workerCount)
+	return &this.workers[id].jobChannel
 }
 
 func (this *Server) putOutChannel() {
