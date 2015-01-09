@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
-	"os"
-	//"time"
 	"fmt"
 	log "github.com/cihub/seelog"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -40,9 +40,18 @@ func deviceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type Status struct {
+	DevCnt    int `json:"devcnt"`
+	RegAppCnt int `json:"regappcnt"`
+}
+
 func statusHandler(w http.ResponseWriter, r *http.Request) {
-	size := comet.DevicesMap.Size()
-	fmt.Fprintf(w, "total online device: %d\n", size)
+	s := Status{
+		DevCnt:    comet.DevicesMap.Size(),
+		RegAppCnt: comet.AMInstance.GetCount(),
+	}
+	b, _ := json.Marshal(&s)
+	fmt.Fprintf(w, "%s", b)
 }
 
 func main() {

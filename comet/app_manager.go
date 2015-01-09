@@ -43,6 +43,10 @@ func RegId(devid string, appId string, userId string) string {
 	return fmt.Sprintf("%x", (sha1.Sum([]byte(fmt.Sprintf("%s_%s_%s", devid, appId, userId)))))
 }
 
+func (this *AppManager) GetCount() int {
+	return len(this.regappMap)
+}
+
 func (this *AppManager) AddApp(devId string, regId string, info *AppInfo) *RegApp {
 	this.lock.RLock()
 	if regapp, ok := this.regappMap[regId]; ok {
