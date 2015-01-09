@@ -15,7 +15,7 @@ type ConfigStruct struct {
 		HeartbeatTimeout uint32 `json:"heartbeat_timeout"`
 		MaxBodyLen       uint32 `json:"max_bodylen"`
 		MaxClients       uint32 `json:"max_clients"`
-		SendRoutineCnt   int    `json:"sendroutine_count"`
+		WorkerCnt        int    `json:"worker_count"`
 	} `json:"comet"`
 	Prof    bool   `json:"prof"`
 	PushAPI string `json:"pushapi"`

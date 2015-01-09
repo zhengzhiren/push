@@ -105,11 +105,11 @@ func main() {
 	if conf.Config.Comet.MaxClients > 0 {
 		mc = conf.Config.Comet.MaxClients
 	}
-	var srcnt int = 100
-	if conf.Config.Comet.SendRoutineCnt > 0 {
-		srcnt = conf.Config.Comet.SendRoutineCnt
+	var worker int = 100
+	if conf.Config.Comet.WorkerCnt > 0 {
+		worker = conf.Config.Comet.WorkerCnt
 	}
-	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc, srcnt)
+	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc, worker)
 	listener, err := cometServer.Init("0.0.0.0:" + conf.Config.Comet.Port)
 	if err != nil {
 		log.Critical(err)
