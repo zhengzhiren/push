@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
-	"os"
-	//"time"
 	"fmt"
 	log "github.com/cihub/seelog"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -40,9 +40,18 @@ func deviceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type Status struct {
+	DevCnt    int `json:"devcnt"`
+	RegAppCnt int `json:"regappcnt"`
+}
+
 func statusHandler(w http.ResponseWriter, r *http.Request) {
-	size := comet.DevicesMap.Size()
-	fmt.Fprintf(w, "total online device: %d\n", size)
+	s := Status{
+		DevCnt:    comet.DevicesMap.Size(),
+		RegAppCnt: comet.AMInstance.GetCount(),
+	}
+	b, _ := json.Marshal(&s)
+	fmt.Fprintf(w, "%s", b)
 }
 
 func main() {
@@ -52,7 +61,6 @@ func main() {
 		//flTest		= flag.Bool("t", false, "Enable test mode, no rabbitmq")
 		flConfig = flag.String("c", "./conf/conf.json", "Config file")
 	)
-	log.Infof("pushd started...")
 	flag.Parse()
 	config_file := "./conf/conf.json"
 	if flConfig != nil {
@@ -77,10 +85,12 @@ func main() {
 	}
 
 	log.ReplaceLogger(logger)
+
+	log.Infof("pushd starting...")
 	storage.NewInstance(&conf.Config)
 	auth.NewInstance(&conf.Config)
 
-	var ato uint32 = 60
+	var ato uint32 = uint32(comet.ACCEPT_TIMEOUT)
 	if conf.Config.Comet.AcceptTimeout > 0 {
 		ato = conf.Config.Comet.AcceptTimeout
 	}
@@ -104,11 +114,11 @@ func main() {
 	if conf.Config.Comet.MaxClients > 0 {
 		mc = conf.Config.Comet.MaxClients
 	}
-	var srcnt int = 100
-	if conf.Config.Comet.SendRoutineCnt > 0 {
-		srcnt = conf.Config.Comet.SendRoutineCnt
+	var worker int = 100
+	if conf.Config.Comet.WorkerCnt > 0 {
+		worker = conf.Config.Comet.WorkerCnt
 	}
-	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc, srcnt)
+	cometServer := comet.NewServer(ato, rto, wto, hto, mbl, mc, worker)
 
 	if conf.Config.Comet.HeartbeatInterval > 0 {
 		cometServer.HbInterval = conf.Config.Comet.HeartbeatInterval
@@ -191,6 +201,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Infof("pushd running")
+	log.Infof("pushd started")
 	wg.Wait()
 }

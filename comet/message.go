@@ -13,7 +13,7 @@ type Header struct {
 }
 
 type Message struct {
-	Header Header
+	Header *Header
 	Data   []byte
 }
 
@@ -209,4 +209,13 @@ type StatsReplyMessage struct {
 	ErrInfo string `json:"errinfo,omitempty"`
 	AppId   string `json:"appid"`
 	RegId   string `json:"regid"`
+}
+
+func makeHeader(msgType uint8, seq uint32, size uint32) *Header {
+	return &Header{
+		Type: msgType,
+		Ver:  0,
+		Seq:  seq,
+		Len:  size,
+	}
 }

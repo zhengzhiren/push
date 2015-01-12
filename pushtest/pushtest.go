@@ -17,11 +17,12 @@ import (
 )
 
 type Config struct {
-	Server    string        `json:"server"`
-	Name      string        `json:"name"`
-	HeartBeat time.Duration `json:"heartbeat"`
-	AppIds    []string      `json:"appids"`
-	Interval  time.Duration `json:interval"`
+	Server      string        `json:"server"`
+	Name        string        `json:"name"`
+	HeartBeat   time.Duration `json:"heartbeat"`
+	ReadTimeout time.Duration `json:"readtimeout"`
+	AppIds      []string      `json:"appids"`
+	Interval    time.Duration `json:interval"`
 }
 
 type RegApp struct {
@@ -53,15 +54,15 @@ func NewClient(index int, devId string, conn *net.TCPConn, outMsgs chan *comet.M
 	}
 }
 
-func (client *Client) HandleMessage() bool {
-	client.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+func (client *Client) HandleMessage(config *Config) bool {
+	client.conn.SetReadDeadline(time.Now().Add(config.ReadTimeout * time.Second))
 	headSize := 10
 	buf := make([]byte, headSize)
 	if _, err := io.ReadFull(client.conn, buf); err != nil {
 		if e, ok := err.(*net.OpError); ok && e.Timeout() {
 			return true
 		}
-		log.Infof("read failed, (%v)\n", err)
+		log.Warnf("read header failed, (%v)\n", err)
 		return false
 	}
 
@@ -76,7 +77,7 @@ func (client *Client) HandleMessage() bool {
 
 	data := make([]byte, header.Len)
 	if _, err := io.ReadFull(client.conn, data); err != nil {
-		log.Infof("read from server failed: (%v)", err)
+		log.Warnf("read body failed: (%v)", err)
 		return false
 	}
 
@@ -84,7 +85,7 @@ func (client *Client) HandleMessage() bool {
 	if header.Type == comet.MSG_REGISTER_REPLY {
 		var reply comet.RegisterReplyMessage
 		if err := json.Unmarshal(data, &reply); err != nil {
-			log.Infof("invalid reply, not JSON\n")
+			log.Warnf("invalid reply, not JSON\n")
 			return true
 		}
 		_, ok := client.RegApps[reply.AppId]
@@ -98,7 +99,7 @@ func (client *Client) HandleMessage() bool {
 	} else if header.Type == comet.MSG_PUSH {
 		var request comet.PushMessage
 		if err := json.Unmarshal(data, &request); err != nil {
-			log.Infof("invalid reply, not JSON")
+			log.Warnf("invalid reply, not JSON")
 			return true
 		}
 		regapp, ok := client.RegApps[request.AppId]
@@ -137,7 +138,7 @@ func (client *Client) SendMessage(msgType uint8, seq uint32, body []byte) (uint3
 	if body != nil {
 		bodylen = len(body)
 	}
-	header := comet.Header{
+	header := &comet.Header{
 		Type: msgType,
 		Ver:  0,
 		Seq:  seq,
@@ -235,6 +236,7 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, lo
 		// main loop
 		select {
 		case <-ctrl:
+			client.conn.Close()
 			close(ctrl2)
 			wg.Done()
 			log.Infof("client %d: leave routine", index)
@@ -242,6 +244,7 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, lo
 		default:
 		}
 		if client.broken {
+			client.conn.Close()
 			close(ctrl2)
 			wg.Done()
 			log.Infof("client %d: leave routine", index)
@@ -255,7 +258,8 @@ func runClient(index int, config *Config, wg *sync.WaitGroup, ctrl chan bool, lo
 			registered = true
 		}
 
-		if ok := client.HandleMessage(); !ok {
+		if ok := client.HandleMessage(config); !ok {
+			client.conn.Close()
 			close(ctrl2)
 			wg.Done()
 			log.Infof("client %d: leave routine", index)
@@ -285,6 +289,9 @@ func main() {
 	if err != nil {
 		fmt.Printf("invalid config file")
 		os.Exit(1)
+	}
+	if config.ReadTimeout <= 0 {
+		config.ReadTimeout = time.Duration(20)
 	}
 
 	logger, err := log.LoggerFromConfigAsFile("log.xml")

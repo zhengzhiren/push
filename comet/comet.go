@@ -57,7 +57,7 @@ const (
 //	return false
 //}
 
-func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *PushMessage) bool {
+func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, header *Header, body []byte) bool {
 	//if len(app.SendIds) != 0 {
 	// regapp with sendids
 	log.Infof("msgid %d: before push to (device %s) (regid %s)", rawMsg.MsgId, app.DevId, app.RegId)
@@ -81,12 +81,7 @@ func pushMessage(appId string, app *RegApp, rawMsg *storage.RawMessage, msg *Pus
 		return false
 	}
 	client := x.(*Client)
-	b, err := json.Marshal(msg)
-	if err != nil {
-		log.Errorf("msgid %d: failed to encode msg %v", rawMsg.MsgId, msg)
-		return false
-	}
-	client.SendMessage(MSG_PUSH, 0, b, nil)
+	client.SendMessage2(header, body)
 	log.Infof("msgid %d: after push to (device %s) (regid %s)", rawMsg.MsgId, app.DevId, app.RegId)
 	storage.Instance.MsgStatsSend(rawMsg.MsgId)
 	storage.Instance.AppStatsSend(rawMsg.AppId)
@@ -105,11 +100,19 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		b, _ := json.Marshal(rawMsg.Notification)
 		msg.Content = string(b)
 	}
+
+	body, err := json.Marshal(msg)
+	if err != nil {
+		log.Errorf("msgid %d: failed to encode msg %v", rawMsg.MsgId, msg)
+		return err
+	}
+	header := makeHeader(MSG_PUSH, 0, uint32(len(body)))
+
 	switch rawMsg.PushType {
 	case PUSH_TYPE_ALL: // broadcast
 		apps := AMInstance.GetApps(appId)
 		for _, app := range apps {
-			pushMessage(appId, app, rawMsg, &msg)
+			pushMessage(appId, app, rawMsg, header, body)
 		}
 		log.Infof("msgid %d: get %d apps", rawMsg.MsgId, len(apps))
 	case PUSH_TYPE_REGID: // regid list
@@ -117,7 +120,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		for _, regid := range rawMsg.PushParams.RegId {
 			app := AMInstance.GetApp(appId, regid)
 			if app != nil {
-				pushMessage(appId, app, rawMsg, &msg)
+				pushMessage(appId, app, rawMsg, header, body)
 				count += 1
 			}
 		}
@@ -127,7 +130,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 			count := 0
 			apps := AMInstance.GetAppsByUser(appId, uid)
 			for _, app := range apps {
-				pushMessage(appId, app, rawMsg, &msg)
+				pushMessage(appId, app, rawMsg, header, body)
 				count += 1
 			}
 			log.Infof("msgid %d: get %d apps by user %s", rawMsg.MsgId, count, uid)
@@ -137,7 +140,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		for _, devid := range rawMsg.PushParams.DevId {
 			app := AMInstance.GetAppByDevice(appId, devid)
 			if app != nil {
-				pushMessage(appId, app, rawMsg, &msg)
+				pushMessage(appId, app, rawMsg, header, body)
 				count += 1
 			}
 		}
@@ -145,7 +148,7 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 	case PUSH_TYPE_TOPIC: // topic
 		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic, rawMsg.PushParams.TopicOp)
 		for _, app := range apps {
-			pushMessage(appId, app, rawMsg, &msg)
+			pushMessage(appId, app, rawMsg, header, body)
 		}
 	default:
 	}
