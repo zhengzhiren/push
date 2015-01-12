@@ -638,6 +638,20 @@ func (r *RedisStorage) HashGet(db string, key string) ([]byte, error) {
 	return nil, nil
 }
 
+func (r *RedisStorage) ListLen(key string) (int, error) {
+	return redis.Int(r.Do("LLEN", key))
+}
+func (r *RedisStorage) ListRange(key string, start int, stop int) ([]string, error) {
+	ret, err := r.Do("LRANGE", key, start, stop)
+	if err != nil {
+		return nil, err
+	}
+	if ret != nil {
+		return redis.Strings(ret, nil)
+	}
+	return nil, nil
+}
+
 func (r *RedisStorage) HashSet(db string, key string, val []byte) (int, error) {
 	return redis.Int(r.Do("HSET", db, key, val))
 }

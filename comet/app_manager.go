@@ -233,6 +233,10 @@ func (this *AppManager) GetAppsByUser(appId string, userId string) []*RegApp {
 	return regapps
 }
 
+func (this *AppManager) GetDevicesByGroup(group string, start int, stop int) []string {
+	return storage.Instance.SetMembers(fmt.Sprintf("db_group_%s", group))
+}
+
 func matchTopics(subcriptions []string, topics []string, topicOp string) bool {
 	switch topicOp {
 	case "and":

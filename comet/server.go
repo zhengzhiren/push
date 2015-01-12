@@ -2,6 +2,7 @@ package comet
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/chenyf/push/storage"
 	"github.com/chenyf/push/utils"
 	"github.com/chenyf/push/utils/safemap"
@@ -667,6 +668,14 @@ func (this *Server) handleOfflineMsgs(client *Client, regapp *RegApp) {
 			if matchTopics(regapp.Topics, rawMsg.PushParams.Topic, rawMsg.PushParams.TopicOp) {
 				ok = true
 				break
+			}
+		case PUSH_TYPE_GROUP:
+			for _, group := range rawMsg.PushParams.Group {
+				ret, err := storage.Instance.SetIsMember(fmt.Sprintf("db_group_%s", group), client.devId)
+				if err == nil && ret == 1 {
+					ok = true
+					break
+				}
 			}
 		default:
 			continue
