@@ -7,6 +7,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -698,6 +699,21 @@ func (r *RedisStorage) SetIsMember(key string, val string) (int, error) {
 
 func (r *RedisStorage) SetMembers(key string) ([]string, error) {
 	return redis.Strings(r.Do("SMEMBERS", key))
+}
+
+func (r *RedisStorage) SetScan(key string, cursor int, count int) (int, [][]byte, error) {
+	ret, err := r.Do("SSCAN", key, 0)
+	if err != nil {
+		return 0, nil, err
+	}
+	x := ret.([]interface{})
+	next, _ := strconv.Atoi(string(x[0].([]byte)))
+	v2 := x[1].([]interface{})
+	data := [][]byte{}
+	for _, x := range v2 {
+		data = append(data, x.([]byte))
+	}
+	return next, data, nil
 }
 
 func (r *RedisStorage) KeyExpire(key string, ttl int32) (int, error) {

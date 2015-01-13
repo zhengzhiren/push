@@ -150,6 +150,7 @@ type Storage interface {
 	SetDel(key string, val string) (int, error)
 	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
+	SetScan(key string, cursor int, count int) (int, [][]byte, error)
 	KeyExpire(key string, ttl int32) (int, error)
 
 	ListLen(key string) (int, error)

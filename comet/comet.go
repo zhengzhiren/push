@@ -154,13 +154,25 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 	case PUSH_TYPE_GROUP: // group
 		for _, group := range rawMsg.PushParams.Group {
 			count := 0
-			devids := AMInstance.GetDevicesByGroup(group, 0, -1)
-			for _, devid := range devids {
-				app := AMInstance.GetAppByDevice(appId, devid)
-				if app != nil {
-					pushMessage(appId, app, rawMsg, header, body)
-					count += 1
+			start := 0
+			stop := 1000
+			for {
+				next, items, err := AMInstance.GetDevicesByGroup(group, start, stop)
+				if err != nil {
+					break
 				}
+				for _, devid := range items {
+					app := AMInstance.GetAppByDevice(appId, string(devid))
+					if app != nil {
+						pushMessage(appId, app, rawMsg, header, body)
+						count += 1
+					}
+				}
+				if next == 0 {
+					break
+				}
+				start = next
+				stop = next + 1000
 			}
 			log.Infof("msgid %d: get %d apps by group %s", rawMsg.MsgId, count, group)
 		}
