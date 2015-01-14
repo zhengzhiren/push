@@ -63,7 +63,7 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 			return false, "missing 'notification.title' or empty when 'msg_type'==1"
 		}
 	}
-	if m.PushType < 1 || m.PushType > 5 {
+	if m.PushType < 1 || m.PushType > 7 {
 		return false, "invalid 'push_type'"
 	}
 	if m.PushType == 2 && (m.PushParams.RegId == nil || len(m.PushParams.RegId) == 0) {
@@ -77,6 +77,9 @@ func checkMessage(m *storage.RawMessage) (bool, string) {
 	}
 	if m.PushType == 5 && len(m.PushParams.Topic) == 0 {
 		return false, "empty 'topic' when 'push_type'==5"
+	}
+	if m.PushType == 7 && len(m.PushParams.Group) == 0 {
+		return false, "empty 'group' when 'push_type'==7"
 	}
 	if m.PushParams.TopicOp != "" &&
 		m.PushParams.TopicOp != "or" &&
