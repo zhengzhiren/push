@@ -14,6 +14,7 @@ const (
 	PUSH_TYPE_DEVID  = 4
 	PUSH_TYPE_TOPIC  = 5
 	PUSH_TYPE_ALIAS  = 6
+	PUSH_TYPE_GROUP  = 7
 
 	MSG_TYPE_NOTIFICATION = 1
 	MSG_TYPE_MESSAGE      = 2
@@ -149,6 +150,31 @@ func PushMessages(appId string, rawMsg *storage.RawMessage) error {
 		apps := AMInstance.GetAppsByTopic(appId, rawMsg.PushParams.Topic, rawMsg.PushParams.TopicOp)
 		for _, app := range apps {
 			pushMessage(appId, app, rawMsg, header, body)
+		}
+	case PUSH_TYPE_GROUP: // group
+		for _, group := range rawMsg.PushParams.Group {
+			count := 0
+			start := 0
+			stop := 1000
+			for {
+				next, items, err := AMInstance.GetDevicesByGroup(group, start, stop)
+				if err != nil {
+					break
+				}
+				for _, devid := range items {
+					app := AMInstance.GetAppByDevice(appId, string(devid))
+					if app != nil {
+						pushMessage(appId, app, rawMsg, header, body)
+						count += 1
+					}
+				}
+				if next == 0 {
+					break
+				}
+				start = next
+				stop = next + 1000
+			}
+			log.Infof("msgid %d: get %d apps by group %s", rawMsg.MsgId, count, group)
 		}
 	default:
 	}

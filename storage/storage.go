@@ -22,6 +22,7 @@ type RawMessage struct {
 		DevId   []string `json:"devid,omitempty"`
 		Topic   []string `json:"topic,omitempty"`
 		TopicOp string   `json:"topic_op,omitempty"`
+		Group   []string `json:"group,omitempty"`
 	} `json:"push_params"`
 	Content      string `json:"content,omitempty"`
 	Notification struct {
@@ -149,7 +150,11 @@ type Storage interface {
 	SetDel(key string, val string) (int, error)
 	SetIsMember(key string, val string) (int, error)
 	SetMembers(key string) ([]string, error)
+	SetScan(key string, cursor int, count int) (int, [][]byte, error)
 	KeyExpire(key string, ttl int32) (int, error)
+
+	ListLen(key string) (int, error)
+	ListRange(key string, start int, stop int) ([]string, error)
 }
 
 var (
